@@ -50,13 +50,32 @@ const writeCode = (code: string | null) => writeStored(CODE_STORAGE_KEY, code);
  */
 function takePresenterKey(): string | null {
   const url = new URL(window.location.href);
-  const fromUrl = url.searchParams.get('presenter');
-  if (fromUrl === null) return readStored(PRESENTER_STORAGE_KEY);
+  if (!url.searchParams.has('presenter')) return readStored(PRESENTER_STORAGE_KEY);
+  const fromUrl = rawQueryParam(url.search, 'presenter');
   url.searchParams.delete('presenter');
   window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
   writeStored(PRESENTER_STORAGE_KEY, fromUrl);
   return fromUrl;
 }
+/**
+ * Like URLSearchParams.get, but keeps '+' as '+'. Render's generated keys are base64 (with + / =),
+ * and URLSearchParams would turn '+' into a space, so a pasted key would never match.
+ */
+function rawQueryParam(search: string, name: string): string {
+  for (const part of search.replace(/^\?/, '').split('&')) {
+    const eq = part.indexOf('=');
+    const key = eq === -1 ? part : part.slice(0, eq);
+    if (key !== name) continue;
+    const value = eq === -1 ? '' : part.slice(eq + 1);
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return '';
+}
+
 let presenterKey = takePresenterKey();
 
 let view: GameView = {

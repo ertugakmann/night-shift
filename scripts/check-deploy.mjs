@@ -42,7 +42,13 @@ console.log(`Checking ${base}`);
 // 1. Plain HTTP and the health check (also wakes a sleeping free instance).
 try {
   const res = await fetch(`${base}/healthz`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  const body = await res.json();
+  const text = await res.text();
+  if (res.status === 404 && !text.trim().startsWith('{')) {
+    bad('404 Not Found: nothing is running at this address. Check the URL (copy it from the Render dashboard)');
+    console.log('\nStopping: the server could not be found.');
+    process.exit(1);
+  }
+  const body = JSON.parse(text);
   if (res.ok && body.ok) ok(`/healthz answered (phase ${body.phase}, ${body.clients} clients)`);
   else bad(`/healthz returned ${res.status}`);
 } catch (err) {
