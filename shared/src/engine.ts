@@ -337,13 +337,22 @@ function tick(s: GameState, w: World): void {
   const hour = sc.night.realSecondsPerGameHour;
 
   // Scheduled events.
-  // A locked door keeps everyone out, the gang too: if the way in is locked, they wait outside.
-  if (!s.brokenIn && now >= ms.breakIn && !s.rooms[sc.intruders.entryRoom].locked) {
-    s.brokenIn = true;
-    s.stats.brokenInMs = now;
-    addGroup(s, sc.intruders.entryRoom, [sc.intruders.entryRoom]);
-    s.entrySplit = true;
-    s.nextSpreadMs = now + ms.firstSplit;
+  // A locked door keeps everyone out, the gang too. Mail Room locked: they try the front door instead
+  // (reality: phishing blocked, so they come in over the VPN). Both locked: they wait outside.
+  if (!s.brokenIn && now >= ms.breakIn) {
+    const front = sc.intruders.frontDoor;
+    const entry = !s.rooms[sc.intruders.entryRoom].locked ? sc.intruders.entryRoom : !s.rooms[front.room].locked ? front.room : null;
+    if (entry) {
+      s.brokenIn = true;
+      s.stats.brokenInMs = now;
+      addGroup(s, entry, [entry]);
+      s.entrySplit = true;
+      s.nextSpreadMs = now + ms.firstSplit;
+      if (entry === front.room) {
+        const guard = s.guards.find((g) => g.id === front.guard);
+        if (guard) say(s, guard, front.text, entry, front.real);
+      }
+    }
   }
   for (const d of sc.clues.decoyChatter) {
     if (reached(clockToMs(d.at, hour))) log(s, { kind: 'staff', speaker: d.speaker, text: d.text, truth: false });
@@ -397,7 +406,7 @@ function spread(s: GameState, w: World): void {
       rand(s); // move?
       rand(s); // which door
       rand(s); // split?
-      const dest = intruders.firstSplitTo;
+      const dest = g.room === intruders.frontDoor.room ? intruders.frontDoor.splitTo : intruders.firstSplitTo;
       if (!s.rooms[g.room].locked && !s.rooms[dest].locked) {
         addGroup(s, dest, [...g.visited, dest]);
         g.enteredMs = s.timeMs;

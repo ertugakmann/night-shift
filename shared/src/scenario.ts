@@ -70,6 +70,11 @@ export interface Scenario {
     firstSplitSec: number;
     /** Where the group that splits off goes. */
     firstSplitTo: RoomId;
+    /**
+     * If the entry room is locked at break-in time, the gang comes in here instead (the front door),
+     * a guard warns on the radio, and the split goes to `splitTo`. Both locked: they wait outside.
+     */
+    frontDoor: { room: RoomId; splitTo: RoomId; guard: string; text: string; real: string };
     vandaliseAfterSec: number;
     vaultLoseAfterSec: number;
   };

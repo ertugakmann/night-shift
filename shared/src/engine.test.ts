@@ -186,14 +186,24 @@ describe('find, trap, evict, repair', () => {
     expect(s.groups.map((g) => g.room)).toEqual(['mail-room', 'entrance-hall']);
   });
 
-  it('a Mail Room locked in advance keeps the gang outside until it opens', () => {
+  it('a Mail Room locked in advance: they come in through the front door, and Tom warns on the radio', () => {
     let s = act(started(), 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.brokenIn);
+    expect(s.groups.map((g) => g.room)).toEqual(['entrance-hall']);
+    expect(s.log.some((l) => l.speaker === 'Tom' && l.text === "Someone's at the front door!")).toBe(true);
+    s = runUntil(s, (x) => x.groups.length > 1);
+    expect(s.groups.map((g) => g.room)).toEqual(['entrance-hall', 'west-corridor']);
+    expect(s.groups.some((g) => g.room === 'mail-room')).toBe(false);
+  });
+
+  it('both ways in locked: the gang waits outside until one opens', () => {
+    let s = act(started(), 'lock', 'mail-room', 'sam');
+    s = act(s, 'lock', 'entrance-hall', 'tom');
     s = runFor(s, w.ms.breakIn + 5000);
     expect(s.brokenIn).toBe(false);
-    expect(s.groups).toHaveLength(0);
-    s = act(s, 'unlock', 'mail-room', 'sam');
+    s = act(s, 'unlock', 'entrance-hall', 'tom');
     s = runUntil(s, (x) => x.brokenIn);
-    expect(s.groups.map((g) => g.room)).toEqual(['mail-room']);
+    expect(s.groups.map((g) => g.room)).toEqual(['entrance-hall']);
   });
 
   it('a lock on the Entrance Hall stops the split', () => {

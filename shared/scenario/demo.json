@@ -23,6 +23,13 @@
     "spreadTickSec": 8.4,
     "firstSplitSec": 3.6,
     "firstSplitTo": "entrance-hall",
+    "frontDoor": {
+      "room": "entrance-hall",
+      "splitTo": "west-corridor",
+      "guard": "tom",
+      "text": "Someone's at the front door!",
+      "real": "Suspicious login on the VPN gateway!"
+    },
     "masterKeysSpreadTickSec": 5.6,
     "moveChance": 0.65,
     "splitChance": 0.5,
