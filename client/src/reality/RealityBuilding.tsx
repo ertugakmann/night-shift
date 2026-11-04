@@ -1,0 +1,251 @@
+// The reality view of a building screen: the same floor plan, redrawn as a hospital network in a clean
+// SOC style. Departments instead of galleries, systems instead of exhibits, ransomware instead of the
+// gang, analysts instead of guards. The game names stay underneath, so the mapping is always visible.
+import { useId } from 'react';
+import { motion } from 'motion/react';
+import type { Room as RoomData, Snapshot } from '@night-shift/shared';
+import { guardPose } from '../building/geometry';
+import { DOORS, ROOMS, SLICE_H, SLICE_W, intersects, sliceRect, type BuildingScreenId } from '../building/layout';
+import { wrap } from '../desk/util';
+import { worldOf } from '../game/view';
+import { selectRoom, useGame } from '../net/game';
+import { RealityStrip } from './RealityStrip';
+
+const C = {
+  bg: '#0a1120',
+  room: '#101a2c',
+  line: '#2a3a58',
+  text: '#e6edf7',
+  sub: '#7f8ea8',
+  ok: '#3ee0d8',
+  isolated: '#9c86f5',
+  encrypted: '#ff6b6b',
+  amber: '#f2c65e',
+};
+
+type Status = 'ONLINE' | 'ISOLATED' | 'ENCRYPTED';
+const STATUS_COLOR: Record<Status, string> = { ONLINE: C.ok, ISOLATED: C.isolated, ENCRYPTED: C.encrypted };
+
+function StatusChip({ x, y, status }: { x: number; y: number; status: Status }) {
+  const w = status.length * 11 + 22;
+  return (
+    <g>
+      <rect x={x} y={y - 16} width={w} height={24} rx={12} fill={STATUS_COLOR[status]} fillOpacity={0.16} stroke={STATUS_COLOR[status]} strokeWidth={2} />
+      <text x={x + w / 2} y={y + 1} textAnchor="middle" fontSize={14} fontWeight={700} fill={STATUS_COLOR[status]} letterSpacing={1}>
+        {status}
+      </text>
+    </g>
+  );
+}
+
+/** A system as an asset card: icon, name, status, criticality. */
+function SystemCard({ x, y, name, status, criticality }: { x: number; y: number; name: string; status: Status; criticality: number }) {
+  const w = 360;
+  const h = 100;
+  const lines = wrap(name, 24, 2);
+  const color = STATUS_COLOR[status];
+  return (
+    <g transform={`translate(${x - w / 2},${y - h / 2})`}>
+      <rect width={w} height={h} rx={12} fill="#0d1729" stroke={color} strokeOpacity={0.55} strokeWidth={2} />
+      <rect width={6} height={h} rx={3} fill={color} />
+      {/* server glyph */}
+      <g transform="translate(22,22)">
+        <rect width={50} height={56} rx={8} fill="#16243d" stroke="#2f4a73" strokeWidth={2} />
+        {[12, 26, 40].map((yy) => (
+          <g key={yy}>
+            <rect x={9} y={yy - 3} width={24} height={6} rx={3} fill="#2f4a73" />
+            <circle cx={40} cy={yy} r={3.5} fill={color} />
+          </g>
+        ))}
+      </g>
+      {lines.map((l, i) => (
+        <text key={i} x={88} y={lines.length === 1 ? 44 : 34 + i * 24} fontSize={20} fontWeight={600} fill={C.text}>
+          {l}
+        </text>
+      ))}
+      <StatusChip x={88} y={84} status={status} />
+      <text x={w - 16} y={86} textAnchor="end" className="soc-mono" fontSize={14} fill={C.sub}>
+        CRIT {criticality}
+      </text>
+    </g>
+  );
+}
+
+function Analyst({ x, y, name, initial }: { x: number; y: number; name: string; initial: string }) {
+  return (
+    <motion.g initial={false} animate={{ x, y: y - 46 }} transition={{ duration: 0.12, ease: 'linear' }}>
+      <circle r={28} fill="#16243d" stroke={C.ok} strokeWidth={3} />
+      <text y={9} textAnchor="middle" fontSize={24} fontWeight={700} fill={C.ok}>
+        {initial}
+      </text>
+      {/* headset */}
+      <path d="M-22 -4 A22 22 0 0 1 22 -4" fill="none" stroke="#cfe0f5" strokeWidth={4} />
+      <rect x={-27} y={-6} width={8} height={14} rx={3} fill="#cfe0f5" />
+      <rect x={19} y={-6} width={8} height={14} rx={3} fill="#cfe0f5" />
+      <rect x={-56} y={-66} width={112} height={26} rx={13} fill="#0d1729" stroke="#2f4a73" strokeWidth={2} />
+      <text y={-48} textAnchor="middle" fontSize={15} fontWeight={600} fill="#cfe0f5">
+        Analyst {name}
+      </text>
+    </motion.g>
+  );
+}
+
+function Ransomware({ x, y, detected }: { x: number; y: number; detected: boolean }) {
+  return (
+    <g transform={`translate(${x},${y - 34})`}>
+      {detected && <circle r={44} fill="none" stroke={C.encrypted} strokeWidth={3} className="shimmer" />}
+      <path d="M0 -32 L28 -16 L28 16 L0 32 L-28 16 L-28 -16 Z" fill="#3a1220" stroke={C.encrypted} strokeWidth={3} />
+      {/* padlock: encryption */}
+      <path d="M-8 -2 V-9 A8 8 0 0 1 8 -9 V-2" fill="none" stroke={C.encrypted} strokeWidth={4} />
+      <rect x={-12} y={-3} width={24} height={18} rx={4} fill={C.encrypted} />
+      <rect x={-74} y={38} width={148} height={26} rx={13} fill={C.encrypted} />
+      <text y={56} textAnchor="middle" fontSize={15} fontWeight={800} fill="#2a0a12" letterSpacing={1}>
+        RANSOMWARE
+      </text>
+    </g>
+  );
+}
+
+function RealityRoom({ room, snapshot, uid, selected }: { room: RoomData; snapshot: Snapshot; uid: string; selected: boolean }) {
+  const layout = ROOMS[room.id];
+  const rs = snapshot.rooms[room.id];
+  const { rect } = layout;
+  const scanning = rs.litBy !== null;
+  const roomStatus: Status = rs.dark ? 'ENCRYPTED' : rs.locked ? 'ISOLATED' : 'ONLINE';
+  const stroke = rs.dark ? C.encrypted : rs.locked ? C.isolated : scanning ? C.ok : C.line;
+  const groups = snapshot.groups.filter((g) => g.room === room.id);
+  const visible = scanning || snapshot.debug;
+  const scanner = scanning ? snapshot.guards.find((g) => g.id === rs.litBy)?.name : null;
+  const downtime = snapshot.candlelight[room.wing] && (rs.locked || rs.dark);
+  const clip = `${uid}-r-${room.id}`;
+  const labelX = rect.x + 34;
+
+  return (
+    <g onClick={() => selectRoom(selected ? null : room.id)} style={{ cursor: 'pointer' }}>
+      <clipPath id={clip}>
+        <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx={10} />
+      </clipPath>
+      <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx={10} fill={rs.dark ? '#1c1020' : C.room} />
+      <g clipPath={`url(#${clip})`}>
+        {!scanning && <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={`url(#${uid}-unknown)`} />}
+        {layout.corridor && (
+          <line
+            x1={rect.x}
+            y1={rect.y + rect.h * 0.74}
+            x2={rect.x + rect.w}
+            y2={rect.y + rect.h * 0.74}
+            stroke={rs.dark ? C.encrypted : C.ok}
+            strokeOpacity={0.45}
+            strokeWidth={6}
+            strokeDasharray="18 14"
+            className="march"
+          />
+        )}
+        {scanning && (
+          <rect
+            x={rect.x}
+            y={rect.y}
+            width={rect.w}
+            height={10}
+            fill={C.ok}
+            opacity={0.35}
+            className="scanline"
+            style={{ '--scan': `${rect.h}px` } as React.CSSProperties}
+          />
+        )}
+      </g>
+      <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx={10} fill="none" stroke={stroke} strokeWidth={rs.locked ? 5 : 3} strokeDasharray={rs.locked ? '14 8' : undefined} />
+      {selected && <rect x={rect.x + 10} y={rect.y + 10} width={rect.w - 20} height={rect.h - 20} rx={8} fill="none" stroke={C.amber} strokeWidth={4} strokeDasharray="14 10" className="march" />}
+
+      {/* department first, the game name underneath */}
+      <text x={labelX} y={rect.y + (layout.corridor ? 60 : 58)} fontSize={36} fontWeight={700} fill={C.text}>
+        {room.real}
+      </text>
+      <text x={labelX} y={rect.y + (layout.corridor ? 88 : 86)} fontSize={19} fill={C.sub}>
+        in the game: {room.name}
+      </text>
+
+      {/* status, top right */}
+      <g transform={`translate(${rect.x + rect.w - 24},${rect.y + 40})`}>
+        <text textAnchor="end" fontSize={16} fill={scanning ? C.ok : C.sub} fontWeight={scanning ? 700 : 400}>
+          {scanning ? `EDR scan · ${scanner}` : 'Visibility: unknown'}
+        </text>
+        {downtime && (
+          <text y={26} textAnchor="end" fontSize={16} fontWeight={700} fill={C.amber}>
+            Downtime procedures (paper)
+          </text>
+        )}
+      </g>
+
+      {Object.entries(layout.exhibits).map(([id, ex]) => {
+        const exhibit = room.exhibits.find((e) => e.id === id);
+        if (!exhibit) return null;
+        return <SystemCard key={id} x={ex.x} y={ex.y} name={exhibit.real} status={roomStatus} criticality={exhibit.criticality} />;
+      })}
+
+      {visible &&
+        groups.map((g, i) => {
+          const spot = layout.spots[i % layout.spots.length];
+          return <Ransomware key={g.id} x={spot.x} y={spot.y} detected={g.spotted} />;
+        })}
+    </g>
+  );
+}
+
+/** Reality view of one building screen. */
+export function RealityBuilding({ screen }: { screen: BuildingScreenId }) {
+  const { snapshot, selected } = useGame();
+  const uid = useId().replace(/:/g, '');
+  const slice = sliceRect(screen);
+  if (!snapshot) return null;
+  const w = worldOf(snapshot);
+  const rooms = w.sc.rooms.filter((r) => intersects(ROOMS[r.id].rect, slice));
+  const doors = DOORS.filter((d) => intersects({ x: d.x - 60, y: d.y - 60, w: 120, h: 120 }, slice));
+
+  return (
+    <svg viewBox={`${slice.x} 0 ${SLICE_W} ${SLICE_H}`} preserveAspectRatio="xMidYMid meet" className="soc-text block h-full w-full select-none" role="img" aria-label="Hospital network, reality view">
+      <defs>
+        <pattern id={`${uid}-unknown`} width={28} height={28} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width={28} height={28} fill="none" />
+          <line x1={0} y1={0} x2={0} y2={28} stroke="#7f8ea8" strokeOpacity={0.07} strokeWidth={10} />
+        </pattern>
+        <pattern id={`${uid}-grid`} width={40} height={40} patternUnits="userSpaceOnUse">
+          <path d="M40 0 L0 0 0 40" fill="none" stroke="#16243d" strokeWidth={1.5} />
+        </pattern>
+      </defs>
+      <rect x={slice.x} y={0} width={SLICE_W} height={SLICE_H} fill={C.bg} />
+      <rect x={slice.x} y={0} width={SLICE_W} height={SLICE_H} fill={`url(#${uid}-grid)`} />
+
+      {rooms.map((room) => (
+        <RealityRoom key={room.id} room={room} snapshot={snapshot} uid={uid} selected={selected === room.id} />
+      ))}
+
+      {/* network links between departments */}
+      {doors.map((d) => {
+        const isolated = snapshot.rooms[d.a].locked || snapshot.rooms[d.b].locked;
+        const v = d.orient === 'v';
+        return (
+          <g key={`${d.a}-${d.b}`} pointerEvents="none">
+            <rect x={v ? d.x - 14 : d.x - 40} y={v ? d.y - 40 : d.y - 14} width={v ? 28 : 80} height={v ? 80 : 28} rx={8} fill="#0d1729" stroke={isolated ? C.isolated : '#3a5680'} strokeWidth={3} />
+            {isolated ? (
+              <g transform={`translate(${d.x},${d.y})`}>
+                <path d="M-6 -1 V-6 A6 6 0 0 1 6 -6 V-1" fill="none" stroke={C.isolated} strokeWidth={3} />
+                <rect x={-9} y={-2} width={18} height={13} rx={3} fill={C.isolated} />
+              </g>
+            ) : (
+              <circle cx={d.x} cy={d.y} r={6} fill={C.ok} className="shimmer" />
+            )}
+          </g>
+        );
+      })}
+
+      <RealityStrip x0={slice.x} />
+
+      {/* analysts, on top of everything */}
+      {snapshot.guards.map((g) => {
+        const p = guardPose(g);
+        return <Analyst key={g.id} x={p.x} y={p.y} name={g.name} initial={g.name[0]} />;
+      })}
+    </svg>
+  );
+}
