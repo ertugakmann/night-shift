@@ -55,6 +55,8 @@ export interface NightFacts {
   /** Galleries where intruders were still hiding at the end. */
   intrudersLeftIn: { gallery: string; department: string }[];
   masterKeysStolen: boolean;
+  /** The locks were changed in time ("Change the locks"), taking the master keys away again. */
+  locksChanged: boolean;
   backupsDestroyed: boolean;
   guards: { name: string; actions: { at: string; action: ActionKind; actionReal: string; gallery: string; department: string; success: boolean }[] }[];
   rex: {
@@ -114,7 +116,8 @@ export function nightFacts(state: GameState): NightFacts {
       .map((r) => ({ gallery: r.name, department: r.real, systems: r.exhibits.map((x) => x.real) })),
     stillLocked: w.sc.rooms.filter((r) => state.rooms[r.id].locked).map((r) => ({ gallery: r.name, department: r.real })),
     intrudersLeftIn: [...new Set(state.groups.map((g) => g.room))].map((id) => ({ gallery: room(id).name, department: room(id).real })),
-    masterKeysStolen: state.masterKeys,
+    masterKeysStolen: state.stats.keysStolen,
+    locksChanged: state.stats.keysChanged,
     backupsDestroyed: state.backupsLost,
     guards: state.guards.map((g) => ({
       name: g.name,
@@ -235,7 +238,7 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
   if (f.intrudersLeftIn.length > 0) next.push(`Hunt and eradicate remaining ransomware in ${some(f.intrudersLeftIn.map((r) => r.department), 2, 'segments')}.`);
   if (encrypted.length > 0) next.push(f.backupsDestroyed ? 'Rebuild backups before restoring encrypted systems.' : `Restore from backup: ${some(encrypted, 2, 'systems')}.`);
   if (f.stillLocked.length > 0) next.push(`Bring isolated services back once clean: ${some(f.stillLocked.map((r) => r.department), 2, 'more')}.`);
-  if (f.masterKeysStolen) next.push('Reset all admin credentials and review privileged access.');
+  if (f.masterKeysStolen) next.push(f.locksChanged ? 'Admin passwords were reset in the night: check for sessions opened before the reset.' : 'Reset all admin credentials and review privileged access.');
   if (f.rex.ignoredRight > 0) next.push('Review the AI copilot alerts that went unanswered.');
   next.push('Remind staff about phishing: the attack started with an email.');
 

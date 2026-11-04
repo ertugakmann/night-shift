@@ -177,3 +177,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .caret, .pen { animation: none !important; }
 }
+
+/* "Change the locks": a wrong key shakes the tag. */
+.shake { animation: shake 0.35s ease-in-out; transform-box: fill-box; transform-origin: center; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-12px); } 75% { transform: translateX(12px); } }
+@media (prefers-reduced-motion: reduce) { .shake { animation: none !important; } }

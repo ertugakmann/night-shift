@@ -86,7 +86,10 @@ export interface Scenario {
     catchSec: number;
     catchPenaltySec: number;
     catchInnocents: number;
-    repairSec: number;
+    /** Repair is the "Reconnect the exhibit" mini game: its time limit. */
+    wiresSec: number;
+    /** "Change the locks" (Key Room vandalised): time to type the code. */
+    keysSec: number;
     candlelightSec: number;
     candlelightModifier: number;
     /** How many rooms can be locked at the same time (the padlocks on the desk). */
@@ -143,6 +146,8 @@ export interface World {
     firstSplit: number;
     catch: number;
     catchPenalty: number;
+    wires: number;
+    keys: number;
     followWindow: number;
     vandalise: number;
     vaultLose: number;
@@ -208,6 +213,8 @@ function buildWorld(sc: Scenario): World {
       firstSplit: sc.intruders.firstSplitSec * 1000,
       catch: sc.actions.catchSec * 1000,
       catchPenalty: sc.actions.catchPenaltySec * 1000,
+      wires: sc.actions.wiresSec * 1000,
+      keys: sc.actions.keysSec * 1000,
       followWindow: sc.rex.followWindowSec * 1000,
       vandalise: sc.intruders.vandaliseAfterSec * 1000,
       vaultLose: sc.intruders.vaultLoseAfterSec * 1000,

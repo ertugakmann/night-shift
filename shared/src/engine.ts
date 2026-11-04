@@ -66,6 +66,8 @@ export interface Task {
   arrived: boolean;
   /** Patrol only: intruders were seen during this patrol. */
   found: boolean;
+  /** Evict and repair: the mini game has begun (a guard who arrives while another one runs waits). */
+  started?: boolean;
 }
 
 export interface Guard {
@@ -152,8 +154,47 @@ export interface Catch {
   resultAtMs: number | null;
 }
 
-/** How long the result of a catch stays on screen. */
+/** How long the result of a mini game stays on screen. */
 export const CATCH_RESULT_MS = 1800;
+
+/** The cable colours of "Reconnect the exhibit", in order. */
+export const WIRE_COUNT = 4;
+
+/**
+ * Repair as a mini game: cable ends on the left and right in mixed order; join each left end to the
+ * right end of the same colour. `left`/`right`: the colour at each position, top to bottom.
+ */
+export interface Wires {
+  id: number;
+  room: RoomId;
+  guard: string;
+  startedMs: number;
+  endsMs: number;
+  left: number[];
+  right: number[];
+  /** Colours joined so far. */
+  connected: number[];
+  /** A wrong join sparks (no time lost). */
+  sparkAtMs: number | null;
+  result: 'fixed' | 'failed' | null;
+  resultAtMs: number | null;
+}
+
+/** "Change the locks": the gang took the master keys; type the code in time to take the advantage away. */
+export interface KeysGame {
+  id: number;
+  /** Shown as "OWL-7"; typed as OWL7. */
+  code: string;
+  /** How many characters are typed correctly so far. */
+  typed: number;
+  /** On-screen tiles for touch screens: the code's characters and a few others, mixed. */
+  tiles: string[];
+  startedMs: number;
+  endsMs: number;
+  wrongAtMs: number | null;
+  result: 'changed' | 'kept' | null;
+  resultAtMs: number | null;
+}
 
 export interface DoneAction {
   guard: string;
@@ -219,6 +260,9 @@ export interface GameState {
     /** Barks that ended without the player acting on them, and how many of those were right. */
     rexIgnored: number;
     rexIgnoredRight: number;
+    /** The master keys were stolen tonight, and whether the locks were changed in time. */
+    keysStolen: boolean;
+    keysChanged: boolean;
     /** Game time the gang broke in, was first spotted, and was last fully stopped (null while any group roams free). */
     brokenInMs: number | null;
     firstSpottedMs: number | null;
@@ -236,6 +280,12 @@ export interface GameState {
   done: DoneAction[];
   /** The "Catch the intruders" mini game in progress (or just finished, while its result shows). */
   catch: Catch | null;
+  /** "Reconnect the exhibit" (repair) in progress or just finished. */
+  wires: Wires | null;
+  /** "Change the locks" in progress or just finished. */
+  keys: KeysGame | null;
+  /** The Key Room fell while another mini game was on: change the locks as soon as it ends. */
+  keysPending: boolean;
   nextCatchId: number;
 }
 
@@ -281,6 +331,8 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
       rexFollowedWrong: 0,
       rexIgnored: 0,
       rexIgnoredRight: 0,
+      keysStolen: false,
+      keysChanged: false,
       brokenInMs: null,
       firstSpottedMs: null,
       containedMs: null,
@@ -293,6 +345,9 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     outcome: null,
     done: [],
     catch: null,
+    wires: null,
+    keys: null,
+    keysPending: false,
     nextCatchId: 1,
   };
 }
@@ -403,6 +458,8 @@ function tick(s: GameState, w: World): void {
 
   updateGuards(s, w);
   updateCatch(s, w);
+  updateWires(s, w);
+  updateKeys(s, w);
   updateRooms(s, w);
   if (s.phase !== 'running') return;
 
@@ -540,8 +597,10 @@ function vandalise(s: GameState, w: World, roomId: RoomId): void {
   for (const ex of room.exhibits) {
     log(s, { kind: 'staff', speaker: ex.report.speaker, text: ex.report.text, room: roomId, truth: true });
   }
-  if (room.special === 'masterKeys' && !s.masterKeys) {
+  if (room.special === 'masterKeys' && !s.masterKeys && !s.stats.keysStolen) {
     s.masterKeys = true;
+    s.stats.keysStolen = true;
+    s.keysPending = true; // "Change the locks!" as soon as no other mini game is on
     log(s, {
       kind: 'event',
       room: roomId,
@@ -641,6 +700,7 @@ function updateContainment(s: GameState): void {
 // ---------- Catch the intruders (Evict) ----------
 
 function arriveToEvict(s: GameState, w: World, guard: Guard, task: Task): void {
+  // (only called when no other mini game is on: see updateGuards)
   const room = w.room.get(task.room)!;
   const inside = s.groups.filter((g) => g.room === task.room);
   if (inside.length === 0) {
@@ -770,6 +830,185 @@ function resolveCatch(s: GameState, w: World, won: boolean): void {
   }
 }
 
+// ---------- Mini games: one at a time ----------
+
+/** A mini game is on (or its result is still showing). */
+export function miniGameBusy(s: GameState): boolean {
+  return s.catch !== null || s.wires !== null || s.keys !== null;
+}
+
+// ---------- Reconnect the exhibit (Repair) ----------
+
+/** Fixed mixes for the cable ends: no randomness, so a repair never changes the seeded night. */
+const WIRE_MIXES = [
+  [2, 0, 3, 1],
+  [1, 3, 0, 2],
+  [3, 2, 1, 0],
+  [0, 3, 1, 2],
+  [1, 0, 3, 2],
+  [3, 0, 2, 1],
+];
+
+function arriveToRepair(s: GameState, w: World, guard: Guard, task: Task): void {
+  const room = w.room.get(task.room)!;
+  const name = theRoom(room.name);
+  const rs = s.rooms[task.room];
+  const fail = (text: string, real: string) => {
+    guard.task = null;
+    s.done.push({ guard: guard.id, action: 'repair', room: task.room, atMs: s.timeMs, hit: false });
+    say(s, guard, text, task.room, real);
+  };
+  if (s.groups.some((g) => g.room === task.room)) {
+    return fail(`Someone's still in ${name}! Clear them out first.`, `Cannot restore: ransomware still active in ${room.real}.`);
+  }
+  if (rs.dark && s.backupsLost) {
+    return fail(`The Archive is wrecked, chief. Can't fix ${name}.`, `Cannot restore ${room.real}: backups destroyed.`);
+  }
+  const id = s.nextCatchId++;
+  const left = WIRE_MIXES[(id + 3) % WIRE_MIXES.length];
+  const turn = 1 + (id % 3); // the right side is the left side turned, so no cable runs straight across
+  s.wires = {
+    id,
+    room: task.room,
+    guard: guard.id,
+    startedMs: s.timeMs,
+    endsMs: s.timeMs + w.ms.wires,
+    left,
+    right: left.map((_, i) => left[(i + turn) % left.length]),
+    connected: [],
+    sparkAtMs: null,
+    result: null,
+    resultAtMs: null,
+  };
+  s.rooms[task.room].litBy = guard.id;
+  say(s, guard, `Toolbox open. Let's get ${name} running again.`, task.room, `Restoring ${room.real} from backup: reconnecting network links.`);
+}
+
+function joinWire(state: GameState, from: number, to: number): ApplyResult {
+  const g = state.wires;
+  if (state.phase === 'paused') return { state, error: 'Paused. Press Space to continue.' };
+  if (state.phase !== 'running' || !g || g.result !== null) return { state, error: 'No repair in progress.' };
+  if (from < 0 || from >= g.left.length || to < 0 || to >= g.right.length) return { state };
+  const colour = g.left[from];
+  if (g.connected.includes(colour)) return { state };
+  const s = clone(state);
+  const gg = s.wires!;
+  if (gg.right[to] === colour) {
+    gg.connected.push(colour);
+    if (gg.connected.length === gg.left.length) resolveWires(s, world(s.scenarioId), true);
+  } else {
+    gg.sparkAtMs = s.timeMs; // wrong socket: a spark, no harm done
+  }
+  return { state: s };
+}
+
+function updateWires(s: GameState, w: World): void {
+  const g = s.wires;
+  if (!g) return;
+  if (g.result === null && s.timeMs >= g.endsMs) resolveWires(s, w, false);
+  else if (g.result !== null && s.timeMs >= (g.resultAtMs ?? 0) + CATCH_RESULT_MS) s.wires = null;
+}
+
+function resolveWires(s: GameState, w: World, ok: boolean): void {
+  const g = s.wires!;
+  const guard = s.guards.find((x) => x.id === g.guard)!;
+  const room = w.room.get(g.room)!;
+  const name = theRoom(room.name);
+  const rs = s.rooms[g.room];
+  g.result = ok ? 'fixed' : 'failed';
+  g.resultAtMs = s.timeMs;
+  guard.task = null;
+  if (rs.litBy === guard.id) rs.litBy = null;
+  s.done.push({ guard: guard.id, action: 'repair', room: g.room, atMs: s.timeMs, hit: ok });
+  if (!ok) {
+    say(s, guard, `Sparks everywhere! ${upper(name)} is still out. Again, chief?`, g.room, `Restore failed: network links not up on ${room.real}. Retry.`);
+    return;
+  }
+  rs.dark = false;
+  rs.locked = false;
+  rs.occupiedMs = 0;
+  s.stats.repairs++;
+  fx(s, 'repaired', g.room);
+  say(s, guard, repairedLine(guard.id, s.nextLogId, name), g.room, `${room.real} restored from backup and back online.`);
+}
+
+// ---------- Change the locks (the Key Room falls) ----------
+
+const LOCK_WORDS = ['OWL', 'FOX', 'BAT', 'ELK', 'YAK', 'EMU', 'APE', 'HEN'];
+const OTHER_KEYS = 'ABDGKMNPRSTUVZ23456789';
+
+function startKeys(s: GameState, w: World): void {
+  const id = s.nextCatchId++;
+  // From the game's counters, not the random generator: the seeded night stays the same.
+  const word = LOCK_WORDS[(id * 5 + Math.floor(s.timeMs / 1000)) % LOCK_WORDS.length];
+  const digit = String((id * 7 + Math.floor(s.timeMs / 100)) % 10);
+  const chars = [...word, digit];
+  const extra = [...OTHER_KEYS].filter((c) => !chars.includes(c));
+  const decoys = [0, 1, 2, 3].map((i) => extra[(id * 11 + i * 5) % extra.length]);
+  const tiles = [...chars, ...decoys]
+    .map((c, i) => ({ c, k: (i * 37 + id * 13) % 17 }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.c);
+  s.keys = {
+    id,
+    code: `${word}-${digit}`,
+    typed: 0,
+    tiles,
+    startedMs: s.timeMs,
+    endsMs: s.timeMs + w.ms.keys,
+    wrongAtMs: null,
+    result: null,
+    resultAtMs: null,
+  };
+  log(s, {
+    kind: 'event',
+    text: `Change the locks! Type ${word}-${digit} before they use the master keys.`,
+    real: `Admin credentials stolen! Emergency reset: enter ${word}-${digit}.`,
+  });
+}
+
+function typeCode(state: GameState, char: string): ApplyResult {
+  const k = state.keys;
+  if (state.phase === 'paused') return { state, error: 'Paused. Press Space to continue.' };
+  if (state.phase !== 'running' || !k || k.result !== null) return { state, error: 'No code to type.' };
+  const want = k.code.replace('-', '')[k.typed];
+  const s = clone(state);
+  const kk = s.keys!;
+  if (char.toUpperCase() === want) {
+    kk.typed++;
+    if (kk.typed === kk.code.replace('-', '').length) resolveKeys(s, true);
+  } else {
+    kk.typed = 0; // start again
+    kk.wrongAtMs = s.timeMs;
+  }
+  return { state: s };
+}
+
+function updateKeys(s: GameState, w: World): void {
+  const k = s.keys;
+  if (k) {
+    if (k.result === null && s.timeMs >= k.endsMs) resolveKeys(s, false);
+    else if (k.result !== null && s.timeMs >= (k.resultAtMs ?? 0) + CATCH_RESULT_MS) s.keys = null;
+  }
+  if (s.keysPending && !miniGameBusy(s) && s.phase === 'running') {
+    s.keysPending = false;
+    startKeys(s, w);
+  }
+}
+
+function resolveKeys(s: GameState, ok: boolean): void {
+  const k = s.keys!;
+  k.result = ok ? 'changed' : 'kept';
+  k.resultAtMs = s.timeMs;
+  if (ok) {
+    s.masterKeys = false;
+    s.stats.keysChanged = true;
+    log(s, { kind: 'event', text: 'New locks fitted. The master keys are useless now.', real: 'Admin passwords reset. Stolen credentials revoked.' });
+  } else {
+    log(s, { kind: 'event', text: 'Too slow. The gang keeps the master keys.', real: 'Reset missed: stolen admin credentials still valid.' });
+  }
+}
+
 // ---------- Guards ----------
 
 function updateGuards(s: GameState, w: World): void {
@@ -782,12 +1021,16 @@ function updateGuards(s: GameState, w: World): void {
       task.arrived = true;
       guard.room = task.room;
       if (task.action === 'patrol') s.rooms[task.room].litBy = guard.id;
-      if (task.action === 'evict') {
-        arriveToEvict(s, w, guard, task);
-        continue;
-      }
     }
-    if (task.action === 'evict') continue; // the catch frees the guard
+    if (task.action === 'evict' || task.action === 'repair') {
+      // A mini game decides when these end. One at a time: a guard who arrives meanwhile waits in the room.
+      if (task.arrived && !task.started && !miniGameBusy(s)) {
+        task.started = true;
+        if (task.action === 'evict') arriveToEvict(s, w, guard, task);
+        else arriveToRepair(s, w, guard, task);
+      }
+      continue;
+    }
     if (task.arrived && task.elapsedMs >= task.walkMs + task.workMs) {
       guard.task = null;
       complete(s, w, guard, task);
@@ -864,21 +1107,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       break; // handled by the catch (see resolveCatch)
 
     case 'repair':
-      if (inside.length > 0) {
-        say(s, guard, `Someone's still in ${name}! Clear them out first.`, task.room, `Cannot restore: ransomware still active in ${room.real}.`);
-        break;
-      }
-      if (rs.dark && s.backupsLost) {
-        say(s, guard, `The Archive is wrecked, chief. Can't fix ${name}.`, task.room, `Cannot restore ${room.real}: backups destroyed.`);
-        break;
-      }
-      rs.dark = false;
-      rs.locked = false;
-      rs.occupiedMs = 0;
-      s.stats.repairs++;
-      fx(s, 'repaired', task.room);
-      say(s, guard, repairedLine(guard.id, n, name), task.room, `${room.real} restored from backup and back online.`);
-      break;
+      break; // handled by the wires (see resolveWires)
 
     case 'unlock':
       rs.locked = false;
@@ -916,6 +1145,9 @@ function end(s: GameState, result: Outcome['result'], reason: string, real: stri
   s.phase = 'ended';
   s.rex.pending = []; // barks still inside their window were never decided
   s.catch = null;
+  s.wires = null;
+  s.keys = null;
+  s.keysPending = false;
   if (s.groups.length === 0 && s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
   s.outcome = { result, reason, real, atMs: s.timeMs, summary: summarise(s, result) };
   for (const rs of Object.values(s.rooms)) rs.litBy = null;
@@ -936,14 +1168,18 @@ function summarise(s: GameState, result: Outcome['result']): NightSummary {
 
 // ---------- Intents ----------
 
-export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch'] as const;
+export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch', 'wire', 'code'] as const;
 export type IntentType = (typeof INTENT_TYPES)[number];
 
 export type Intent =
-  | { type: Exclude<IntentType, 'action' | 'catch'> }
+  | { type: Exclude<IntentType, 'action' | 'catch' | 'wire' | 'code'> }
   | { type: 'action'; action: ActionKind; room: RoomId; guard?: string }
   /** A click on someone in the "Catch the intruders" scene. */
-  | { type: 'catch'; figure: number };
+  | { type: 'catch'; figure: number }
+  /** A cable dragged from left position `from` to right position `to` in "Reconnect the exhibit". */
+  | { type: 'wire'; from: number; to: number }
+  /** One character typed in "Change the locks". */
+  | { type: 'code'; char: string };
 
 /** Only the presenter page can start (or skip the intro), reset or hand over control. */
 export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode'];
@@ -953,6 +1189,8 @@ export function isIntent(value: unknown): value is Intent {
   const v = value as Record<string, unknown>;
   if (!INTENT_TYPES.includes(v.type as IntentType)) return false;
   if (v.type === 'catch') return typeof v.figure === 'number' && Number.isInteger(v.figure);
+  if (v.type === 'wire') return Number.isInteger(v.from) && Number.isInteger(v.to);
+  if (v.type === 'code') return typeof v.char === 'string' && v.char.length === 1;
   if (v.type !== 'action') return true;
   return (
     ACTIONS.includes(v.action as ActionKind) &&
@@ -968,6 +1206,10 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
   switch (intent.type) {
     case 'catch':
       return clickCatch(state, intent.figure);
+    case 'wire':
+      return joinWire(state, intent.from, intent.to);
+    case 'code':
+      return typeCode(state, intent.char);
     case 'start':
       if (state.phase === 'running') return { state, error: 'Already running.' };
       if (state.phase === 'intro') return { state, error: 'The shift is starting. Press Enter to skip.' };
@@ -1008,7 +1250,7 @@ const WORK_SEC: Record<ActionKind, (w: World) => number> = {
   lock: (w) => w.sc.actions.lockSec,
   unlock: (w) => w.sc.actions.lockSec,
   evict: () => 0, // the catch decides when it ends
-  repair: (w) => w.sc.actions.repairSec,
+  repair: () => 0, // the wires decide when it ends
   candlelight: (w) => w.sc.actions.candlelightSec,
 };
 
@@ -1048,15 +1290,15 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
     }
     case 'evict': {
       // Works in any room. Locked first is the safe way: if the catch fails, they cannot slip away.
-      const other = busyWith('evict', () => true);
-      if (other) return fail(`${other.name} is already chasing intruders. One catch at a time!`);
+      const other = busyWith('evict', () => true) ?? busyWith('repair', () => true);
+      if (other) return fail(`${other.name} is already on a job. One mini game at a time!`);
       break;
     }
     case 'repair': {
       if (!rs.locked) return fail(rs.dark ? `Lock and clear ${name} before repairing it.` : `Nothing to repair in ${name}.`);
       if (rs.dark && state.backupsLost) return fail('The Archive is wrecked. Repairs are disabled tonight.');
-      const other = busyWith('repair', (t) => t.room === room.id);
-      if (other) return fail(`${other.name} is already repairing ${name}.`);
+      const other = busyWith('repair', () => true) ?? busyWith('evict', () => true);
+      if (other) return fail(`${other.name} is already on a job. One mini game at a time!`);
       break;
     }
     case 'candlelight': {

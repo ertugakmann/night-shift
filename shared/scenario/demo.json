@@ -48,7 +48,8 @@
     "catchSec": 7,
     "catchPenaltySec": 1.5,
     "catchInnocents": 4,
-    "repairSec": 11.2,
+    "wiresSec": 8,
+    "keysSec": 6,
     "candlelightSec": 1.68,
     "candlelightModifier": 0.5,
     "maxLocks": 3

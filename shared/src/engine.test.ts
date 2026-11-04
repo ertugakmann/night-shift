@@ -48,6 +48,18 @@ function placeGang(s: GameState, room: string): GameState {
 
 const idleNight = () => runUntil(started(), () => false);
 
+/** Repair, and win the wires: wait for the guard to arrive, then join every cable to its colour. */
+function repairAndWire(s: GameState, room: string, guard?: string): GameState {
+  s = act(s, 'repair', room, guard);
+  s = runUntil(s, (x) => (x.wires?.room === room && x.wires.result === null) || !x.guards.some((g) => g.task?.action === 'repair'));
+  if (!s.wires || s.wires.result !== null) return s;
+  const { left, right } = s.wires;
+  left.forEach((colour, from) => {
+    s = applyIntent(s, { type: 'wire', from, to: right.indexOf(colour) }).state;
+  });
+  return s;
+}
+
 /** Evict, and win the catch: wait for the guard to arrive, then click every intruder. */
 function evictAndCatch(s: GameState, room: string, guard?: string): GameState {
   s = act(s, 'evict', room, guard);
@@ -268,7 +280,7 @@ describe('find, trap, evict, repair', () => {
   it('evict works in an open room too, but only one catch at a time', () => {
     let s = act(afterBreakIn(), 'evict', 'mail-room', 'tom');
     const second = applyIntent(s, { type: 'action', action: 'evict', room: 'entrance-hall', guard: 'sam' });
-    expect(second.error).toMatch(/One catch at a time/);
+    expect(second.error).toMatch(/One mini game at a time/);
     s = runUntil(s, (x) => x.catch !== null);
     expect(s.catch!.room).toBe('mail-room');
   });
@@ -282,8 +294,9 @@ describe('find, trap, evict, repair', () => {
     s = runUntil(s, (x) => x.candlelight.west);
     expect(s.care).toBe(93);
 
-    s = act(s, 'repair', 'lab', 'sam');
-    s = runUntil(s, (x) => !x.rooms.lab.locked);
+    s = repairAndWire(s, 'lab', 'sam');
+    expect(s.rooms.lab.locked).toBe(false);
+    s = runFor(s, 200);
     expect(s.care).toBe(100);
   });
 
@@ -398,6 +411,137 @@ describe('Catch the intruders (Evict)', () => {
   });
 });
 
+describe('Reconnect the exhibit (Repair)', () => {
+  /** The Lab locked (no gang inside) and a guard arrived to repair it. */
+  function wiring(): GameState {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked && !x.guards.some((g) => g.task));
+    s = act(s, 'repair', 'lab', 'sam');
+    return runUntil(s, (x) => x.wires !== null);
+  }
+
+  it('starts when the guard arrives: 4 cables in mixed order, 8 seconds', () => {
+    const s = wiring();
+    const g = s.wires!;
+    expect(g.room).toBe('lab');
+    expect(g.endsMs - g.startedMs).toBe(8000);
+    expect([...g.left].sort()).toEqual([0, 1, 2, 3]);
+    expect([...g.right].sort()).toEqual([0, 1, 2, 3]);
+    expect(g.left.every((c, i) => g.right[i] !== c)).toBe(true); // no cable runs straight across
+  });
+
+  it('joining every cable to its colour repairs the room at once and gives the padlock back', () => {
+    let s = wiring();
+    const { left, right } = s.wires!;
+    left.forEach((colour, from) => {
+      s = applyIntent(s, { type: 'wire', from, to: right.indexOf(colour) }).state;
+    });
+    expect(s.wires!.result).toBe('fixed');
+    expect(s.rooms.lab.locked).toBe(false);
+    expect(s.stats.repairs).toBe(1);
+    expect(padlocks(s).free).toBe(3);
+    expect(s.guards.find((g) => g.id === 'sam')!.task).toBeNull();
+  });
+
+  it('a wrong socket sparks, joins nothing and costs no time', () => {
+    let s = wiring();
+    const { left, right, endsMs } = s.wires!;
+    const wrongTo = right.findIndex((c) => c !== left[0]);
+    s = applyIntent(s, { type: 'wire', from: 0, to: wrongTo }).state;
+    expect(s.wires!.connected).toEqual([]);
+    expect(s.wires!.sparkAtMs).toBe(s.timeMs);
+    expect(s.wires!.endsMs).toBe(endsMs);
+  });
+
+  it('out of time: the repair fails, the room stays as it was, and it can be tried again', () => {
+    let s = wiring();
+    s = runUntil(s, (x) => x.wires?.result !== null);
+    expect(s.wires!.result).toBe('failed');
+    expect(s.rooms.lab.locked).toBe(true);
+    expect(s.stats.repairs).toBe(0);
+    s = runFor(s, 2000);
+    expect(s.wires).toBeNull();
+    s = repairAndWire(s, 'lab', 'sam');
+    expect(s.rooms.lab.locked).toBe(false);
+  });
+
+  it('one mini game at a time: a guard who arrives while another one runs waits for it', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = act(s, 'lock', 'pharmacy', 'priya');
+    s = runUntil(s, (x) => x.rooms.lab.locked && x.rooms.pharmacy.locked && !x.guards.some((g) => g.task));
+    s = act(s, 'repair', 'lab', 'sam');
+    expect(applyIntent(s, { type: 'action', action: 'repair', room: 'pharmacy', guard: 'priya' }).error).toMatch(/One mini game at a time/);
+    // the Key Room game can still start on its own, so a guard can arrive to a busy desk: they wait
+    s = runUntil(s, (x) => x.wires !== null);
+    const paused: GameState = JSON.parse(JSON.stringify(s));
+    paused.guards.find((g) => g.id === 'priya')!.task = { action: 'repair', room: 'pharmacy', path: ['pharmacy'], walkMs: 0, workMs: 0, elapsedMs: 0, arrived: false, found: false };
+    paused.guards.find((g) => g.id === 'priya')!.room = 'pharmacy';
+    let w2 = runFor(paused, 1000);
+    expect(w2.wires!.room).toBe('lab');
+    expect(w2.guards.find((g) => g.id === 'priya')!.task?.started).toBeFalsy();
+    w2 = runUntil(w2, (x) => x.wires?.room === 'pharmacy');
+    expect(w2.wires!.room).toBe('pharmacy');
+  });
+
+  it('a wire without a repair is refused', () => {
+    expect(applyIntent(started(), { type: 'wire', from: 0, to: 0 }).error).toMatch(/No repair/);
+    expect(isIntent({ type: 'wire', from: 1, to: 2 })).toBe(true);
+    expect(isIntent({ type: 'wire', from: 'a', to: 2 })).toBe(false);
+  });
+});
+
+describe('Change the locks (the Key Room falls)', () => {
+  /** The gang in the Key Room until it falls. */
+  function keyRoomFalls(): GameState {
+    const s = placeGang(runUntil(started(), (x) => x.brokenIn), 'key-room');
+    s.rooms['key-room'].locked = true; // keep them there
+    return runUntil(s, (x) => x.keys !== null);
+  }
+
+  it('starts on its own when the master keys are stolen: a short code, 6 seconds', () => {
+    const s = keyRoomFalls();
+    expect(s.masterKeys).toBe(true);
+    expect(s.keys!.code).toMatch(/^[A-Z]{3}-\d$/);
+    expect(s.keys!.endsMs - s.keys!.startedMs).toBe(6000);
+    for (const c of s.keys!.code.replace('-', '')) expect(s.keys!.tiles).toContain(c);
+    expect(s.log.some((l) => l.kind === 'event' && l.text.startsWith('Change the locks!'))).toBe(true);
+  });
+
+  it('typing the code in time takes the master keys away: the gang slows down again', () => {
+    let s = keyRoomFalls();
+    for (const c of s.keys!.code.replace('-', '')) s = applyIntent(s, { type: 'code', char: c.toLowerCase() }).state;
+    expect(s.keys!.result).toBe('changed');
+    expect(s.masterKeys).toBe(false);
+    expect(s.stats.keysChanged).toBe(true);
+    const first = s.nextSpreadMs;
+    s = runUntil(s, (x) => x.nextSpreadMs > first);
+    expect(s.nextSpreadMs - first).toBe(w.ms.spreadTick);
+  });
+
+  it('a wrong character starts the typing again', () => {
+    let s = keyRoomFalls();
+    const code = s.keys!.code.replace('-', '');
+    s = applyIntent(s, { type: 'code', char: code[0] }).state;
+    expect(s.keys!.typed).toBe(1);
+    s = applyIntent(s, { type: 'code', char: code[0] === 'Q' ? 'X' : 'Q' }).state;
+    expect(s.keys!.typed).toBe(0);
+    expect(s.keys!.wrongAtMs).toBe(s.timeMs);
+  });
+
+  it('too slow: the gang keeps the master keys', () => {
+    let s = keyRoomFalls();
+    s = runUntil(s, (x) => x.keys?.result !== null);
+    expect(s.keys!.result).toBe('kept');
+    expect(s.masterKeys).toBe(true);
+  });
+
+  it('an idle night keeps the same route: the locks are never changed', () => {
+    const night = idleNight();
+    expect(night.stats.keysStolen).toBe(true);
+    expect(night.stats.keysChanged).toBe(false);
+  });
+});
+
 describe('padlocks and the lock rule', () => {
   const afterBreakIn = () => runUntil(started(), (s) => s.brokenIn);
 
@@ -426,8 +570,8 @@ describe('padlocks and the lock rule', () => {
   it('a repair gives the padlock back too', () => {
     let s = act(started(), 'lock', 'lab', 'sam');
     s = runUntil(s, (x) => x.rooms.lab.locked);
-    s = act(s, 'repair', 'lab', 'sam');
-    s = runUntil(s, (x) => !x.rooms.lab.locked);
+    s = repairAndWire(s, 'lab', 'sam');
+    expect(s.rooms.lab.locked).toBe(false);
     expect(padlocks(s).free).toBe(3);
   });
 

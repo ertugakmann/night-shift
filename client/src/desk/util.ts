@@ -87,9 +87,10 @@ export function actionBlocked(s: Snapshot, room: RoomId, action: ActionKind): st
       return rs.locked ? null : 'Not locked.';
     case 'evict':
       // Works anywhere; locked first is safer (a failed catch cannot slip away).
-      return s.guards.some((g) => g.task?.action === 'evict') || (s.catch && s.catch.result === null) ? 'One catch at a time.' : null;
+      return s.guards.some((g) => g.task?.action === 'evict' || g.task?.action === 'repair') ? 'One mini game at a time.' : null;
     case 'repair':
       if (!rs.locked) return rs.dark ? 'Lock and clear the room first.' : 'Nothing to repair.';
+      if (s.guards.some((g) => g.task?.action === 'evict' || g.task?.action === 'repair')) return 'One mini game at a time.';
       if (rs.dark && s.backupsLost) return 'The Archive is wrecked. Repairs are disabled.';
       return null;
     case 'candlelight': {
