@@ -1,19 +1,21 @@
 import type { ScreenId } from '@night-shift/shared';
 import { gameClock } from '../game/view';
 import { useGame } from '../net/game';
-import { BEAT, MISSION, POWER_ON_FLICKER_MS, inIntro, powerOnAt } from './timeline';
+import { useScreenPosition } from '../components/position';
+import { BEAT, MISSION, POWER_ON_FLICKER_MS, inIntro, powerOnAtPosition } from './timeline';
 
 /**
  * Shift start, per screen: black until this screen's turn, then a short flicker as it powers on.
- * The same component sits on /screen/x, inside the /wall monitors and in /preview, so the physical
- * screens in the room and the monitors on /wall light up together, left to right.
+ * The same component sits on /screen/x, inside the /wall monitors and in /preview. Real-room screens
+ * light up in their physical order (ROOM_ORDER), the /wall monitors and /preview in the plan order 1 to 5.
  * `quiet`: inside /wall, where the office overlay shows the clock and the mission instead.
  */
 export function IntroOverlay({ id, quiet = false }: { id: ScreenId; quiet?: boolean }) {
   const { snapshot } = useGame();
+  const position = useScreenPosition(id);
   if (!inIntro(snapshot)) return null;
   const t = snapshot.introMs;
-  const on = powerOnAt(id);
+  const on = powerOnAtPosition(position);
 
   if (t < on) {
     // Before power-on. The desk (screen 2) shows the time and the sounds of the guard arriving.

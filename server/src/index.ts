@@ -5,12 +5,14 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { Server, type Socket } from 'socket.io';
 import {
+  DEFAULT_ROOM_ORDER,
   TICK_MS,
   advance,
   applyIntent,
   initialState,
   publicState,
   isIntent,
+  parseRoomOrder,
   type ClientToServerEvents,
   type GameState,
   type Hello,
@@ -38,6 +40,14 @@ const PUBLIC_URL = (process.env.RENDER_EXTERNAL_URL || (DEV ? VITE_URL : `http:/
 // Presenter access needs ?presenter=<key>. See presenterKey.ts for where the key comes from.
 const { key: PRESENTER_KEY, source: KEY_SOURCE } = resolvePresenterKey(process.env);
 
+// How the five screens physically stand in the room, left to right, e.g. ROOM_ORDER=2,1,3,4,5.
+// Each /screen/x page uses it for the power-on order, the Lights on wave and the Input → Output strip.
+const ROOM_ORDER_RAW = process.env.ROOM_ORDER?.trim();
+const ROOM_ORDER = parseRoomOrder(ROOM_ORDER_RAW) ?? [...DEFAULT_ROOM_ORDER];
+if (ROOM_ORDER_RAW && !parseRoomOrder(ROOM_ORDER_RAW)) {
+  console.warn(`ROOM_ORDER="${ROOM_ORDER_RAW}" ignored: list each screen 1–5 exactly once, e.g. 2,1,3,4,5.`);
+}
+
 const app = express();
 const httpServer = createServer(app);
 // Snapshots are repetitive JSON at 10 Hz; compressing them keeps remote judges on slow links happy.
@@ -47,7 +57,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 
 // Health check for Render, and a quick way to see that the server is up.
 app.get('/healthz', (_req, res) => {
-  res.json({ ok: true, phase: state.phase, clients: io.engine.clientsCount });
+  res.json({ ok: true, phase: state.phase, clients: io.engine.clientsCount, roomOrder: ROOM_ORDER.join(',') });
 });
 
 // Serve the built client (npm start). In development Vite serves the live client instead, so an old
@@ -101,6 +111,7 @@ setInterval(() => {
 // ---------- Connections ----------
 
 io.on('connection', (socket) => {
+  socket.emit('wall', { order: ROOM_ORDER });
   socket.emit('snapshot', snapshot());
   sendControl(socket);
 
@@ -158,6 +169,7 @@ io.on('connection', (socket) => {
 httpServer.listen(PORT, () => {
   const mode = SERVE_DIST ? 'serving client/dist' : DEV ? `dev: open the pages on ${VITE_URL}` : 'API only (build the client first)';
   console.log(`NIGHT SHIFT server on http://localhost:${PORT} (${mode})`);
+  console.log(`Screens in the room, left to right: ${ROOM_ORDER.join(' ')} (ROOM_ORDER)`);
   const link = `${PUBLIC_URL}/screen/2?presenter=${encodeURIComponent(PRESENTER_KEY)}`;
   if (KEY_SOURCE === 'env') {
     console.log('Presenter key: from PRESENTER_KEY. Presenter link:');

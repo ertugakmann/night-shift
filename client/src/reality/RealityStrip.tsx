@@ -1,10 +1,11 @@
 import type { ScreenId } from '@night-shift/shared';
+import { useScreenPosition } from '../components/position';
 
 /**
  * How NIGHT SHIFT plugs into a modular SOC: what goes in, what comes out.
  * - 'full': the whole strip on one screen (/preview, /wall).
- * - 'split': the strip runs across the five real-room screens as one line: INPUT on screen 1,
- *   NIGHT SHIFT in the middle on screen 3, OUTPUT on screen 5, flow arrows on 2 and 4.
+ * - 'split': the strip runs across the five real-room screens as one line, in the order they stand
+ *   (ROOM_ORDER): INPUT on the leftmost, NIGHT SHIFT in the middle, OUTPUT on the rightmost, flow arrows between.
  * Drawn in plan units; x0 is the left edge of the screen's 1600-unit area.
  */
 export type StripMode = 'full' | 'split' | 'none';
@@ -77,15 +78,17 @@ function Full({ x0, y }: { x0: number; y: number }) {
   );
 }
 
-/** This screen's piece of the wall-wide strip. Outer ends are rounded only on screens 1 and 5. */
-function Split({ x0, y, screen }: { x0: number; y: number; screen: ScreenId }) {
-  const left = screen === 1 ? x0 + 16 : x0;
-  const right = screen === 5 ? x0 + 1584 : x0 + 1600;
+/** This screen's piece of the wall-wide strip, by its position (0 = leftmost). Only the outer ends are rounded. */
+function Split({ x0, y, position }: { x0: number; y: number; position: number }) {
+  const first = position === 0;
+  const last = position === 4;
+  const left = first ? x0 + 16 : x0;
+  const right = last ? x0 + 1584 : x0 + 1600;
   const bar = (
-    <rect x={left} y={y} width={right - left} height={H} rx={screen === 1 || screen === 5 ? 14 : 0} fill="#0a1424" fillOpacity={0.94} stroke="#2a3a58" strokeWidth={2} />
+    <rect x={left} y={y} width={right - left} height={H} rx={first || last ? 14 : 0} fill="#0a1424" fillOpacity={0.94} stroke="#2a3a58" strokeWidth={2} />
   );
-  switch (screen) {
-    case 1:
+  switch (position) {
+    case 0:
       return (
         <g>
           {bar}
@@ -96,7 +99,7 @@ function Split({ x0, y, screen }: { x0: number; y: number; screen: ScreenId }) {
           <Flow x1={x0 + 820} x2={x0 + 1600} y={y} />
         </g>
       );
-    case 3:
+    case 2:
       return (
         <g>
           {bar}
@@ -105,7 +108,7 @@ function Split({ x0, y, screen }: { x0: number; y: number; screen: ScreenId }) {
           <Flow x1={x0 + 980} x2={x0 + 1600} y={y} />
         </g>
       );
-    case 5:
+    case 4:
       return (
         <g>
           {bar}
@@ -117,14 +120,14 @@ function Split({ x0, y, screen }: { x0: number; y: number; screen: ScreenId }) {
         </g>
       );
     default:
-      // screens 2 and 4: the flow carries on, with a hint of what is moving
+      // second and fourth screen: the flow carries on, with a hint of what is moving
       return (
         <g>
           {bar}
           <Flow x1={x0} x2={x0 + 1600} y={y} />
           <rect x={x0 + 560} y={y + 18} width={480} height={32} rx={16} fill="#0a1424" />
           <text x={x0 + 800} y={y + 41} textAnchor="middle" fontSize={17} fontWeight={600} fill="#7f8ea8">
-            {screen === 2 ? 'alerts · staff reports · network data' : 'containment · trust insight · handover'}
+            {position === 1 ? 'alerts · staff reports · network data' : 'containment · trust insight · handover'}
           </text>
         </g>
       );
@@ -132,10 +135,11 @@ function Split({ x0, y, screen }: { x0: number; y: number; screen: ScreenId }) {
 }
 
 export function RealityStrip({ x0, y = 826, mode, screen }: { x0: number; y?: number; mode: StripMode; screen: ScreenId }) {
+  const position = useScreenPosition(screen);
   if (mode === 'none') return null;
   return (
     <g className="soc-text" pointerEvents="none">
-      {mode === 'full' ? <Full x0={x0} y={y} /> : <Split x0={x0} y={y} screen={screen} />}
+      {mode === 'full' ? <Full x0={x0} y={y} /> : <Split x0={x0} y={y} position={position} />}
     </g>
   );
 }

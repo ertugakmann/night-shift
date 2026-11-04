@@ -1,4 +1,5 @@
 import type { Intent, PublicState } from './engine';
+import type { ScreenId } from './screens';
 
 /** What every client receives at 10 Hz. */
 export interface Snapshot extends PublicState {
@@ -20,12 +21,19 @@ export interface Hello {
   code: string | null;
 }
 
+/** How the screens stand in the room, sent once on connect. */
+export interface WallInfo {
+  /** Screen ids, left to right (ROOM_ORDER). */
+  order: ScreenId[];
+}
+
 export type CodeResult = { ok: boolean; message: string };
 
 export interface ServerToClientEvents {
   snapshot: (snapshot: Snapshot) => void;
   control: (info: ControlInfo) => void;
   notice: (text: string) => void;
+  wall: (info: WallInfo) => void;
 }
 
 export interface ClientToServerEvents {

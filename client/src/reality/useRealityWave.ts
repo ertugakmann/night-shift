@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ScreenId } from '@night-shift/shared';
+import { useScreenPosition } from '../components/position';
 import { useGame } from '../net/game';
 
-/** Physical order of the screens on the wall, left to right. */
-const ORDER: Record<ScreenId, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4 };
 /** Delay between neighbouring screens, and how long each screen's sweep of light takes. */
 export const WAVE_STEP_MS = 380;
 export const SWEEP_MS = 950;
@@ -20,12 +19,14 @@ function prefersReducedMotion(): boolean {
 /**
  * "Lights on" as a wave across the wall. The server flips one flag for everyone at once; each screen
  * waits its turn (left to right when the lights go on, right to left when they go off) and then sweeps.
+ * Real-room screens go by where they physically stand (ROOM_ORDER); /wall and /preview by the plan order.
  * A page that loads mid-way simply shows the current view, without a wave.
  */
 export function useRealityWave(id: ScreenId): { shown: boolean; sweep: Sweep | null; sweepDone: () => void } {
   const { snapshot } = useGame();
   const target = snapshot?.reality ?? false;
   const loaded = snapshot !== null;
+  const position = useScreenPosition(id);
   const [shown, setShown] = useState(target);
   const [sweep, setSweep] = useState<Sweep | null>(null);
   const ready = useRef(false);
@@ -45,10 +46,10 @@ export function useRealityWave(id: ScreenId): { shown: boolean; sweep: Sweep | n
       setShown(target);
       return;
     }
-    const turn = target ? ORDER[id] : 4 - ORDER[id];
+    const turn = target ? position : 4 - position;
     const timer = setTimeout(() => setSweep({ to: target, key: Date.now() }), turn * WAVE_STEP_MS);
     return () => clearTimeout(timer);
-  }, [loaded, target, shown, sweep, id]);
+  }, [loaded, target, shown, sweep, position]);
 
   const sweepDone = useCallback(() => {
     setSweep((s) => {

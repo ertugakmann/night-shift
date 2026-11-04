@@ -23,6 +23,14 @@ Open each presenter tab with the full link once; after that, refreshing the tab 
   For demo day, switch the plan to **Starter**, or open the site well before 12:00 and keep a tab open.
 - Don't push during the demo: auto-deploy restarts the server.
 
+## Screen order in the room
+
+Set `ROOM_ORDER` to the screen numbers as they physically stand, left to right. Default `2,1,3,4,5`:
+the desk on the far left, then the lobby, west wing, east wing and the Vault. Each `/screen/x` page uses it
+for the power-on order at shift start, the Lights on wave and its piece of the Input → NIGHT SHIFT → Output
+strip. `/wall` and `/preview` always keep the order 1 to 5. An invalid value is ignored with a warning,
+and the server prints the order it uses at startup (also on `/healthz`). Changing it needs a restart.
+
 ## Offline fallback (laptop)
 
 ```

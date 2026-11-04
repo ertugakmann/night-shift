@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { DEFAULT_ROOM_ORDER, type ScreenId } from '@night-shift/shared';
 import type {
   ClientToServerEvents,
   CodeResult,
@@ -21,6 +22,8 @@ export interface GameView {
   transport: string | null;
   /** Room picked on this page for the action menu. Local to this tab. */
   selected: string | null;
+  /** How the screens stand in the room, left to right (ROOM_ORDER, sent by the server). */
+  roomOrder: readonly ScreenId[];
 }
 
 const CODE_STORAGE_KEY = 'night-shift:control-code';
@@ -88,6 +91,7 @@ let view: GameView = {
   notice: null,
   transport: null,
   selected: null,
+  roomOrder: DEFAULT_ROOM_ORDER,
 };
 
 export function selectRoom(room: string | null): void {
@@ -130,6 +134,7 @@ socket.on('control', ({ role, code }) => {
   set({ role, code });
 });
 socket.on('notice', showNotice);
+socket.on('wall', ({ order }) => set({ roomOrder: order }));
 
 export function sendIntent(intent: Intent): void {
   socket.emit('intent', intent);

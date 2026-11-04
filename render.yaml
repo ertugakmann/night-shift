@@ -20,6 +20,9 @@ services:
       # https://<your-app>.onrender.com/wall?presenter=<key>
       - key: PRESENTER_KEY
         generateValue: true
-      # Phase 6 (Morning report). Optional: without it the template report is used.
+      # Screens in the room, left to right (see DEPLOY.md). Change it here or in the Environment tab.
+      - key: ROOM_ORDER
+        value: "2,1,3,4,5"
+      # Phase 7 (Morning report). Optional: without it the template report is used.
       - key: ANTHROPIC_API_KEY
         sync: false
