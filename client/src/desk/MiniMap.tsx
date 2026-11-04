@@ -72,7 +72,7 @@ export function MiniMap({ snapshot, selected, reality = false }: { snapshot: Sna
               />
             )}
             <text x={x + 8} y={y + label + 5} className={reality ? 'soc-text' : 'game-text'} fontSize={label} fontWeight={600} fill={lit && !reality ? '#5a3a22' : reality ? '#e6edf7' : '#d8cffd'} pointerEvents="none">
-              {reality ? truncate(room.real, Math.floor((rw - (estimate >= bark ? 78 : 14)) / (label * 0.55))) : room.name}
+              {reality ? truncate(room.real, Math.floor((rw - (estimate > bark ? 78 : 14)) / (label * 0.55))) : room.name}
             </text>
             {rs.locked && (
               <g transform={`translate(${x + rw - 18},${y + rh - 16})`} pointerEvents="none">
@@ -83,7 +83,7 @@ export function MiniMap({ snapshot, selected, reality = false }: { snapshot: Sna
             {snapshot.candlelight[room.wing] && (rs.locked || rs.dark) && (
               <path d={`M${x + rw - 44} ${y + rh - 26} q6 8 0 14 q-6 -6 0 -14 Z`} fill="#ffb84d" className="flame" pointerEvents="none" />
             )}
-            {estimate >= bark && (
+            {estimate > bark && (
               <g pointerEvents="none">
                 <Paw x={x + rw - 18} y={y + 18} />
                 <text x={x + rw - 32} y={y + 24} textAnchor="end" className="game-text" fontSize={16} fontWeight={700} fill="#c9a6ff">

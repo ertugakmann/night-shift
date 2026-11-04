@@ -37,10 +37,11 @@ function act(s: GameState, action: ActionKind, room: string, guard?: string): Ga
   return result.state;
 }
 
-/** Test setup: replace the gang with a single group in `room`. */
+/** Test setup: replace the gang with a single group in `room` (later in the night: no entry split pending). */
 function placeGang(s: GameState, room: string): GameState {
   const copy: GameState = JSON.parse(JSON.stringify(s));
   copy.groups = [{ id: 99, room, enteredMs: copy.timeMs, spotted: false, visited: [room] }];
+  copy.entrySplit = false;
   return copy;
 }
 
@@ -82,7 +83,7 @@ describe('an idle night (nobody touches anything)', () => {
     expect(night.outcome?.result).toBe('lost');
     expect(lostAt / w.ms.night).toBeGreaterThanOrEqual(0.6);
     expect(lostAt / w.ms.night).toBeLessThanOrEqual(0.7);
-    expect(msToClock(lostAt, HOUR)).toBe('03:59');
+    expect(msToClock(lostAt, HOUR)).toBe('03:48');
   });
 
   it('leaves dark exhibits along the way', () => {
@@ -133,41 +134,98 @@ describe('Rex', () => {
     expect(s.groups.some((g) => g.room === wrong[0].room)).toBe(false);
   });
 
-  it('counts following a bark for the trust analysis', () => {
+  it('barks only above 50% confidence', () => {
+    const barks = idleNight().log.filter((l) => l.kind === 'rex');
+    expect(barks.length).toBeGreaterThan(5);
+    for (const b of barks) expect(Number(/\((\d+)%\)/.exec(b.text)![1])).toBeGreaterThan(50);
+  });
+
+  it('a patrol sent soon after a bark follows him', () => {
     let s = runUntil(started(), (x) => x.rex.mistake !== null);
     s = act(s, 'patrol', s.rex.mistake!.room);
     expect(s.stats.rexFollowed).toBe(1);
-    expect(s.stats.rexFollowedWrong).toBe(1);
+    expect(s.stats.rexFollowedWrong).toBe(1); // the planned mistake: nobody there
+  });
+
+  it('no patrol within the window ignores him, and a late patrol does not count', () => {
+    let s = runUntil(started(), (x) => x.rex.mistake !== null);
+    const room = s.rex.mistake!.room;
+    // The planned mistake is the night's only wrong bark, so it shows up as "ignored, and he was wrong".
+    const wrongIgnored = (x: GameState) => x.stats.rexIgnored - x.stats.rexIgnoredRight;
+    const before = wrongIgnored(s);
+    s = runFor(s, w.ms.followWindow + 200);
+    expect(wrongIgnored(s)).toBe(before + 1);
+    s = act(s, 'patrol', room);
+    expect(s.stats.rexFollowed).toBe(0);
+  });
+
+  it('one bark is one decision: locks and repeated orders do not count', () => {
+    let s = runUntil(started(), (x) => x.rex.mistake !== null);
+    const room = s.rex.mistake!.room;
+    s = act(s, 'lock', room, 'sam');
+    expect(s.stats.rexFollowed).toBe(0);
+    s = act(s, 'patrol', room, 'priya');
+    const again = applyIntent(s, { type: 'action', action: 'patrol', room, guard: 'tom' });
+    expect(again.error).toMatch(/already/);
+    expect(again.state.stats.rexFollowed).toBe(1);
+    expect(s.stats.rexFollowed).toBe(1);
+    s = runFor(s, w.ms.followWindow + 200);
+    expect(s.stats.rexIgnored + s.stats.rexFollowed).toBeLessThanOrEqual(s.stats.barks);
   });
 });
 
 describe('find, trap, evict, repair', () => {
   const afterBreakIn = () => runUntil(started(), (s) => s.brokenIn);
 
-  it('a patrol reveals the gang, and they flee at the next spread tick', () => {
-    let s = act(afterBreakIn(), 'patrol', 'mail-room', 'tom');
-    s = runUntil(s, (x) => x.groups[0].spotted);
-    expect(s.groups[0].spotted).toBe(true);
-    expect(s.log.at(-1)).toMatchObject({ kind: 'radio', speaker: 'Tom' });
-
-    s = runUntil(s, (x) => x.groups[0].room !== 'mail-room', s.nextSpreadMs);
-    expect(s.groups[0].room).toBe('entrance-hall');
+  it('the gang splits 3–4 s after breaking in: one group stays, one slips into the Entrance Hall', () => {
+    const s = runUntil(started(), (x) => x.groups.length > 1);
+    const after = s.timeMs - s.stats.brokenInMs!;
+    expect(after).toBeGreaterThanOrEqual(3000);
+    expect(after).toBeLessThanOrEqual(4000);
+    expect(s.groups.map((g) => g.room)).toEqual(['mail-room', 'entrance-hall']);
   });
 
-  it('locking traps them, evicting them all wins the night', () => {
-    let s = act(afterBreakIn(), 'patrol', 'mail-room', 'tom');
-    s = act(s, 'lock', 'mail-room', 'sam');
-    s = runUntil(s, (x) => x.rooms['mail-room'].locked);
-    expect(s.care).toBe(98);
+  it('even a Mail Room locked in advance does not stop the split', () => {
+    let s = act(started(), 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.groups.length > 1);
+    expect(s.rooms['mail-room'].locked).toBe(true);
+    expect(s.groups.map((g) => g.room)).toEqual(['mail-room', 'entrance-hall']);
+  });
 
-    s = runFor(s, 20_000);
-    expect(s.groups[0].room).toBe('mail-room');
+  it('a patrol reveals the gang, and spotted intruders flee at the next spread tick', () => {
+    let s = act(afterBreakIn(), 'patrol', 'mail-room', 'tom');
+    const first = s.groups[0].id;
+    s = runUntil(s, (x) => x.groups[0].spotted);
+    expect(s.log.at(-1)).toMatchObject({ kind: 'radio', speaker: 'Tom' });
+
+    s = runUntil(s, (x) => x.groups.length > 1); // the split tick: the spotted group stays put
+    s = runUntil(s, (x) => x.groups.find((g) => g.id === first)!.room !== 'mail-room', s.nextSpreadMs);
+    expect(s.groups.find((g) => g.id === first)!.room).toBe('entrance-hall');
+  });
+
+  it('catching the first group alone does not win the night', () => {
+    let s = act(afterBreakIn(), 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.groups.length > 1);
+    expect(s.care).toBe(98);
+    s = act(s, 'evict', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.stats.evicted === 1);
+    expect(s.phase).toBe('running');
+    expect(s.groups).toHaveLength(1);
+    expect(s.groups[0].room).not.toBe('mail-room');
+  });
+
+  it('trapping and evicting both groups wins the night', () => {
+    let s = act(afterBreakIn(), 'lock', 'mail-room', 'sam');
+    s = act(s, 'lock', 'entrance-hall', 'tom');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.rooms['entrance-hall'].locked && x.groups.length > 1);
+    expect(s.groups.every((g) => s.rooms[g.room].locked)).toBe(true);
 
     s = act(s, 'evict', 'mail-room', 'sam');
+    s = act(s, 'evict', 'entrance-hall', 'tom');
     s = runUntil(s, (x) => x.groups.length === 0);
     expect(s.phase).toBe('ended');
     expect(s.outcome?.result).toBe('won');
-    expect(s.stats.evicted).toBe(1);
+    expect(s.stats.evicted).toBe(2);
   });
 
   it('evict needs a locked room', () => {
@@ -291,38 +349,42 @@ describe('intents', () => {
 });
 
 describe('end of night summary', () => {
-  it('an idle night: never detected, every bark ignored, care collapses after the loss', () => {
+  it('an idle night: never detected, every decided bark ignored, care collapses after the loss', () => {
     const s = idleNight();
     const sum = s.outcome!.summary;
     expect(sum.mttdMs).toBeNull();
     expect(sum.mttrMs).toBeNull();
     expect(s.stats.rexFollowed).toBe(0);
-    expect(s.stats.rexIgnored).toBe(s.stats.barks);
-    expect(s.stats.rexIgnoredRight).toBe(s.stats.barks - s.stats.wrongBarks);
-    expect(sum.careContinuity).toBeLessThan(60);
+    // A bark still inside its window when the night ends was never decided.
+    expect(s.stats.rexIgnored).toBeGreaterThanOrEqual(s.stats.barks - 1);
+    expect(s.stats.rexIgnored).toBeLessThanOrEqual(s.stats.barks);
+    expect(s.stats.rexIgnoredRight).toBeLessThanOrEqual(s.stats.rexIgnored);
+    expect(sum.careContinuity).toBeLessThan(70);
   });
 
   it('a quick catch: MTTD from break-in to spotted, MTTR from spotted to trapped', () => {
-    let s = act(runUntil(started(), (x) => x.brokenIn), 'patrol', 'mail-room', 'tom');
-    s = act(s, 'lock', 'mail-room', 'sam');
-    s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.groups[0].spotted);
+    let s = act(runUntil(started(), (x) => x.brokenIn), 'lock', 'mail-room', 'sam');
+    s = act(s, 'lock', 'entrance-hall', 'tom');
+    s = act(s, 'patrol', 'mail-room', 'priya');
+    s = runUntil(s, (x) => x.stats.firstSpottedMs !== null && x.stats.containedMs !== null);
     const { brokenInMs, firstSpottedMs, containedMs } = s.stats;
-    expect(firstSpottedMs).not.toBeNull();
-    expect(containedMs).not.toBeNull();
-
+    s = runUntil(s, (x) => !x.guards.some((g) => g.task));
     s = act(s, 'evict', 'mail-room', 'sam');
+    s = act(s, 'evict', 'entrance-hall', 'tom');
     s = runUntil(s, (x) => x.phase === 'ended');
     const sum = s.outcome!.summary;
+    expect(s.outcome!.result).toBe('won');
     expect(sum.mttdMs).toBe(firstSpottedMs! - brokenInMs!);
     expect(sum.mttrMs).toBe(Math.max(0, containedMs! - firstSpottedMs!));
-    expect(sum.careContinuity).toBeGreaterThan(95);
+    expect(sum.careContinuity).toBeGreaterThan(90);
   });
 
   it('containment is undone when a group roams free again', () => {
     let s = act(runUntil(started(), (x) => x.brokenIn), 'lock', 'mail-room', 'sam');
-    s = runUntil(s, (x) => x.stats.containedMs !== null);
+    s = act(s, 'lock', 'entrance-hall', 'tom');
+    s = runUntil(s, (x) => x.groups.length > 1 && x.stats.containedMs !== null);
     const free: GameState = JSON.parse(JSON.stringify(s));
-    free.rooms['mail-room'].locked = false;
+    free.rooms['entrance-hall'].locked = false;
     const after = advance(free, 100);
     expect(after.stats.containedMs).toBeNull();
   });

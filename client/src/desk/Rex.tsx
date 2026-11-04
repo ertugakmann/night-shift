@@ -88,8 +88,8 @@ export function Rex({ snapshot, selected, reality = false }: { snapshot: Snapsho
   const top = w.sc.rooms.reduce((best, r) => ((estimates[r.id] ?? 0) > (estimates[best.id] ?? 0) ? r : best), w.sc.rooms[0]);
   const focus = selected ? w.room.get(selected)! : top;
   const value = estimates[focus.id] ?? 0;
-  const barking = value >= threshold;
-  const anyBark = (estimates[top.id] ?? 0) >= threshold;
+  const barking = value > threshold;
+  const anyBark = (estimates[top.id] ?? 0) > threshold;
   const name = theRoom(focus.name);
   const lastBark = snapshot.log.filter((e) => e.kind === 'rex').at(-1);
   const woof = !!lastBark && snapshot.timeMs - lastBark.atMs < 1800;

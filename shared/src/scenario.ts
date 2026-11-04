@@ -66,6 +66,8 @@ export interface Scenario {
     towardVaultFactor: number;
     revisitFactor: number;
     minStaySec: number;
+    /** The first spread tick comes this soon after the break-in, and in it the gang always splits. */
+    firstSplitSec: number;
     vandaliseAfterSec: number;
     vaultLoseAfterSec: number;
   };
@@ -88,7 +90,10 @@ export interface Scenario {
     decoyChatter: { at: Clock; speaker: string; text: string }[];
   };
   rex: {
+    /** Rex barks when his confidence is above this (percent). */
     barkThreshold: number;
+    /** After a bark, a patrol sent to that room within this many seconds counts as following Rex. */
+    followWindowSec: number;
     mistake: { from: Clock; room: RoomId; confidence: number; holdSec: number };
   };
 }
@@ -123,6 +128,8 @@ export interface World {
     spreadTick: number;
     masterKeysTick: number;
     minStay: number;
+    firstSplit: number;
+    followWindow: number;
     vandalise: number;
     vaultLose: number;
     walkPerRoom: number;
@@ -184,6 +191,8 @@ function buildWorld(sc: Scenario): World {
       spreadTick: sc.intruders.spreadTickSec * 1000,
       masterKeysTick: sc.intruders.masterKeysSpreadTickSec * 1000,
       minStay: sc.intruders.minStaySec * 1000,
+      firstSplit: sc.intruders.firstSplitSec * 1000,
+      followWindow: sc.rex.followWindowSec * 1000,
       vandalise: sc.intruders.vandaliseAfterSec * 1000,
       vaultLose: sc.intruders.vaultLoseAfterSec * 1000,
       walkPerRoom: sc.actions.walkSecPerRoom * 1000,

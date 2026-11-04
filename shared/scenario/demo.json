@@ -21,6 +21,7 @@
     "entryRoom": "mail-room",
     "breakInAt": "00:11",
     "spreadTickSec": 8.4,
+    "firstSplitSec": 3.6,
     "masterKeysSpreadTickSec": 5.6,
     "moveChance": 0.65,
     "splitChance": 0.5,
@@ -361,7 +362,8 @@
   },
 
   "rex": {
-    "barkThreshold": 60,
+    "barkThreshold": 50,
+    "followWindowSec": 6,
     "mistake": { "from": "02:14", "room": "pharmacy", "confidence": 80, "holdSec": 25.2 }
   }
 }

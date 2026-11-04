@@ -79,7 +79,7 @@ export function ActionPopup({
   const x = floating ? (1600 - W) / 2 : Math.min(1600 - W - 24, Math.max(24, anchorX - W / 2));
   const y = floating ? 900 - H - 40 : 292;
   const estimate = snapshot.rex.estimates[roomId] ?? 0;
-  const barking = estimate >= w.sc.rex.barkThreshold;
+  const barking = estimate > w.sc.rex.barkThreshold;
   const nearest = nearestFreeGuard(snapshot, roomId);
   const who = nearest
     ? `${nearest.guard.name} goes · ${nearest.rooms === 0 ? 'already there' : `${nearest.rooms} room${nearest.rooms > 1 ? 's' : ''} away`}`

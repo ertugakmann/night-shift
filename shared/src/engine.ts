@@ -140,6 +140,8 @@ export interface GameState {
   candlelight: Record<Wing, boolean>;
 
   brokenIn: boolean;
+  /** The next spread tick is the first one, where the gang splits up. */
+  entrySplit: boolean;
   nextSpreadMs: number;
   masterKeys: boolean;
   bypassUsed: boolean;
@@ -154,10 +156,11 @@ export interface GameState {
     estimates: Record<RoomId, number>;
     mistake: { room: RoomId; untilMs: number } | null;
     mistakeDone: boolean;
-    /** Rooms Rex is barking at whose bark the player has already acted on. */
-    followed: RoomId[];
-    /** Rooms Rex is barking at right now, with whether the gang really was there when the bark started. */
-    barking: Partial<Record<RoomId, boolean>>;
+    /**
+     * Barks waiting for the player's decision: a patrol sent there before `untilMs` follows Rex,
+     * otherwise the bark counts as ignored. `truth`: the gang really was there when he barked.
+     */
+    pending: { room: RoomId; truth: boolean; untilMs: number }[];
   };
 
   stats: {
@@ -210,6 +213,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     guards: sc.guards.map((g) => ({ id: g.id, name: g.name, room: g.startRoom, task: null })),
     candlelight: Object.fromEntries(WINGS.map((wing) => [wing, false])) as Record<Wing, boolean>,
     brokenIn: false,
+    entrySplit: false,
     nextSpreadMs: 0,
     masterKeys: false,
     bypassUsed: false,
@@ -217,7 +221,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     care: 100,
     lowestCare: 100,
     impact: Object.fromEntries(IMPACT_TYPES.map((t) => [t, 0])) as Record<ImpactType, number>,
-    rex: { estimates: perRoom(() => 0), mistake: null, mistakeDone: false, followed: [], barking: {} },
+    rex: { estimates: perRoom(() => 0), mistake: null, mistakeDone: false, pending: [] },
     stats: {
       dispatches: 0,
       patrols: 0,
@@ -328,7 +332,8 @@ function tick(s: GameState, w: World): void {
     s.brokenIn = true;
     s.stats.brokenInMs = now;
     addGroup(s, sc.intruders.entryRoom, [sc.intruders.entryRoom]);
-    s.nextSpreadMs = ms.breakIn + ms.spreadTick;
+    s.entrySplit = true;
+    s.nextSpreadMs = ms.breakIn + ms.firstSplit;
   }
   for (const d of sc.clues.decoyChatter) {
     if (reached(clockToMs(d.at, hour))) log(s, { kind: 'staff', speaker: d.speaker, text: d.text, truth: false });
@@ -351,6 +356,7 @@ function tick(s: GameState, w: World): void {
   }
 
   revealLitRooms(s, w);
+  expireBarks(s);
   updateContainment(s);
   updateCare(s, w);
 
@@ -371,6 +377,25 @@ function occupied(s: GameState, room: RoomId): boolean {
 
 function spread(s: GameState, w: World): void {
   const { intruders } = w.sc;
+  if (s.entrySplit) {
+    s.entrySplit = false;
+    // Right after getting in, the gang splits up: some stay, the rest slip into the next room towards
+    // the Vault. This is part of the break-in, so even a door locked in advance does not stop it
+    // (reality: the payload beaconed out before isolation). Finding one group is never enough.
+    // Three draws, exactly as an ordinary move-and-split, so the rest of the seeded night is unchanged.
+    const g = s.groups[0];
+    if (g) {
+      rand(s); // move?
+      rand(s); // which door
+      rand(s); // split?
+      const dest = [...w.neighbours.get(g.room)!].sort((x, y) => w.distToVault.get(x)! - w.distToVault.get(y)!)[0];
+      if (dest) {
+        addGroup(s, dest, [...g.visited, dest]);
+        g.enteredMs = s.timeMs;
+      }
+    }
+    return;
+  }
   for (const g of [...s.groups]) {
     if (g.spotted) {
       const dest = pickDestination(s, w, g, true);
@@ -519,17 +544,17 @@ function updateRex(s: GameState, w: World): void {
   }
 
   for (const room of w.sc.rooms) {
-    const barking = next[room.id] >= cfg.barkThreshold;
-    const wasBarking = previous[room.id] >= cfg.barkThreshold;
-    const fresh = barking && (!wasBarking || room.id === mistakeStarts);
-    // A bark ends when Rex calms down (or barks anew): if nobody acted on it, it was ignored.
-    if (wasBarking && (!barking || fresh)) closeBark(s, room.id);
+    const barking = next[room.id] > cfg.barkThreshold;
+    const wasBarking = previous[room.id] > cfg.barkThreshold;
     // The mistake always gets its own bark, even if Rex was still on edge about that room.
+    const fresh = barking && (!wasBarking || room.id === mistakeStarts);
     if (fresh) {
       const truth = busy.has(room.id);
       s.stats.barks++;
       if (!truth) s.stats.wrongBarks++;
-      s.rex.barking[room.id] = truth;
+      // Each bark is one decision for the player: patrol there soon (follow) or not (ignore).
+      s.rex.pending = s.rex.pending.filter((p) => p.room !== room.id);
+      s.rex.pending.push({ room: room.id, truth, untilMs: s.timeMs + w.ms.followWindow });
       log(s, {
         kind: 'rex',
         speaker: 'Rex',
@@ -543,15 +568,14 @@ function updateRex(s: GameState, w: World): void {
   s.rex.estimates = next;
 }
 
-/** Trust analysis: a bark that ends without the player acting on it counts as ignored. */
-function closeBark(s: GameState, room: RoomId): void {
-  const truth = s.rex.barking[room];
-  if (truth !== undefined && !s.rex.followed.includes(room)) {
+/** Trust analysis: a bark nobody patrolled within the window counts as ignored. */
+function expireBarks(s: GameState): void {
+  for (const p of s.rex.pending) {
+    if (s.timeMs < p.untilMs) continue;
     s.stats.rexIgnored++;
-    if (truth) s.stats.rexIgnoredRight++;
+    if (p.truth) s.stats.rexIgnoredRight++;
   }
-  delete s.rex.barking[room];
-  s.rex.followed = s.rex.followed.filter((id) => id !== room);
+  s.rex.pending = s.rex.pending.filter((p) => s.timeMs < p.untilMs);
 }
 
 /** The gang is stopped when every group is trapped behind locked doors. Escaping (master keys) undoes it. */
@@ -701,7 +725,7 @@ function updateCare(s: GameState, w: World): void {
 function end(s: GameState, result: Outcome['result'], reason: string, real: string): void {
   if (s.phase === 'ended') return;
   s.phase = 'ended';
-  for (const room of Object.keys(s.rex.barking)) closeBark(s, room);
+  s.rex.pending = []; // barks still inside their window were never decided
   if (s.groups.length === 0 && s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
   s.outcome = { result, reason, real, atMs: s.timeMs, summary: summarise(s, result) };
   for (const rs of Object.values(s.rooms)) rs.litBy = null;
@@ -871,13 +895,13 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
   };
   s.stats.dispatches++;
 
-  // Trust analysis: acting on a room Rex is barking at counts as following him (once per bark).
-  if (intent.action !== 'candlelight' && intent.action !== 'repair') {
-    const barking = s.rex.estimates[room.id] >= w.sc.rex.barkThreshold;
-    if (barking && !s.rex.followed.includes(room.id)) {
-      s.rex.followed.push(room.id);
+  // Trust analysis: a patrol sent to a room Rex barked at, within the window, follows him (once per bark).
+  if (intent.action === 'patrol') {
+    const bark = s.rex.pending.find((p) => p.room === room.id);
+    if (bark) {
+      s.rex.pending = s.rex.pending.filter((p) => p !== bark);
       s.stats.rexFollowed++;
-      if (!occupied(s, room.id)) s.stats.rexFollowedWrong++;
+      if (!bark.truth) s.stats.rexFollowedWrong++;
     }
   }
 
