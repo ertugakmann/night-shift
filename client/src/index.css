@@ -33,3 +33,96 @@ body {
 .panel {
   container-type: size;
 }
+
+/* ---------- Building screens ---------- */
+
+.game-text {
+  font-family: "Fredoka Variable", ui-rounded, "Segoe UI", system-ui, sans-serif;
+}
+
+/* Exhibits in the dark: the same drawing, re-coloured to faint outlines. */
+.ex-dark * {
+  fill: #221b50 !important;
+  stroke: #5b50b2 !important;
+  stroke-width: 3px;
+}
+.ex-dark .lamp-glow {
+  fill: #ffd27a !important;
+  stroke: none !important;
+}
+.ex-dark.ex-off .lamp-glow {
+  fill: #3a3350 !important;
+  animation: none;
+}
+/* Vandalised: dull and grey. */
+.ex-broken * {
+  fill: #6e6788 !important;
+  stroke: #4b4566 !important;
+}
+.ex-broken .lamp-glow,
+.ex-off .lamp-glow {
+  fill: #4b4566 !important;
+}
+.ex-broken .spin-slow,
+.ex-broken .spin-slow-reverse,
+.ex-broken .sway,
+.ex-off .spin-slow,
+.ex-off .spin-slow-reverse,
+.ex-off .sway {
+  animation: none;
+}
+.ex-closed {
+  opacity: 0.8;
+}
+
+.spin-slow,
+.spin-slow-reverse,
+.sway,
+.bob,
+.breathe,
+.blink,
+.glance,
+.sneak {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.spin-slow { animation: spin 16s linear infinite; }
+.spin-slow-reverse { animation: spin 11s linear infinite reverse; }
+.sway { animation: sway 5s ease-in-out infinite alternate; }
+.bob { animation: bob 0.42s ease-in-out infinite alternate; }
+.breathe { animation: breathe 3.2s ease-in-out infinite alternate; transform-origin: center bottom; }
+.blink { animation: blink 4.5s infinite; }
+.flame { animation: flame 0.9s ease-in-out infinite alternate; }
+.flicker { animation: flicker 3.7s ease-in-out infinite; }
+.shimmer { animation: shimmer 3s ease-in-out infinite alternate; }
+.lamp-glow { animation: shimmer 2.4s ease-in-out infinite alternate; }
+.dust { animation: dust 20s linear infinite; opacity: 0; }
+.sneak { animation: sneak 1.8s ease-in-out infinite alternate; }
+.glance { animation: glance 2.6s ease-in-out infinite; }
+.march { animation: march 1.2s linear infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+@keyframes bob { from { transform: translateY(0); } to { transform: translateY(-9px); } }
+@keyframes breathe { from { transform: scaleY(1); } to { transform: scaleY(1.025); } }
+@keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes flame { from { opacity: 0.75; } to { opacity: 1; } }
+@keyframes flicker { 0%, 100% { opacity: 1; } 40% { opacity: 0.93; } 55% { opacity: 0.98; } 70% { opacity: 0.91; } }
+@keyframes shimmer { from { opacity: 0.18; } to { opacity: 0.42; } }
+@keyframes dust {
+  0% { transform: translate(0, 0); opacity: 0; }
+  20% { opacity: 0.45; }
+  80% { opacity: 0.3; }
+  100% { transform: translate(60px, -140px); opacity: 0; }
+}
+@keyframes sneak { from { transform: translateX(-5px); } to { transform: translateX(5px); } }
+@keyframes glance { 0%, 100% { transform: translateX(-2px); } 50% { transform: translateX(3px); } }
+@keyframes march { to { stroke-dashoffset: -48; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spin-slow, .spin-slow-reverse, .sway, .bob, .breathe, .blink, .flame, .flicker,
+  .shimmer, .lamp-glow, .sneak, .glance, .march {
+    animation: none !important;
+  }
+  .dust { animation: none !important; opacity: 0.2; }
+}

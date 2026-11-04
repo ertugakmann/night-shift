@@ -1,6 +1,7 @@
 import { SCREENS, type Phase, type ScreenId, type Snapshot } from '@night-shift/shared';
 import { gameClock } from '../game/view';
 import { useGame } from '../net/game';
+import { BuildingScreen } from '../building/BuildingScreen';
 import { ControlCodeCard } from './ControlCodeCard';
 import { DeskPanel } from './DeskPanel';
 import { RoomList } from './RoomList';
@@ -12,6 +13,15 @@ const PHASE_COLOR: Record<Phase, string> = { idle: 'text-ink/60', running: 'text
 /** One wall screen. Phase 3: raw data as plain lists. Sizes scale with the panel (container query units). */
 export function ScreenPanel({ id }: { id: ScreenId }) {
   const { snapshot } = useGame();
+
+  // Screens already drawn in the game style. The rest still show raw data until their turn in Phase 4.
+  if (id === 3) {
+    return (
+      <section className="panel relative h-full w-full overflow-hidden bg-[#0c0922]">
+        <BuildingScreen screen={id} />
+      </section>
+    );
+  }
 
   return (
     <section className="panel relative flex h-full min-h-0 w-full min-w-0 flex-col gap-2 overflow-hidden rounded-xl border border-white/10 bg-night-900 p-3">

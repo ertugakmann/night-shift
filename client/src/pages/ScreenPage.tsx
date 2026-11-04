@@ -8,7 +8,7 @@ export function ScreenPage() {
   const { search } = useLocation();
   if (id === null) return <Navigate to={`/${search}`} replace />;
   return (
-    <main className="h-full w-full p-2">
+    <main className={id === 3 ? "h-full w-full" : "h-full w-full p-2"}>
       <ScreenPanel id={id} />
     </main>
   );

@@ -81,6 +81,17 @@ export interface LogEntry {
   truth: boolean | null;
 }
 
+/** Short-lived visual cue for the screens (star burst, sparkle...). Never affects the game. */
+export interface Fx {
+  id: number;
+  kind: 'spotted' | 'evicted' | 'repaired' | 'vandalised' | 'locked';
+  room: RoomId;
+  atMs: number;
+}
+
+/** How many recent effects are kept. */
+const FX_KEEP = 12;
+
 export interface Outcome {
   result: 'won' | 'lost';
   reason: string;
@@ -139,6 +150,8 @@ export interface GameState {
 
   log: LogEntry[];
   nextLogId: number;
+  fx: Fx[];
+  nextFxId: number;
   outcome: Outcome | null;
 }
 
@@ -184,6 +197,8 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     },
     log: [],
     nextLogId: 1,
+    fx: [],
+    nextFxId: 1,
     outcome: null,
   };
 }
@@ -202,6 +217,11 @@ function rand(s: GameState): number {
 
 function log(s: GameState, entry: Omit<LogEntry, 'id' | 'atMs' | 'speaker' | 'real' | 'room' | 'truth'> & Partial<LogEntry>) {
   s.log.push({ speaker: null, real: null, room: null, truth: null, ...entry, id: s.nextLogId++, atMs: s.timeMs });
+}
+
+function fx(s: GameState, kind: Fx['kind'], room: RoomId): void {
+  s.fx.push({ id: s.nextFxId++, kind, room, atMs: s.timeMs });
+  if (s.fx.length > FX_KEEP) s.fx.splice(0, s.fx.length - FX_KEEP);
 }
 
 // ---------- Time ----------
@@ -366,6 +386,7 @@ function updateRooms(s: GameState, w: World): void {
 function vandalise(s: GameState, w: World, roomId: RoomId): void {
   const room = w.room.get(roomId)!;
   s.rooms[roomId].dark = true;
+  fx(s, 'vandalised', roomId);
   log(s, {
     kind: 'event',
     room: roomId,
@@ -479,6 +500,7 @@ function revealLitRooms(s: GameState, w: World): void {
     if (!guardId || g.spotted) continue;
     g.spotted = true;
     s.stats.spotted++;
+    fx(s, 'spotted', g.room);
     const guard = s.guards.find((x) => x.id === guardId)!;
     if (guard.task && !guard.task.found) {
       guard.task.found = true;
@@ -509,6 +531,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       if (!rs.locked) {
         rs.locked = true;
         s.stats.locks++;
+        fx(s, 'locked', task.room);
       }
       say(s, guard, `${Name} is locked.`, task.room);
       break;
@@ -524,6 +547,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       }
       s.groups = s.groups.filter((g) => g.room !== task.room);
       s.stats.evicted += inside.length;
+      fx(s, 'evicted', task.room);
       say(s, guard, `Out they go! ${Name} is clear.`, task.room);
       if (s.groups.length === 0) {
         end(s, 'won', 'Every intruder has been shown the door.', 'All malware eradicated. Incident contained.');
@@ -543,6 +567,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       rs.locked = false;
       rs.occupiedMs = 0;
       s.stats.repairs++;
+      fx(s, 'repaired', task.room);
       say(s, guard, `${Name} is back on and open.`, task.room);
       break;
 
