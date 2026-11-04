@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-night-950: #0b0920;
+  --color-night-900: #17123a;
+  --color-night-800: #241d52;
+  --color-ink: #eceaf8;
+  --color-flash: #ffd27a;
+  --color-safe: #3ee0d8;
+  --color-locked: #9c86f5;
+  --color-suspect: #f2994a;
+  --color-danger: #ff6b6b;
+}
+
+/* No scrolling anywhere: the app always fits the viewport. */
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--color-night-950);
+  color: var(--color-ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.panel {
+  container-type: size;
+}

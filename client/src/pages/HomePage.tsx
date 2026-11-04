@@ -1,0 +1,24 @@
+import { Link, useLocation } from 'react-router';
+import { SCREENS, type ScreenId } from '@night-shift/shared';
+
+const IDS: ScreenId[] = [1, 2, 3, 4, 5];
+
+/** Index of all pages. Keeps ?presenter=… on the links. */
+export function HomePage() {
+  const { search } = useLocation();
+  return (
+    <main className="flex h-full w-full flex-col items-center justify-center gap-6 p-4">
+      <h1 className="text-4xl font-bold tracking-widest text-flash">NIGHT SHIFT</h1>
+      <Link to={`/wall${search}`} className="rounded-xl bg-flash px-6 py-3 text-xl font-semibold text-night-950">
+        Security Office (/wall)
+      </Link>
+      <nav className="flex flex-wrap justify-center gap-3">
+        {IDS.map((id) => (
+          <Link key={id} to={`/screen/${id}${search}`} className="rounded-lg bg-night-800 px-4 py-2 text-base hover:bg-night-800/70">
+            {id}. {SCREENS[id].name}
+          </Link>
+        ))}
+      </nav>
+    </main>
+  );
+}
