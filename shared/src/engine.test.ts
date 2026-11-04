@@ -15,8 +15,10 @@ const w = world('demo');
 const HOUR = w.sc.night.realSecondsPerGameHour;
 const at = (clock: string) => clockToMs(clock, HOUR);
 
+/** A night with the shift-start intro skipped, clock at 00:00 and running. */
 function started(): GameState {
-  return applyIntent(initialState(), { type: 'start' }).state;
+  const intro = applyIntent(initialState(), { type: 'start' }).state;
+  return applyIntent(intro, { type: 'skipIntro' }).state;
 }
 
 function runUntil(s: GameState, done: (s: GameState) => boolean, limitMs = w.ms.night + 1000): GameState {
@@ -213,6 +215,58 @@ describe('special rooms', () => {
     s = runUntil(s, (x) => x.backupsLost);
     expect(s.backupsLost).toBe(true);
     expect(applyIntent(s, { type: 'action', action: 'repair', room: 'archive' }).error).toMatch(/Archive/);
+  });
+});
+
+describe('shift-start intro', () => {
+  const radioCheck = (s: GameState) => s.log.filter((l) => l.kind === 'radio').map((l) => l.speaker);
+
+  it('plays before the clock starts, then hands over at 00:00 with the radio check', () => {
+    let s = applyIntent(initialState(), { type: 'start' }).state;
+    expect(s.phase).toBe('intro');
+    s = advance(s, 10_000);
+    expect(s.phase).toBe('intro');
+    expect(s.timeMs).toBe(0);
+    expect(radioCheck(s)).toEqual([]);
+    while (s.phase === 'intro') s = advance(s, 100);
+    expect(s.phase).toBe('running');
+    expect(s.introMs).toBe(w.ms.intro);
+    expect(s.timeMs).toBe(0);
+    expect(radioCheck(s)).toEqual(['Sam', 'Priya', 'Tom']);
+  });
+
+  it('can be skipped, and the radio check still happens', () => {
+    const s = started();
+    expect(s.phase).toBe('running');
+    expect(radioCheck(s)).toEqual(['Sam', 'Priya', 'Tom']);
+  });
+
+  it('does not change the night: watching the intro or skipping it gives the same game', () => {
+    let watched = applyIntent(initialState(), { type: 'start' }).state;
+    while (watched.phase === 'intro') watched = advance(watched, 100);
+    const skipped = started();
+    const night = (s: GameState) => runUntil(s, () => false);
+    expect({ ...night(watched), accMs: 0 }).toEqual({ ...night(skipped), accMs: 0 });
+  });
+
+  it('blocks actions and pausing until it is over', () => {
+    const s = applyIntent(initialState(), { type: 'start' }).state;
+    expect(applyIntent(s, { type: 'action', action: 'patrol', room: 'lab' }).error).toMatch(/Enter/);
+    expect(applyIntent(s, { type: 'togglePause' }).error).toMatch(/Enter/);
+  });
+});
+
+describe('radio lines', () => {
+  it('vary from dispatch to dispatch', () => {
+    let s = started();
+    s = act(s, 'patrol', 'lab', 'sam');
+    s = runUntil(s, (x) => !x.guards.find((g) => g.id === 'sam')!.task);
+    s = act(s, 'patrol', 'pharmacy', 'sam');
+    const asks = s.log.filter((l) => l.speaker === 'You').map((l) => l.text);
+    const replies = s.log.filter((l) => l.speaker === 'Sam' && l.kind === 'radio').map((l) => l.text);
+    expect(asks[0]).toBe('Sam, check the Lab Gallery.');
+    expect(asks[1]).not.toBe(asks[0].replace('Lab Gallery', 'Pharmacy Gallery'));
+    expect(new Set(replies).size).toBe(replies.length);
   });
 });
 

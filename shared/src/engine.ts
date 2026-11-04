@@ -1,7 +1,17 @@
 // The NIGHT SHIFT game engine. Pure TypeScript, no I/O, no clocks, no Math.random.
 // The simulation runs in fixed 100 ms steps, so the result depends only on the seed and the
 // player's actions, never on how the server's timer happens to fire.
-import { dispatchLine, emptyLine, foundLine, replyLine } from './lines';
+import {
+  candlesLine,
+  dispatchLine,
+  emptyLine,
+  evictEmptyLine,
+  evictedLine,
+  foundLine,
+  lockedLine,
+  repairedLine,
+  replyLine,
+} from './lines';
 import {
   DEMO,
   IMPACT_TYPES,
@@ -22,7 +32,7 @@ export const STEP_MS = 100;
 /** Longest stretch simulated in one call (e.g. after the server was suspended). */
 const MAX_CATCH_UP_MS = 1000;
 
-export type Phase = 'idle' | 'running' | 'paused' | 'ended';
+export type Phase = 'idle' | 'intro' | 'running' | 'paused' | 'ended';
 export type ActionKind = 'patrol' | 'lock' | 'evict' | 'repair' | 'candlelight';
 export const ACTIONS: readonly ActionKind[] = ['patrol', 'lock', 'evict', 'repair', 'candlelight'];
 
@@ -102,6 +112,8 @@ export interface Outcome {
 export interface GameState {
   scenarioId: string;
   phase: Phase;
+  /** How far the shift-start intro has played (real ms). The game clock waits at 00:00 meanwhile. */
+  introMs: number;
   /** Simulated time since 00:00 on the game clock, in real ms. */
   timeMs: number;
   /** Time received but not yet simulated (less than one step). */
@@ -164,6 +176,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
   return {
     scenarioId,
     phase: 'idle',
+    introMs: 0,
     timeMs: 0,
     accMs: 0,
     rng: sc.seed >>> 0,
@@ -226,9 +239,11 @@ function fx(s: GameState, kind: Fx['kind'], room: RoomId): void {
 
 // ---------- Time ----------
 
-/** Advance the simulation by `dtMs` of real time. Only a running game moves. */
+/** Advance the simulation by `dtMs` of real time. Only a running game moves (or the intro plays). */
 export function advance(state: GameState, dtMs: number): GameState {
-  if (state.phase !== 'running' || !(dtMs > 0)) return state;
+  if (!(dtMs > 0)) return state;
+  if (state.phase === 'intro') return playIntro(state, Math.min(dtMs, MAX_CATCH_UP_MS));
+  if (state.phase !== 'running') return state;
   const s = clone(state);
   s.accMs += Math.min(dtMs, MAX_CATCH_UP_MS);
   while (s.accMs >= STEP_MS && s.phase === 'running') {
@@ -236,6 +251,28 @@ export function advance(state: GameState, dtMs: number): GameState {
     tick(s, world(s.scenarioId));
   }
   return s;
+}
+
+/** The shift-start intro: radio check on cue, then the clock starts. Uses no randomness. */
+function playIntro(state: GameState, dtMs: number): GameState {
+  const s = clone(state);
+  const w = world(s.scenarioId);
+  const before = s.introMs;
+  s.introMs = Math.min(w.ms.intro, s.introMs + dtMs);
+  radioCheck(s, w, before, s.introMs);
+  if (s.introMs >= w.ms.intro) s.phase = 'running';
+  return s;
+}
+
+/** Log the radio-check lines whose cue falls in (from, to]. */
+function radioCheck(s: GameState, w: World, from: number, to: number): void {
+  for (const line of w.sc.intro.radioCheck) {
+    const at = line.atSec * 1000;
+    if (from < at && at <= to) {
+      const guard = s.guards.find((g) => g.id === line.guard);
+      if (guard) say(s, guard, line.text, null);
+    }
+  }
 }
 
 /** step(state, dt, intents) → state: apply intents in order, then advance. Errors are returned per intent. */
@@ -517,8 +554,9 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
   const room = w.room.get(task.room)!;
   const rs = s.rooms[task.room];
   const name = theRoom(room.name);
-  const Name = name.charAt(0).toUpperCase() + name.slice(1);
   const inside = s.groups.filter((g) => g.room === task.room);
+  /** Varies the wording from line to line, without touching the RNG. */
+  const n = s.nextLogId;
 
   switch (task.action) {
     case 'patrol':
@@ -533,7 +571,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
         s.stats.locks++;
         fx(s, 'locked', task.room);
       }
-      say(s, guard, `${Name} is locked.`, task.room);
+      say(s, guard, lockedLine(guard.id, n, name), task.room);
       break;
 
     case 'evict':
@@ -542,13 +580,13 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
         break;
       }
       if (inside.length === 0) {
-        say(s, guard, `Nobody in ${name}, chief.`, task.room);
+        say(s, guard, evictEmptyLine(guard.id, n, name), task.room);
         break;
       }
       s.groups = s.groups.filter((g) => g.room !== task.room);
       s.stats.evicted += inside.length;
       fx(s, 'evicted', task.room);
-      say(s, guard, `Out they go! ${Name} is clear.`, task.room);
+      say(s, guard, evictedLine(guard.id, n, name), task.room);
       if (s.groups.length === 0) {
         end(s, 'won', 'Every intruder has been shown the door.', 'All malware eradicated. Incident contained.');
       }
@@ -568,12 +606,12 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       rs.occupiedMs = 0;
       s.stats.repairs++;
       fx(s, 'repaired', task.room);
-      say(s, guard, `${Name} is back on and open.`, task.room);
+      say(s, guard, repairedLine(guard.id, n, name), task.room);
       break;
 
     case 'candlelight':
       s.candlelight[room.wing] = true;
-      say(s, guard, `Candles lit in the ${WING_NAMES[room.wing].name}. Staff are on paper.`, task.room);
+      say(s, guard, candlesLine(guard.id, n, `the ${WING_NAMES[room.wing].name}`), task.room);
       break;
   }
 }
@@ -606,15 +644,15 @@ function end(s: GameState, result: Outcome['result'], reason: string, real: stri
 
 // ---------- Intents ----------
 
-export const INTENT_TYPES = ['start', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action'] as const;
+export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action'] as const;
 export type IntentType = (typeof INTENT_TYPES)[number];
 
 export type Intent =
   | { type: Exclude<IntentType, 'action'> }
   | { type: 'action'; action: ActionKind; room: RoomId; guard?: string };
 
-/** Only the presenter page can start, reset or hand over control. */
-export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'reset', 'toggleCode'];
+/** Only the presenter page can start (or skip the intro), reset or hand over control. */
+export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode'];
 
 export function isIntent(value: unknown): value is Intent {
   if (typeof value !== 'object' || value === null) return false;
@@ -635,10 +673,22 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
   switch (intent.type) {
     case 'start':
       if (state.phase === 'running') return { state, error: 'Already running.' };
+      if (state.phase === 'intro') return { state, error: 'The shift is starting. Press Enter to skip.' };
       if (state.phase === 'ended') return { state, error: 'The night is over. Press R to reset.' };
-      return { state: { ...state, phase: 'running' } };
+      if (state.phase === 'paused') return { state: { ...state, phase: 'running' } };
+      return { state: { ...state, phase: 'intro', introMs: 0 } };
+    case 'skipIntro': {
+      if (state.phase !== 'intro') return { state, error: 'No intro playing.' };
+      const s = clone(state);
+      const w = world(s.scenarioId);
+      radioCheck(s, w, s.introMs, w.ms.intro); // the radio check still happens, just all at once
+      s.introMs = w.ms.intro;
+      s.phase = 'running';
+      return { state: s };
+    }
     case 'togglePause':
       if (state.phase === 'idle') return { state, error: 'Not started yet. Press S.' };
+      if (state.phase === 'intro') return { state, error: 'The shift is starting. Press Enter to skip.' };
       if (state.phase === 'ended') return { state, error: 'The night is over. Press R to reset.' };
       return { state: { ...state, phase: state.phase === 'running' ? 'paused' : 'running' } };
     case 'reset': {
@@ -670,6 +720,7 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
   const room = w.room.get(intent.room);
   if (!room) return fail('Unknown room.');
   if (state.phase === 'idle') return fail('The night has not started yet.');
+  if (state.phase === 'intro') return fail('The shift is starting. Press Enter to skip.');
   if (state.phase === 'paused') return fail('Paused. Press Space to continue.');
   if (state.phase === 'ended') return fail('The night is over.');
 
@@ -753,8 +804,8 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
   }
 
   const target = intent.action === 'candlelight' ? `the ${WING_NAMES[room.wing].name}` : name;
-  log(s, { kind: 'radio', speaker: 'You', text: dispatchLine(g.name, intent.action, target), room: room.id });
-  say(s, g, replyLine(g.id, s.stats.dispatches), room.id);
+  log(s, { kind: 'radio', speaker: 'You', text: dispatchLine(g.name, intent.action, target, s.stats.dispatches - 1), room: room.id });
+  say(s, g, replyLine(g.id, s.stats.dispatches - 1), room.id);
   return { state: s };
 }
 

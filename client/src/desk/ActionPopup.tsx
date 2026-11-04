@@ -53,15 +53,29 @@ function ActionIcon({ action }: { action: ActionKind }) {
 }
 
 /** The little action menu that opens over the desk when a room is picked. */
-export function ActionPopup({ snapshot, roomId, canAct }: { snapshot: Snapshot; roomId: string; canAct: boolean }) {
+/**
+ * `floating`: shown over a zoomed-in monitor in /wall, where the desk map is off screen. Centred low on the
+ * view, with no pointer to the map.
+ */
+export function ActionPopup({
+  snapshot,
+  roomId,
+  canAct,
+  floating = false,
+}: {
+  snapshot: Snapshot;
+  roomId: string;
+  canAct: boolean;
+  floating?: boolean;
+}) {
   const w = worldOf(snapshot);
   const room = w.room.get(roomId);
   if (!room) return null;
   const rect = ROOMS[roomId].rect;
   const anchorX = mapX(rect.x + rect.w / 2);
   const anchorY = mapY(rect.y + rect.h);
-  const x = Math.min(1600 - W - 24, Math.max(24, anchorX - W / 2));
-  const y = 292;
+  const x = floating ? (1600 - W) / 2 : Math.min(1600 - W - 24, Math.max(24, anchorX - W / 2));
+  const y = floating ? 900 - H - 40 : 292;
   const estimate = snapshot.rex.estimates[roomId] ?? 0;
   const barking = estimate >= w.sc.rex.barkThreshold;
   const nearest = nearestFreeGuard(snapshot, roomId);
@@ -81,7 +95,7 @@ export function ActionPopup({ snapshot, roomId, canAct }: { snapshot: Snapshot; 
   return (
     <g className="game-text" onClick={(e) => e.stopPropagation()}>
       {/* pointer up to the room on the map */}
-      <path d={`M${anchorX - 16} ${y + 2} L${anchorX} ${Math.min(anchorY + 6, y - 10)} L${anchorX + 16} ${y + 2} Z`} fill="#fff4e0" />
+      {!floating && <path d={`M${anchorX - 16} ${y + 2} L${anchorX} ${Math.min(anchorY + 6, y - 10)} L${anchorX + 16} ${y + 2} Z`} fill="#fff4e0" />}
       <rect x={x + 6} y={y + 8} width={W} height={H} rx={24} fill="#000" opacity={0.3} />
       <rect x={x} y={y} width={W} height={H} rx={24} fill="#fff4e0" stroke="#f2c65e" strokeWidth={5} />
 

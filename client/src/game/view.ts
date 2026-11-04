@@ -5,7 +5,13 @@ export function worldOf(snapshot: Snapshot): World {
 }
 
 export function gameClock(snapshot: Snapshot): string {
-  return msToClock(snapshot.timeMs, worldOf(snapshot).sc.night.realSecondsPerGameHour);
+  const w = worldOf(snapshot);
+  if (snapshot.phase === 'intro') {
+    // The last two minutes before midnight, stretched over the intro.
+    const minute = Math.min(1, Math.floor((snapshot.introMs / w.ms.intro) * 2));
+    return `23:5${8 + minute}`;
+  }
+  return msToClock(snapshot.timeMs, w.sc.night.realSecondsPerGameHour);
 }
 
 export function logClock(snapshot: Snapshot, atMs: number): string {

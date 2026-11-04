@@ -103,6 +103,10 @@ body {
 .pendulum { animation: pendulum 1.6s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 0 -20px; }
 .note-float { animation: note-float 3s ease-in-out infinite; }
 .danger-pulse { animation: danger-pulse 1.4s ease-in-out infinite alternate; }
+.power-on { animation: power-on 700ms steps(1, end) forwards; }
+.fade-up { animation: fade-up 900ms ease-out both; }
+.rain { animation: rain 0.9s linear infinite; }
+.steam { animation: steam 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: bottom center; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
@@ -121,6 +125,22 @@ body {
 @keyframes sneak { from { transform: translateX(-5px); } to { transform: translateX(5px); } }
 @keyframes glance { 0%, 100% { transform: translateX(-2px); } 50% { transform: translateX(3px); } }
 @keyframes march { to { stroke-dashoffset: -48; } }
+@keyframes power-on {
+  0% { opacity: 1; }
+  15% { opacity: 0.2; }
+  30% { opacity: 0.9; }
+  45% { opacity: 0.1; }
+  60% { opacity: 0.6; }
+  75% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes fade-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes rain { from { transform: translate(0, -60px); } to { transform: translate(-14px, 60px); } }
+@keyframes steam {
+  0% { opacity: 0; transform: translateY(6px) scaleY(0.8); }
+  40% { opacity: 0.55; }
+  100% { opacity: 0; transform: translateY(-26px) scaleY(1.15); }
+}
 @keyframes danger-pulse { from { opacity: 0.6; } to { opacity: 1; } }
 @keyframes pendulum { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
 @keyframes note-float {
@@ -131,7 +151,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .spin-slow, .spin-slow-reverse, .sway, .bob, .breathe, .blink, .flame, .flicker,
-  .shimmer, .lamp-glow, .sneak, .glance, .march, .pendulum, .note-float, .danger-pulse {
+  .shimmer, .lamp-glow, .sneak, .glance, .march, .pendulum, .note-float, .danger-pulse, .rain, .steam {
     animation: none !important;
   }
   .dust { animation: none !important; opacity: 0.2; }

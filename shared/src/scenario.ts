@@ -52,6 +52,8 @@ export interface Scenario {
   id: string;
   seed: number;
   night: { start: Clock; end: Clock; realSecondsPerGameHour: number };
+  /** Shift-start intro, played on every page at once before the clock starts. */
+  intro: { durationSec: number; radioCheck: { atSec: number; guard: string; text: string }[] };
   intruders: {
     entryRoom: RoomId;
     breakInAt: Clock;
@@ -112,6 +114,7 @@ export interface World {
   ms: {
     gameHour: number;
     night: number;
+    intro: number;
     breakIn: number;
     spreadTick: number;
     masterKeysTick: number;
@@ -172,6 +175,7 @@ function buildWorld(sc: Scenario): World {
     ms: {
       gameHour: hour * 1000,
       night: at(sc.night.end) - at(sc.night.start),
+      intro: sc.intro.durationSec * 1000,
       breakIn: at(sc.intruders.breakInAt),
       spreadTick: sc.intruders.spreadTickSec * 1000,
       masterKeysTick: sc.intruders.masterKeysSpreadTickSec * 1000,

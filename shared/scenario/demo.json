@@ -8,6 +8,15 @@
     "realSecondsPerGameHour": 50
   },
 
+  "intro": {
+    "durationSec": 20,
+    "radioCheck": [
+      { "atSec": 12, "guard": "sam", "text": "West wing, all quiet." },
+      { "atSec": 13.4, "guard": "priya", "text": "East wing clear, chief." },
+      { "atSec": 14.8, "guard": "tom", "text": "Lobby. Coffee machine's broken again." }
+    ]
+  },
+
   "intruders": {
     "entryRoom": "mail-room",
     "breakInAt": "00:10",

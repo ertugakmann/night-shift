@@ -9,9 +9,10 @@ const KEYS: Record<string, Exclude<IntentType, 'action'>> = {
   l: 'toggleReality',
   d: 'toggleDebug',
   c: 'toggleCode',
+  enter: 'skipIntro',
 };
 
-/** S start, Space pause, R reset, L lights, D debug, C control code. The server decides who is allowed. */
+/** S start, Enter skip intro, Space pause, R reset, L lights, D debug, C control code. The server decides who is allowed. */
 export function usePresenterKeys(): void {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

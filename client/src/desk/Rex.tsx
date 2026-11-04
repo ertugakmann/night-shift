@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'motion/react';
 import type { Snapshot } from '@night-shift/shared';
 import { theRoom } from '@night-shift/shared';
 import { worldOf } from '../game/view';
@@ -69,6 +70,9 @@ export function Rex({ snapshot, selected }: { snapshot: Snapshot; selected: stri
   const barking = value >= threshold;
   const anyBark = (estimates[top.id] ?? 0) >= threshold;
   const name = theRoom(focus.name);
+  const lastBark = snapshot.log.filter((e) => e.kind === 'rex').at(-1);
+  const woof = !!lastBark && snapshot.timeMs - lastBark.atMs < 1800;
+  const yawning = snapshot.phase === 'intro' && snapshot.introMs >= 5500 && snapshot.introMs < 7200;
   const line = barking ? `Woof! ${name}` : selected ? `Hmm… ${name}` : 'Zzz… all calm';
   return (
     <g className="game-text">
@@ -85,8 +89,26 @@ export function Rex({ snapshot, selected }: { snapshot: Snapshot; selected: stri
         </text>
       </g>
       <g transform={`translate(${X + 130},${Y - 6}) scale(0.8)`}>
-        <RexArt alert={anyBark || barking} />
+        <motion.g animate={woof ? { y: [0, -14, 0, -8, 0] } : { y: 0 }} transition={{ duration: 0.6 }} key={lastBark?.id ?? 'calm'}>
+          <RexArt alert={anyBark || barking || woof} />
+        </motion.g>
       </g>
+      <AnimatePresence>
+        {(woof || yawning) && (
+          <motion.g
+            key={woof ? `woof-${lastBark?.id}` : 'yawn'}
+            initial={{ opacity: 0, scale: 0.4 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.6 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 14 }}
+            style={{ originX: `${X - 60}px`, originY: `${Y - 60}px` }}
+          >
+            <text x={X - 60} y={Y - 50} textAnchor="middle" fontSize={34} fontWeight={800} fill={woof ? '#c9a6ff' : '#fff1cf'} stroke="#2a1d5c" strokeWidth={6} paintOrder="stroke">
+              {woof ? 'WOOF!' : '*yawn*'}
+            </text>
+          </motion.g>
+        )}
+      </AnimatePresence>
     </g>
   );
 }
