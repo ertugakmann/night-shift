@@ -3,9 +3,9 @@ import { ROOMS, doorSide, findDoor, type Pt } from './layout';
 
 /** Small offsets so guards sharing a room don't stand on each other. */
 const GUARD_OFFSET: Record<string, Pt> = {
-  sam: { x: -34, y: 6 },
-  priya: { x: 0, y: -10 },
-  tom: { x: 34, y: 8 },
+  sam: { x: -95, y: 4 },
+  priya: { x: 0, y: -8 },
+  tom: { x: 95, y: 6 },
 };
 
 /** The walking line for a route: start spot, through each door, to the target spot. */

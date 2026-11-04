@@ -44,6 +44,8 @@ export type ExhibitKind =
 
 export interface ExhibitLayout extends Pt {
   kind: ExhibitKind;
+  /** Drawing scale (1 = base size). */
+  scale?: number;
 }
 
 export interface RoomLayout {
@@ -54,6 +56,10 @@ export interface RoomLayout {
   spots: Pt[];
   exhibits: Record<string, ExhibitLayout>;
   corridor?: boolean;
+  /** x positions of picture frames hanging on the top wall. */
+  frames?: number[];
+  /** Stone columns in the corners. */
+  columns?: boolean;
 }
 
 /** A door in a vertical wall ('v', walk through it left/right) or a horizontal wall ('h', up/down). */
@@ -86,37 +92,41 @@ export const ROOMS: Record<string, RoomLayout> = {
 
   // ---------- Screen 3: West Wing (x 1600–3200) ----------
   'west-corridor': {
-    rect: { x: 1600, y: 380, w: 1600, h: 140 },
-    anchor: { x: 2520, y: 488 },
-    spots: [{ x: 2240, y: 492 }, { x: 2860, y: 492 }, { x: 1980, y: 492 }],
-    exhibits: { 'west-lamps': { kind: 'lamps', x: 2400, y: 450 } },
+    rect: { x: 1600, y: 380, w: 1600, h: 180 },
+    anchor: { x: 2520, y: 524 },
+    spots: [{ x: 2240, y: 528 }, { x: 2900, y: 528 }, { x: 1980, y: 528 }],
+    exhibits: { 'west-lamps': { kind: 'lamps', x: 2400, y: 470 } },
     corridor: true,
   },
   lab: {
-    rect: { x: 1680, y: 70, w: 1440, h: 310 },
-    anchor: { x: 1960, y: 310 },
-    spots: [{ x: 2620, y: 300 }, { x: 2860, y: 130 }, { x: 1840, y: 150 }],
+    rect: { x: 1608, y: 8, w: 1584, h: 372 },
+    anchor: { x: 1900, y: 330 },
+    spots: [{ x: 2720, y: 340 }, { x: 2260, y: 345 }, { x: 3090, y: 345 }],
     exhibits: {
-      microscopes: { kind: 'microscopes', x: 2330, y: 175 },
-      clockwork: { kind: 'clockwork', x: 2880, y: 230 },
+      microscopes: { kind: 'microscopes', x: 2440, y: 205, scale: 1.4 },
+      clockwork: { kind: 'clockwork', x: 2960, y: 200, scale: 1.35 },
     },
+    frames: [2070],
+    columns: true,
   },
   pharmacy: {
-    rect: { x: 1680, y: 520, w: 1440, h: 310 },
-    anchor: { x: 2700, y: 730 },
-    spots: [{ x: 2160, y: 760 }, { x: 2440, y: 640 }, { x: 3000, y: 760 }],
+    rect: { x: 1608, y: 560, w: 1584, h: 332 },
+    anchor: { x: 2930, y: 840 },
+    spots: [{ x: 1860, y: 850 }, { x: 2420, y: 865 }, { x: 3080, y: 760 }],
     exhibits: {
-      apothecary: { kind: 'apothecary', x: 1880, y: 680 },
-      'golden-scales': { kind: 'scales', x: 2380, y: 740 },
+      apothecary: { kind: 'apothecary', x: 2210, y: 712, scale: 1.35 },
+      'golden-scales': { kind: 'scales', x: 2650, y: 712, scale: 1.35 },
     },
+    frames: [2975],
+    columns: true,
   },
 
   // ---------- Screen 4: East Wing (x 3200–4800) ----------
   'east-corridor': {
-    rect: { x: 3200, y: 380, w: 1540, h: 140 },
-    anchor: { x: 3900, y: 488 },
-    spots: [{ x: 3700, y: 492 }, { x: 4250, y: 492 }, { x: 3450, y: 492 }],
-    exhibits: { 'east-lamps': { kind: 'lamps', x: 3970, y: 450 } },
+    rect: { x: 3200, y: 380, w: 1540, h: 180 },
+    anchor: { x: 3900, y: 524 },
+    spots: [{ x: 3700, y: 528 }, { x: 4250, y: 528 }, { x: 3450, y: 528 }],
+    exhibits: { 'east-lamps': { kind: 'lamps', x: 3970, y: 470 } },
     corridor: true,
   },
   ward4: {
@@ -138,7 +148,7 @@ export const ROOMS: Record<string, RoomLayout> = {
     },
   },
   radiology: {
-    rect: { x: 3280, y: 520, w: 1520, h: 310 },
+    rect: { x: 3280, y: 560, w: 1520, h: 270 },
     anchor: { x: 4000, y: 610 },
     spots: [{ x: 3500, y: 720 }, { x: 4400, y: 760 }, { x: 4650, y: 640 }],
     exhibits: {
@@ -165,13 +175,13 @@ export const ROOMS: Record<string, RoomLayout> = {
 export const DOORS: DoorLayout[] = [
   { a: 'mail-room', b: 'entrance-hall', x: 820, y: 250, orient: 'v' },
   { a: 'entrance-hall', b: 'key-room', x: 820, y: 690, orient: 'v' },
-  { a: 'entrance-hall', b: 'west-corridor', x: 1600, y: 450, orient: 'v' },
+  { a: 'entrance-hall', b: 'west-corridor', x: 1600, y: 470, orient: 'v' },
   { a: 'west-corridor', b: 'lab', x: 2040, y: 380, orient: 'h' },
-  { a: 'west-corridor', b: 'pharmacy', x: 2760, y: 520, orient: 'h' },
-  { a: 'west-corridor', b: 'east-corridor', x: 3200, y: 450, orient: 'v' },
+  { a: 'west-corridor', b: 'pharmacy', x: 2760, y: 560, orient: 'h' },
+  { a: 'west-corridor', b: 'east-corridor', x: 3200, y: 470, orient: 'v' },
   { a: 'east-corridor', b: 'emergency', x: 4360, y: 380, orient: 'h' },
   { a: 'east-corridor', b: 'ward4', x: 3620, y: 380, orient: 'h' },
-  { a: 'east-corridor', b: 'radiology', x: 4000, y: 520, orient: 'h' },
+  { a: 'east-corridor', b: 'radiology', x: 4000, y: 560, orient: 'h' },
   { a: 'radiology', b: 'archive', x: 4800, y: 690, orient: 'v' },
   { a: 'emergency', b: 'vault', x: 4800, y: 250, orient: 'v' },
   { a: 'archive', b: 'vault', x: 5000, y: 520, orient: 'h' },
@@ -200,7 +210,7 @@ export function findDoor(a: string, b: string): DoorLayout {
 /** Corridors are walked along a line near their lower wall, so characters fit inside. */
 export function walkY(room: string): number {
   const r = ROOMS[room].rect;
-  return r.y + r.h - 32;
+  return r.y + r.h - 36;
 }
 
 /** The point just inside `room` on each side of a door. */

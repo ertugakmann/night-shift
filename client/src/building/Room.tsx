@@ -1,11 +1,16 @@
 import { AnimatePresence, motion } from 'motion/react';
 import type { Room as RoomData, Snapshot } from '@night-shift/shared';
 import { IntruderArt } from './Characters';
-import { ExhibitArt, EXHIBIT_RADIUS } from './Exhibit';
+import { Barrier, Column, ExhibitArt, Frame, exhibitBox } from './Exhibit';
 import { guardPose } from './geometry';
-import { ROOMS } from './layout';
+import { ROOMS, type RoomLayout } from './layout';
 
 const LIGHT_SPRING = { type: 'spring', stiffness: 26, damping: 11 } as const;
+const WALL = 16;
+/** Room name and real system name sizes, in plan units (1600 wide → ×1.2 on a 1080p screen: 48 px and 29 px). */
+const NAME_SIZE = 40;
+const REAL_SIZE = 24;
+const INTRUDER_SCALE = 1.3;
 
 function farthestCorner(cx: number, cy: number, r: { x: number; y: number; w: number; h: number }): number {
   const xs = [r.x, r.x + r.w];
@@ -14,17 +19,17 @@ function farthestCorner(cx: number, cy: number, r: { x: number; y: number; w: nu
 }
 
 /** Zig-zag crack across a vandalised exhibit. */
-function Crack({ x, y, r }: { x: number; y: number; r: number }) {
-  const w = Math.max(40, r * 0.6);
+function Crack({ x, y, half }: { x: number; y: number; half: number }) {
+  const w = Math.max(50, half * 0.7);
   return (
     <path
-      d={`M${x - w} ${y - 30} L${x - w * 0.4} ${y - 4} L${x - w * 0.1} ${y - 26} L${x + w * 0.3} ${y + 6} L${x + w} ${y - 14}`}
+      d={`M${x - w} ${y - 30} L${x - w * 0.4} ${y} L${x - w * 0.1} ${y - 30} L${x + w * 0.3} ${y + 8} L${x + w} ${y - 18}`}
       fill="none"
       stroke="#ff6b6b"
-      strokeWidth={5}
+      strokeWidth={7}
       strokeLinecap="round"
       strokeLinejoin="round"
-      opacity={0.85}
+      opacity={0.9}
     />
   );
 }
@@ -33,11 +38,47 @@ function Candle({ x, y, glowId }: { x: number; y: number; glowId: string }) {
   return (
     <g transform={`translate(${x},${y})`}>
       <g className="flicker">
-        <circle r={26} fill={`url(#${glowId})`} />
+        <circle r={34} fill={`url(#${glowId})`} />
       </g>
-      <rect x={-5} y={-4} width={10} height={20} rx={3} fill="#fff1d6" />
-      <path d="M0 -18 Q6 -10 0 -4 Q-6 -10 0 -18 Z" fill="#ffb84d" className="flame" />
+      <rect x={-7} y={-6} width={14} height={28} rx={4} fill="#fff1d6" />
+      <path d="M0 -26 Q8 -15 0 -7 Q-8 -15 0 -26 Z" fill="#ffb84d" className="flame" />
     </g>
+  );
+}
+
+/** Columns, picture frames and velvet barriers. Drawn in both the dark and the lit layer. */
+function Decor({ layout }: { layout: RoomLayout }) {
+  const { rect } = layout;
+  const inset = 50;
+  const height = 130;
+  return (
+    <g>
+      {layout.columns &&
+        [
+          [rect.x + inset, rect.y + 18 + height],
+          [rect.x + rect.w - inset, rect.y + 18 + height],
+          [rect.x + inset, rect.y + rect.h - 16],
+          [rect.x + rect.w - inset, rect.y + rect.h - 16],
+        ].map(([x, y]) => <Column key={`${x}-${y}`} x={x} baseY={y} height={height} />)}
+      {layout.frames?.map((x, i) => <Frame key={x} x={x} top={rect.y + WALL / 2} variant={i + Math.round(rect.y / 100)} />)}
+      {Object.entries(layout.exhibits).map(([id, ex]) => {
+        if (ex.kind === 'lamps') return null;
+        const box = exhibitBox(ex.kind, ex.scale);
+        return <Barrier key={id} x={ex.x} y={ex.y + box.bottom + 34} half={box.half + 10} />;
+      })}
+    </g>
+  );
+}
+
+function Exhibits({ layout }: { layout: RoomLayout }) {
+  return (
+    <>
+      {Object.entries(layout.exhibits).map(([id, ex]) => (
+        <g key={id} transform={`translate(${ex.x},${ex.y}) scale(${ex.scale ?? 1})`}>
+          <ExhibitArt kind={ex.kind} />
+        </g>
+      ))}
+    </>
   );
 }
 
@@ -63,12 +104,14 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
   const clip = `${uid}-${room.id}-clip`;
   const mask = `${uid}-${room.id}-mask`;
   const exhibits = Object.entries(layout.exhibits);
+  const labelX = layout.corridor ? rect.x + 70 : rect.x + (layout.columns ? 100 : 34);
+  const labelY = layout.corridor ? rect.y + 64 : rect.y + 62;
 
   return (
     <g onClick={() => onSelect(room.id)} style={{ cursor: 'pointer' }}>
       <defs>
         <clipPath id={clip}>
-          <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx={22} />
+          <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx={18} />
         </clipPath>
         <mask id={mask} maskUnits="userSpaceOnUse" x={rect.x} y={rect.y} width={rect.w} height={rect.h}>
           <motion.circle
@@ -83,58 +126,54 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
       </defs>
 
       <g clipPath={`url(#${clip})`}>
-        {/* Dark room: faint floor and outlines only */}
-        <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={layout.corridor ? '#18123c' : '#1c1645'} />
-        <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={`url(#${uid}-tiles)`} />
+        {/* Dark room: chequered museum floor in night tones, everything else as outlines */}
+        <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={`url(#${uid}-checker-dark)`} />
         {layout.corridor && (
-          <rect x={rect.x - 20} y={rect.y + 38} width={rect.w + 40} height={rect.h - 76} rx={30} fill="#221a52" />
+          <rect x={rect.x - 20} y={rect.y + 52} width={rect.w + 40} height={rect.h - 104} rx={30} fill="#33296f" />
         )}
         <g className={`ex-dark ${status === 'broken' ? 'ex-off' : ''}`}>
-          {exhibits.map(([id, ex]) => (
-            <g key={id} transform={`translate(${ex.x},${ex.y})`}>
-              <ExhibitArt kind={ex.kind} />
-            </g>
-          ))}
+          <Decor layout={layout} />
+          <Exhibits layout={layout} />
         </g>
         {/* Night lights under each exhibit: cyan running, violet closed, red vandalised */}
-        {exhibits.map(([id, ex]) =>
-          ex.kind === 'lamps' ? null : (
+        {exhibits.map(([id, ex]) => {
+          if (ex.kind === 'lamps') return null;
+          const box = exhibitBox(ex.kind, ex.scale);
+          return (
             <ellipse
               key={id}
               cx={ex.x}
-              cy={ex.y + (EXHIBIT_RADIUS[ex.kind] ?? 80) * 0.45 + 30}
-              rx={(EXHIBIT_RADIUS[ex.kind] ?? 80) * 0.7}
-              ry={20}
+              cy={ex.y + box.bottom + 8}
+              rx={box.half * 0.85}
+              ry={26}
               className={status === 'ok' ? 'shimmer' : ''}
               fill={`url(#${uid}-pip-${status})`}
             />
-          ),
-        )}
+          );
+        })}
 
         {/* Lantern light: a warm, fully coloured copy of the room revealed through a growing circle */}
         <g mask={`url(#${mask})`}>
           <g className="flicker">
-            <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={`url(#${uid}-parquet)`} />
+            <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={`url(#${uid}-checker-lit)`} />
             {layout.corridor && (
-              <rect x={rect.x - 20} y={rect.y + 38} width={rect.w + 40} height={rect.h - 76} rx={30} fill="#7a4a8c" />
+              <rect x={rect.x - 20} y={rect.y + 52} width={rect.w + 40} height={rect.h - 104} rx={30} fill="#8a4f8f" />
             )}
+            <Decor layout={layout} />
             <g className={status === 'broken' ? 'ex-broken' : status === 'closed' ? 'ex-closed' : ''}>
-              {exhibits.map(([id, ex]) => (
-                <g key={id} transform={`translate(${ex.x},${ex.y})`}>
-                  <ExhibitArt kind={ex.kind} />
-                </g>
-              ))}
+              <Exhibits layout={layout} />
             </g>
             <AnimatePresence>
               {lit &&
                 groups.map((g, i) => {
                   const spot = layout.spots[i % layout.spots.length];
+                  const scale = INTRUDER_SCALE * (layout.corridor ? 0.85 : 1);
                   return (
                     <motion.g
                       key={g.id}
-                      initial={{ opacity: 0, scale: 0.5, x: spot.x, y: spot.y }}
-                      animate={{ opacity: 1, scale: layout.corridor ? 0.85 : 1, x: spot.x, y: spot.y }}
-                      exit={{ opacity: 0, scale: 0.5 }}
+                      initial={{ opacity: 0, scale: scale * 0.5, x: spot.x, y: spot.y }}
+                      animate={{ opacity: 1, scale, x: spot.x, y: spot.y }}
+                      exit={{ opacity: 0, scale: scale * 0.5 }}
                       transition={{ type: 'spring', stiffness: 200, damping: 18 }}
                     >
                       <IntruderArt spotted={g.spotted} />
@@ -148,17 +187,20 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
 
         {status === 'broken' &&
           exhibits.map(([id, ex]) =>
-            ex.kind === 'lamps' ? null : <Crack key={id} x={ex.x} y={ex.y} r={EXHIBIT_RADIUS[ex.kind] ?? 80} />,
+            ex.kind === 'lamps' ? null : <Crack key={id} x={ex.x} y={ex.y} half={exhibitBox(ex.kind, ex.scale).half} />,
           )}
         {candles &&
-          exhibits.map(([id, ex]) => (
-            <Candle
-              key={id}
-              glowId={`${uid}-glow`}
-              x={ex.kind === 'lamps' ? ex.x - 300 : ex.x + (EXHIBIT_RADIUS[ex.kind] ?? 80) + 20}
-              y={ex.kind === 'lamps' ? ex.y : ex.y + 40}
-            />
-          ))}
+          exhibits.map(([id, ex]) => {
+            const box = exhibitBox(ex.kind, ex.scale);
+            return (
+              <Candle
+                key={id}
+                glowId={`${uid}-glow`}
+                x={ex.kind === 'lamps' ? ex.x - 300 : ex.x + box.half + 40}
+                y={ex.kind === 'lamps' ? ex.y : ex.y + box.bottom - 10}
+              />
+            );
+          })}
 
         {/* Debug: where the gang really is, even in the dark */}
         {snapshot.debug &&
@@ -166,9 +208,9 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
           groups.map((g, i) => {
             const spot = layout.spots[i % layout.spots.length];
             return (
-              <g key={g.id} transform={`translate(${spot.x},${spot.y})`}>
+              <g key={g.id} transform={`translate(${spot.x},${spot.y}) scale(${INTRUDER_SCALE})`}>
                 <IntruderArt spotted={false} ghost />
-                <text y={-84} textAnchor="middle" className="game-text" fontSize={20} fill="#ff6b6b">
+                <text y={-84} textAnchor="middle" className="game-text" fontSize={22} fontWeight={600} fill="#ff6b6b">
                   {Math.floor(rs.occupiedMs / 1000)}s
                 </text>
               </g>
@@ -182,23 +224,23 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
         y={rect.y}
         width={rect.w}
         height={rect.h}
-        rx={22}
+        rx={18}
         fill="none"
-        stroke={rs.locked ? '#9c86f5' : '#3a3186'}
-        strokeWidth={10}
+        stroke={rs.locked ? '#b9a8ff' : '#6f61d0'}
+        strokeWidth={WALL}
         style={{ transition: 'stroke 600ms ease' }}
       />
       {selected && (
         <rect
-          x={rect.x + 10}
-          y={rect.y + 10}
-          width={rect.w - 20}
-          height={rect.h - 20}
-          rx={16}
+          x={rect.x + 16}
+          y={rect.y + 16}
+          width={rect.w - 32}
+          height={rect.h - 32}
+          rx={14}
           fill="none"
           stroke="#ffd27a"
-          strokeWidth={4}
-          strokeDasharray="14 10"
+          strokeWidth={5}
+          strokeDasharray="16 12"
           className="march"
         />
       )}
@@ -206,22 +248,22 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
       {/* Name, with the real hospital system underneath */}
       <g className="game-text" pointerEvents="none">
         <text
-          x={layout.corridor ? rect.x + 70 : rect.x + 30}
-          y={layout.corridor ? rect.y + 58 : rect.y + 46}
-          fontSize={30}
+          x={labelX}
+          y={labelY}
+          fontSize={NAME_SIZE}
           fontWeight={600}
-          fill={lit ? '#5a3a22' : '#a99ce6'}
-          opacity={lit ? 0.9 : 0.75}
-          style={{ transition: 'fill 500ms ease, opacity 500ms ease' }}
+          fill={lit ? '#5a3a22' : '#d8cffd'}
+          style={{ transition: 'fill 500ms ease' }}
         >
           {room.name}
         </text>
         <text
-          x={layout.corridor ? rect.x + 70 : rect.x + 30}
-          y={layout.corridor ? rect.y + 84 : rect.y + 72}
-          fontSize={18}
+          x={labelX}
+          y={labelY + REAL_SIZE + 10}
+          fontSize={REAL_SIZE}
+          fontWeight={500}
           fill={lit ? '#7a5638' : '#a99ce6'}
-          opacity={lit ? 0.75 : 0.5}
+          opacity={lit ? 0.85 : 0.7}
           style={{ transition: 'fill 500ms ease, opacity 500ms ease' }}
         >
           {room.real}

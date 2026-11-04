@@ -42,7 +42,6 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
     >
       <Defs uid={uid} />
       <rect x={slice.x} y={0} width={SLICE_W} height={SLICE_H} fill="#0c0922" />
-      <Garden slice={slice} />
 
       {rooms.map((room) => (
         <Room
@@ -94,41 +93,18 @@ function Defs({ uid }: { uid: string }) {
           <stop offset="1" stopColor={color} stopOpacity={0} />
         </radialGradient>
       ))}
-      <pattern id={`${uid}-tiles`} width={80} height={80} patternUnits="userSpaceOnUse">
-        <path d="M80 0 L0 0 0 80" fill="none" stroke="#241d58" strokeWidth={2} />
+      {/* Chequered museum floor: night tones in the dark, warm marble under the lantern */}
+      <pattern id={`${uid}-checker-dark`} width={120} height={120} patternUnits="userSpaceOnUse">
+        <rect width={120} height={120} fill="#2a2263" />
+        <rect width={60} height={60} fill="#352c78" />
+        <rect x={60} y={60} width={60} height={60} fill="#352c78" />
       </pattern>
-      <pattern id={`${uid}-parquet`} width={120} height={40} patternUnits="userSpaceOnUse">
-        <rect width={120} height={40} fill="#e7c48c" />
-        <rect width={120} height={20} fill="#efcf98" />
-        <path d="M0 20 H120 M60 0 V20 M0 20 V40 M120 20 V40" stroke="#d1a96d" strokeWidth={2} />
+      <pattern id={`${uid}-checker-lit`} width={120} height={120} patternUnits="userSpaceOnUse">
+        <rect width={120} height={120} fill="#e9d3ad" />
+        <rect width={60} height={60} fill="#fbf0dc" />
+        <rect x={60} y={60} width={60} height={60} fill="#fbf0dc" />
       </pattern>
     </defs>
-  );
-}
-
-/** Round tree tops and bushes in the gaps outside the walls. */
-function Garden({ slice }: { slice: Rect }) {
-  const trees = useMemo(() => {
-    const out: { x: number; y: number; r: number }[] = [];
-    let seed = slice.x + 7;
-    const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
-    for (let i = 0; i < 14; i++) {
-      const top = i % 2 === 0;
-      out.push({ x: slice.x + 40 + rnd() * (SLICE_W - 80), y: top ? 12 + rnd() * 30 : SLICE_H - 40 + rnd() * 30, r: 14 + rnd() * 16 });
-    }
-    return out;
-  }, [slice.x]);
-  return (
-    <g>
-      {trees.map((t, i) => (
-        <g key={i} transform={`translate(${t.x},${t.y})`}>
-          <circle cx={-t.r * 0.7} cy={t.r * 0.15} r={t.r * 0.7} fill="#10233b" />
-          <circle cx={t.r * 0.7} cy={t.r * 0.2} r={t.r * 0.65} fill="#10233b" />
-          <circle r={t.r} fill="#132a45" />
-          <circle cx={-t.r * 0.3} cy={-t.r * 0.35} r={t.r * 0.35} fill="#1a3757" />
-        </g>
-      ))}
-    </g>
   );
 }
 
@@ -179,6 +155,21 @@ function Guards({ snapshot, uid }: { snapshot: Snapshot; uid: string }) {
   );
 }
 
+const GUARD_SCALE = 1.4;
+
+/** Small rounded label floating above a guard. */
+function NameTag({ name, y }: { name: string; y: number }) {
+  const w = name.length * 14 + 28;
+  return (
+    <g transform={`translate(0,${y})`} className="game-text">
+      <rect x={-w / 2} y={-18} width={w} height={34} rx={17} fill="#17123a" opacity={0.85} stroke="#ffd27a" strokeWidth={2} />
+      <text y={8} textAnchor="middle" fontSize={22} fontWeight={600} fill="#fff1cf">
+        {name}
+      </text>
+    </g>
+  );
+}
+
 function GuardSprite({ snapshot, id, uid }: { snapshot: Snapshot; id: string; uid: string }) {
   const guard = snapshot.guards.find((g) => g.id === id)!;
   const pose = guardPose(guard);
@@ -187,8 +178,11 @@ function GuardSprite({ snapshot, id, uid }: { snapshot: Snapshot; id: string; ui
   last.current.x = pose.x;
   return (
     <motion.g initial={false} animate={{ x: pose.x, y: pose.y }} transition={{ duration: 0.12, ease: 'linear' }}>
-      <circle r={110} cy={-30} fill={`url(#${uid}-glow)`} className="flicker" />
-      <GuardArt id={id} raised={pose.raised} walking={pose.walking} facing={last.current.facing} />
+      <circle r={150} cy={-40} fill={`url(#${uid}-glow)`} className="flicker" />
+      <g transform={`scale(${GUARD_SCALE})`}>
+        <GuardArt id={id} raised={pose.raised} walking={pose.walking} facing={last.current.facing} />
+      </g>
+      <NameTag name={guard.name} y={-170} />
     </motion.g>
   );
 }

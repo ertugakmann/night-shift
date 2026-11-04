@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import type { Fx, Snapshot } from '@night-shift/shared';
-import { EXHIBIT_RADIUS } from './Exhibit';
+import { exhibitBox } from './Exhibit';
 import { ROOMS } from './layout';
 
 /** How long an effect plays, in game time. Effects older than this are not replayed after a refresh. */
@@ -11,7 +11,7 @@ const STAR = 'M0 -14 L4 -4 L14 -4 L6 3 L9 13 L0 7 L-9 13 L-6 3 L-14 -4 L-4 -4 Z'
 function StarBurst({ x, y }: { x: number; y: number }) {
   const rays = Array.from({ length: 9 }, (_, i) => (i / 9) * Math.PI * 2);
   return (
-    <g transform={`translate(${x},${y - 30})`}>
+    <g transform={`translate(${x},${y - 40}) scale(1.4)`}>
       <motion.circle
         r={20}
         fill="none"
@@ -69,7 +69,7 @@ function Effect({ fx }: { fx: Fx }) {
     return (
       <g>
         {Object.entries(room.exhibits).map(([id, ex]) => (
-          <Sparkle key={id} x={ex.x} y={ex.y} r={EXHIBIT_RADIUS[ex.kind] ?? 80} />
+          <Sparkle key={id} x={ex.x} y={ex.y} r={exhibitBox(ex.kind, ex.scale).half} />
         ))}
       </g>
     );

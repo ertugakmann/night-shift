@@ -42,8 +42,8 @@ body {
 
 /* Exhibits in the dark: the same drawing, re-coloured to faint outlines. */
 .ex-dark * {
-  fill: #221b50 !important;
-  stroke: #5b50b2 !important;
+  fill: #2c2468 !important;
+  stroke: #8a7cf0 !important;
   stroke-width: 3px;
 }
 .ex-dark .lamp-glow {
