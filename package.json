@@ -15,7 +15,8 @@
     "build": "npm run build -w client",
     "start": "npm run start -w server",
     "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
-    "check:deploy": "node scripts/check-deploy.mjs"
+    "check:deploy": "node scripts/check-deploy.mjs",
+    "test": "npm run test -w shared"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",

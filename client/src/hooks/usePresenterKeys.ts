@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { IntentType } from '@night-shift/shared';
 import { sendIntent } from '../net/game';
 
-const KEYS: Record<string, IntentType> = {
+const KEYS: Record<string, Exclude<IntentType, 'action'>> = {
   s: 'start',
   ' ': 'togglePause',
   r: 'reset',

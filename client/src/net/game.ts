@@ -19,6 +19,8 @@ export interface GameView {
   notice: { id: number; text: string } | null;
   /** 'websocket' once upgraded, 'polling' while (or if stuck) on HTTP long-polling. */
   transport: string | null;
+  /** Room picked on this page for the action menu. Local to this tab. */
+  selected: string | null;
 }
 
 const CODE_STORAGE_KEY = 'night-shift:control-code';
@@ -85,7 +87,12 @@ let view: GameView = {
   code: null,
   notice: null,
   transport: null,
+  selected: null,
 };
+
+export function selectRoom(room: string | null): void {
+  set({ selected: room });
+}
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<GameView>): void {

@@ -10,6 +10,7 @@ import {
   advance,
   applyIntent,
   initialState,
+  publicState,
   isIntent,
   type ClientToServerEvents,
   type GameState,
@@ -38,7 +39,10 @@ const PRESENTER_KEY = configuredKey || randomBytes(9).toString('base64url');
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
+// Snapshots are repetitive JSON at 10 Hz; compressing them keeps remote judges on slow links happy.
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+  perMessageDeflate: { threshold: 1024 },
+});
 
 // Health check for Render, and a quick way to see that the server is up.
 app.get('/healthz', (_req, res) => {
@@ -61,7 +65,7 @@ const control = new Control(PRESENTER_KEY);
 
 function snapshot(): Snapshot {
   return {
-    ...state,
+    ...publicState(state),
     codeVisible: control.code !== null,
     controllers: control.controllerCount,
     viewers: io.engine.clientsCount,

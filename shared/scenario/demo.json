@@ -1,0 +1,358 @@
+{
+  "id": "demo",
+  "seed": 687,
+
+  "night": {
+    "start": "00:00",
+    "end": "06:00",
+    "realSecondsPerGameHour": 50
+  },
+
+  "intruders": {
+    "entryRoom": "mail-room",
+    "breakInAt": "00:10",
+    "spreadTickSec": 15,
+    "masterKeysSpreadTickSec": 10,
+    "moveChance": 0.65,
+    "splitChance": 0.5,
+    "maxGroups": 3,
+    "towardVaultFactor": 3,
+    "revisitFactor": 0.15,
+    "minStaySec": 15,
+    "vandaliseAfterSec": 30,
+    "vaultLoseAfterSec": 20
+  },
+
+  "actions": {
+    "walkSecPerRoom": 2,
+    "patrolSec": 8,
+    "lockSec": 2,
+    "evictSec": 15,
+    "repairSec": 20,
+    "candlelightSec": 3,
+    "candlelightModifier": 0.5
+  },
+
+  "guards": [
+    { "id": "sam", "name": "Sam", "startRoom": "west-corridor" },
+    { "id": "priya", "name": "Priya", "startRoom": "east-corridor" },
+    { "id": "tom", "name": "Tom", "startRoom": "entrance-hall" }
+  ],
+
+  "rooms": [
+    {
+      "id": "mail-room",
+      "screen": 1,
+      "wing": "lobby",
+      "name": "Mail Room",
+      "real": "Email",
+      "lure": 1,
+      "cctv": { "game": "Camera flicker in the Mail Room", "reality": "Mail gateway: user clicked a flagged link" },
+      "exhibits": [
+        {
+          "id": "letter-press",
+          "name": "The Letter Press",
+          "real": "Email server",
+          "criticality": 2,
+          "impact": null,
+          "report": { "speaker": "Clare, ward admin", "text": "My inbox just went blank." }
+        }
+      ]
+    },
+    {
+      "id": "entrance-hall",
+      "screen": 1,
+      "wing": "lobby",
+      "name": "Entrance Hall",
+      "real": "Network entry (VPN gateway)",
+      "lure": 2,
+      "cctv": { "game": "Shadow crossed the Entrance Hall camera", "reality": "Firewall: unusual outbound connection from VPN gateway" },
+      "exhibits": [
+        {
+          "id": "turnstiles",
+          "name": "Brass Turnstiles",
+          "real": "Remote access for on-call doctors",
+          "criticality": 3,
+          "impact": null,
+          "report": { "speaker": "Dr Osei, on call", "text": "I can't log in from home to see the scans." }
+        }
+      ]
+    },
+    {
+      "id": "key-room",
+      "screen": 1,
+      "wing": "lobby",
+      "name": "Key Room",
+      "real": "Identity server (admin credentials)",
+      "special": "masterKeys",
+      "lure": 5,
+      "cctv": { "game": "Key Room camera went fuzzy", "reality": "Identity server: admin login from unknown host" },
+      "exhibits": [
+        {
+          "id": "key-cabinet",
+          "name": "The Master Key Cabinet",
+          "real": "Staff logins (Active Directory)",
+          "criticality": 4,
+          "impact": null,
+          "report": { "speaker": "Nurse Ada, Ward 4", "text": "My badge stopped opening the drug room." }
+        }
+      ]
+    },
+
+    {
+      "id": "west-corridor",
+      "screen": 3,
+      "wing": "west",
+      "name": "West Corridor",
+      "real": "Network segment (west)",
+      "lure": 1,
+      "cctv": { "game": "Footsteps on the West Corridor microphone", "reality": "IDS: port scan on west network segment" },
+      "exhibits": [
+        {
+          "id": "west-lamps",
+          "name": "Corridor Lamps",
+          "real": "West network switch",
+          "criticality": 2,
+          "impact": null,
+          "report": { "speaker": "Malik, lab technician", "text": "The Wi-Fi in the west wing keeps dropping." }
+        }
+      ]
+    },
+    {
+      "id": "lab",
+      "screen": 3,
+      "wing": "west",
+      "name": "Lab Gallery",
+      "real": "Laboratory",
+      "lure": 2,
+      "cctv": { "game": "Lab Gallery camera glitched", "reality": "EDR: suspicious encryption activity on lab system" },
+      "exhibits": [
+        {
+          "id": "microscopes",
+          "name": "Crystal Microscopes",
+          "real": "Laboratory information system",
+          "criticality": 8,
+          "impact": "tests",
+          "report": { "speaker": "Malik, lab technician", "text": "Lab results stopped printing." }
+        },
+        {
+          "id": "clockwork",
+          "name": "Clockwork Analyser",
+          "real": "Blood analyser",
+          "criticality": 6,
+          "impact": "tests",
+          "report": { "speaker": "Malik, lab technician", "text": "The blood analyser is stuck on a loading screen." }
+        }
+      ]
+    },
+    {
+      "id": "pharmacy",
+      "screen": 3,
+      "wing": "west",
+      "name": "Pharmacy Gallery",
+      "real": "Pharmacy",
+      "lure": 2,
+      "cctv": { "game": "Pharmacy Gallery camera flickered", "reality": "EDR: unknown process on dispensing system" },
+      "exhibits": [
+        {
+          "id": "apothecary",
+          "name": "The Apothecary Cabinet",
+          "real": "Pharmacy dispensing system",
+          "criticality": 7,
+          "impact": "medicines",
+          "report": { "speaker": "Joy, pharmacist", "text": "The dispensing cabinet won't open. Ward 4 is waiting for its 2am meds." }
+        },
+        {
+          "id": "golden-scales",
+          "name": "Golden Scales",
+          "real": "Drug fridge temperature monitor",
+          "criticality": 4,
+          "impact": null,
+          "report": { "speaker": "Joy, pharmacist", "text": "Fridge monitor shows dashes instead of temperatures." }
+        }
+      ]
+    },
+
+    {
+      "id": "east-corridor",
+      "screen": 4,
+      "wing": "east",
+      "name": "East Corridor",
+      "real": "Network segment (east)",
+      "lure": 1,
+      "cctv": { "game": "Door creaked on the East Corridor", "reality": "IDS: lateral movement on east network segment" },
+      "exhibits": [
+        {
+          "id": "east-lamps",
+          "name": "Corridor Lamps",
+          "real": "East network switch",
+          "criticality": 2,
+          "impact": null,
+          "report": { "speaker": "Leo, ED charge nurse", "text": "Network's crawling down here." }
+        }
+      ]
+    },
+    {
+      "id": "emergency",
+      "screen": 4,
+      "wing": "east",
+      "name": "Emergency Hall",
+      "real": "Emergency department",
+      "lure": 3,
+      "cctv": { "game": "Emergency Hall camera blinked", "reality": "EDR: ransomware signature on ED tracking server" },
+      "exhibits": [
+        {
+          "id": "great-clock",
+          "name": "The Great Clock",
+          "real": "ED triage and patient tracking",
+          "criticality": 12,
+          "impact": "ambulances",
+          "report": { "speaker": "Leo, ED charge nurse", "text": "The tracking board is frozen. We're back to the whiteboard." }
+        },
+        {
+          "id": "signal-beacons",
+          "name": "Signal Beacons",
+          "real": "Ambulance pre-alert link",
+          "criticality": 10,
+          "impact": "ambulances",
+          "report": { "speaker": "Leo, ED charge nurse", "text": "No pre-alerts coming through from the ambulances." }
+        }
+      ]
+    },
+    {
+      "id": "ward4",
+      "screen": 4,
+      "wing": "east",
+      "name": "Ward 4 Hall",
+      "real": "Ward 4 (infusion pumps)",
+      "lure": 2,
+      "cctv": { "game": "Ward 4 Hall camera went dark for a second", "reality": "Medical device monitor: pump fleet lost connection" },
+      "exhibits": [
+        {
+          "id": "music-boxes",
+          "name": "Music Boxes",
+          "real": "Infusion pumps",
+          "criticality": 10,
+          "impact": "surgeries",
+          "report": { "speaker": "Nurse Ada, Ward 4", "text": "The pump on bed 6 just froze." }
+        },
+        {
+          "id": "lanterns",
+          "name": "Night Lanterns",
+          "real": "Bedside monitoring and nurse call",
+          "criticality": 8,
+          "impact": null,
+          "report": { "speaker": "Nurse Ada, Ward 4", "text": "Call bells aren't showing at the desk." }
+        }
+      ]
+    },
+    {
+      "id": "radiology",
+      "screen": 4,
+      "wing": "east",
+      "name": "Radiology Gallery",
+      "real": "Radiology",
+      "lure": 2,
+      "cctv": { "game": "Radiology Gallery camera glitched", "reality": "EDR: mass file renames on imaging archive (PACS)" },
+      "exhibits": [
+        {
+          "id": "shadow-theatre",
+          "name": "Shadow Theatre",
+          "real": "Imaging archive (PACS)",
+          "criticality": 7,
+          "impact": "tests",
+          "report": { "speaker": "Ines, radiographer", "text": "Scans won't load. Just a spinning wheel." }
+        },
+        {
+          "id": "great-lens",
+          "name": "The Great Lens",
+          "real": "CT scanner",
+          "criticality": 7,
+          "impact": "tests",
+          "report": { "speaker": "Ines, radiographer", "text": "CT won't send images anywhere." }
+        }
+      ]
+    },
+
+    {
+      "id": "archive",
+      "screen": 5,
+      "wing": "vault",
+      "name": "Archive",
+      "real": "Backups",
+      "special": "backups",
+      "lure": 5,
+      "cctv": { "game": "Archive camera hissed with static", "reality": "Backup server: backup jobs deleted" },
+      "exhibits": [
+        {
+          "id": "copy-scrolls",
+          "name": "The Copy Scrolls",
+          "real": "Backup server",
+          "criticality": 3,
+          "impact": null,
+          "report": { "speaker": "Ravi, IT on call", "text": "Last night's backup job says 'deleted'. Odd." }
+        }
+      ]
+    },
+    {
+      "id": "vault",
+      "screen": 5,
+      "wing": "vault",
+      "name": "The Vault",
+      "real": "Electronic patient records",
+      "special": "vault",
+      "lure": 10,
+      "cctv": { "game": "Vault door sensor tripped", "reality": "EPR database: bulk record access by service account" },
+      "exhibits": [
+        {
+          "id": "crown-ledger",
+          "name": "The Crown Ledger",
+          "real": "Electronic patient records",
+          "criticality": 20,
+          "impact": "surgeries",
+          "report": { "speaker": "Leo, ED charge nurse", "text": "Patient records won't open. We can't see allergies." }
+        }
+      ]
+    }
+  ],
+
+  "doors": [
+    ["mail-room", "entrance-hall"],
+    ["entrance-hall", "key-room"],
+    ["entrance-hall", "west-corridor"],
+    ["west-corridor", "lab"],
+    ["west-corridor", "pharmacy"],
+    ["west-corridor", "east-corridor"],
+    ["east-corridor", "emergency"],
+    ["east-corridor", "ward4"],
+    ["east-corridor", "radiology"],
+    ["radiology", "archive"],
+    ["emergency", "vault"],
+    ["archive", "vault"]
+  ],
+
+  "impactPerGameHour": {
+    "tests": 12,
+    "medicines": 8,
+    "surgeries": 2,
+    "ambulances": 3
+  },
+
+  "clues": {
+    "cctvChancePerTick": 0.5,
+    "falseCctv": [
+      { "at": "01:05", "room": "pharmacy" },
+      { "at": "03:40", "room": "ward4" }
+    ],
+    "decoyChatter": [
+      { "at": "00:40", "speaker": "Tom", "text": "Vending machine ate my coins again." },
+      { "at": "02:15", "speaker": "Nurse Ada, Ward 4", "text": "Printer on Ward 4 is out of paper. Not urgent." },
+      { "at": "04:30", "speaker": "Malik, lab technician", "text": "Anyone seen my mug? Blue one." }
+    ]
+  },
+
+  "rex": {
+    "barkThreshold": 60,
+    "mistake": { "from": "02:00", "room": "pharmacy", "confidence": 80, "holdSec": 45 }
+  }
+}
