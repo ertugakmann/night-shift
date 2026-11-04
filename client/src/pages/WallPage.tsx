@@ -9,10 +9,7 @@ import { OfficeBack, OfficeFront } from '../wall/OfficeScene';
 import { WallIntro } from '../wall/WallIntro';
 import { RealityStrip } from '../reality/RealityStrip';
 import { SWEEP_MS, WAVE_STEP_MS } from '../reality/useRealityWave';
-import { CARD_H, CARD_W, ResultCard } from '../end/ResultCard';
-import { useEndMoment } from '../end/useEndMoment';
-
-const CARD_SCALE = 0.86;
+import { WallEnd } from '../report/WallEnd';
 
 const MAX_ZOOM = 6;
 const GLIDE = { duration: 0.55, ease: [0.4, 0, 0.2, 1] } as const; // within the 400–700 ms brief
@@ -56,7 +53,6 @@ export function WallPage() {
   const y = useMotionValue(0);
   const scale = useMotionValue(1);
   const [zoomed, setZoomed] = useState(false);
-  const end = useEndMoment();
   // The strip arrives as the wave reaches the last screen, and leaves as soon as the wave starts back.
   const reality = snapshot?.reality ?? false;
   const [stripShown, setStripShown] = useState(reality);
@@ -245,25 +241,8 @@ export function WallPage() {
           )}
         </AnimatePresence>
 
-        {/* End of the night: the result card over the office */}
-        <AnimatePresence>
-          {end.card && snapshot && end.outcome && (
-            <motion.svg
-              key="result"
-              viewBox={`0 0 ${STAGE_W} ${STAGE_H}`}
-              className="absolute inset-0 z-[25] h-full w-full"
-              initial={end.fresh ? { opacity: 0, y: 30 } : false}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.8, ease: 'easeOut' }}
-            >
-              <rect width={STAGE_W} height={STAGE_H} fill="#05040f" opacity={0.5} />
-              <g transform={`translate(${(STAGE_W - CARD_W * CARD_SCALE) / 2},${(STAGE_H - CARD_H * CARD_SCALE) / 2}) scale(${CARD_SCALE})`}>
-                <ResultCard snapshot={snapshot} outcome={end.outcome} reality={snapshot.reality} />
-              </g>
-            </motion.svg>
-          )}
-        </AnimatePresence>
+        {/* End of the night: the result card over the office, then the morning report */}
+        <WallEnd snapshot={snapshot} />
 
         <WallIntro snapshot={snapshot} />
 

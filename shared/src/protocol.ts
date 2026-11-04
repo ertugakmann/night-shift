@@ -1,4 +1,5 @@
 import type { Intent, PublicState } from './engine';
+import type { MorningReport } from './report';
 import type { ScreenId } from './screens';
 
 /** What every client receives at 10 Hz. */
@@ -34,6 +35,8 @@ export interface ServerToClientEvents {
   control: (info: ControlInfo) => void;
   notice: (text: string) => void;
   wall: (info: WallInfo) => void;
+  /** The morning report of the night that just ended (null while there is none). */
+  report: (report: MorningReport | null) => void;
 }
 
 export interface ClientToServerEvents {

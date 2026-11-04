@@ -31,6 +31,19 @@ for the power-on order at shift start, the Lights on wave and its piece of the I
 strip. `/wall` and `/preview` always keep the order 1 to 5. An invalid value is ignored with a warning,
 and the server prints the order it uses at startup (also on `/healthz`). Changing it needs a restart.
 
+## Morning report (Claude, optional)
+
+Set `ANTHROPIC_API_KEY` (Render: the **Environment** tab; locally: `.env`) to have the morning report
+written by Claude (`claude-haiku-5-5`). It is written once when the night ends, in both voices (the
+head guard's note and the SOC shift handover), so **L** switches between them instantly.
+
+Without a key, on any API error, or if no answer comes within 8 s, the server writes the same report
+from a template instead. The demo never depends on the API. A small tag on the report says which one
+wrote it ("Written by AI" or "Template report"). The server prints which mode it is in at startup and
+logs each report (`Morning report: written by Claude in 2.1 s` or `Morning report: template (...)`).
+
+The key is only read by the server. Browsers receive the finished report, never the key.
+
 ## Offline fallback (laptop)
 
 ```

@@ -168,3 +168,12 @@ body {
   }
   .dust { animation: none !important; opacity: 0.2; }
 }
+
+/* Morning report: the typewriter caret and the writing pen. */
+.caret { animation: caret 0.9s steps(1, end) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.pen { animation: pen 0.8s ease-in-out infinite alternate; }
+@keyframes pen { from { transform: translate(-0.1em, 0.05em) rotate(-8deg); } to { transform: translate(0.15em, -0.05em) rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .caret, .pen { animation: none !important; }
+}

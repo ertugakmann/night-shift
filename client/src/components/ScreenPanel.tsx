@@ -6,6 +6,7 @@ import { RealityBuilding } from '../reality/RealityBuilding';
 import type { StripMode } from '../reality/RealityStrip';
 import { RealitySwitch } from '../reality/RealitySwitch';
 import { ControlCodeCard } from './ControlCodeCard';
+import { DeskReport } from '../report/DeskReport';
 
 /**
  * One wall screen, drawn as an SVG scene that scales cleanly: full screen on the real wall, or inside a
@@ -21,6 +22,7 @@ export function ScreenPanel({ id, embedded = false, strip = 'split' }: { id: Scr
   return (
     <section className="panel relative h-full w-full overflow-hidden bg-[#0c0922]">
       <RealitySwitch id={id} museum={museum} reality={reality} />
+      {id === 2 && <DeskReport />}
       {id === 2 && <ControlCodeCard />}
       <IntroOverlay id={id} quiet={embedded} />
     </section>

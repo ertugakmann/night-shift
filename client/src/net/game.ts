@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { DEFAULT_ROOM_ORDER, type ScreenId } from '@night-shift/shared';
+import { DEFAULT_ROOM_ORDER, type MorningReport, type ScreenId } from '@night-shift/shared';
 import type {
   ClientToServerEvents,
   CodeResult,
@@ -24,6 +24,10 @@ export interface GameView {
   selected: string | null;
   /** How the screens stand in the room, left to right (ROOM_ORDER, sent by the server). */
   roomOrder: readonly ScreenId[];
+  /** The morning report of the night that just ended, once the server has written it. */
+  report: MorningReport | null;
+  /** The report arrived while this page was watching the end of the night: type it out. After a refresh: show it whole. */
+  reportLive: boolean;
 }
 
 const CODE_STORAGE_KEY = 'night-shift:control-code';
@@ -92,6 +96,8 @@ let view: GameView = {
   transport: null,
   selected: null,
   roomOrder: DEFAULT_ROOM_ORDER,
+  report: null,
+  reportLive: false,
 };
 
 export function selectRoom(room: string | null): void {
@@ -135,6 +141,9 @@ socket.on('control', ({ role, code }) => {
 });
 socket.on('notice', showNotice);
 socket.on('wall', ({ order }) => set({ roomOrder: order }));
+// On connect the server sends the current report before the first snapshot, so a report that exists
+// already (a refresh after the end) is not live; one that arrives later is.
+socket.on('report', (report) => set({ report, reportLive: report !== null && view.snapshot !== null }));
 
 export function sendIntent(intent: Intent): void {
   socket.emit('intent', intent);

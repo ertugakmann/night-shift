@@ -13,13 +13,16 @@ import {
   publicState,
   isIntent,
   parseRoomOrder,
+  reportKey,
   type ClientToServerEvents,
   type GameState,
   type Hello,
+  type MorningReport,
   type ServerToClientEvents,
   type Snapshot,
 } from '@night-shift/shared';
 import { Control } from './control';
+import { reportMode, writeMorningReport } from './morningReport';
 import { resolvePresenterKey } from './presenterKey';
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -100,11 +103,34 @@ function sourceKey(socket: GameSocket): string {
   return first || socket.handshake.address;
 }
 
+// ---------- Morning report ----------
+
+// Written once per night, when it ends. Clients get only the finished report, never the API key.
+let report: MorningReport | null = null;
+let reportFor: string | null = null;
+
+function checkReport(): void {
+  const key = state.outcome ? reportKey(state.outcome) : null;
+  if (key === reportFor) return;
+  reportFor = key;
+  if (report) {
+    report = null;
+    io.emit('report', null);
+  }
+  if (!key) return;
+  void writeMorningReport(state).then((written) => {
+    if (written.key !== reportFor) return; // the game was reset meanwhile
+    report = written;
+    io.emit('report', written);
+  });
+}
+
 let last = performance.now();
 setInterval(() => {
   const now = performance.now();
   state = advance(state, now - last);
   last = now;
+  checkReport();
   broadcast();
 }, TICK_MS);
 
@@ -112,6 +138,7 @@ setInterval(() => {
 
 io.on('connection', (socket) => {
   socket.emit('wall', { order: ROOM_ORDER });
+  socket.emit('report', report);
   socket.emit('snapshot', snapshot());
   sendControl(socket);
 
@@ -149,6 +176,7 @@ io.on('connection', (socket) => {
       state = result.state;
       if (result.error) socket.emit('notice', result.error);
     }
+    checkReport();
     broadcast();
   });
 
@@ -169,6 +197,7 @@ io.on('connection', (socket) => {
 httpServer.listen(PORT, () => {
   const mode = SERVE_DIST ? 'serving client/dist' : DEV ? `dev: open the pages on ${VITE_URL}` : 'API only (build the client first)';
   console.log(`NIGHT SHIFT server on http://localhost:${PORT} (${mode})`);
+  console.log(`Morning report: ${reportMode()}`);
   console.log(`Screens in the room, left to right: ${ROOM_ORDER.join(' ')} (ROOM_ORDER)`);
   const link = `${PUBLIC_URL}/screen/2?presenter=${encodeURIComponent(PRESENTER_KEY)}`;
   if (KEY_SOURCE === 'env') {

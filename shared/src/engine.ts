@@ -120,6 +120,14 @@ export interface Outcome {
   summary: NightSummary;
 }
 
+export interface DoneAction {
+  guard: string;
+  action: ActionKind;
+  room: RoomId;
+  atMs: number;
+  hit: boolean;
+}
+
 export interface GameState {
   scenarioId: string;
   phase: Phase;
@@ -190,6 +198,8 @@ export interface GameState {
   fx: Fx[];
   nextFxId: number;
   outcome: Outcome | null;
+  /** Every finished guard action, for the morning report. `hit`: it did what it was for (found, evicted, restored...). */
+  done: DoneAction[];
 }
 
 // ---------- Setup ----------
@@ -245,6 +255,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     fx: [],
     nextFxId: 1,
     outcome: null,
+    done: [],
   };
 }
 
@@ -644,6 +655,15 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
   const inside = s.groups.filter((g) => g.room === task.room);
   /** Varies the wording from line to line, without touching the RNG. */
   const n = s.nextLogId;
+  const hit =
+    task.action === 'patrol'
+      ? task.found
+      : task.action === 'evict'
+        ? rs.locked && inside.length > 0
+        : task.action === 'repair'
+          ? inside.length === 0 && !(rs.dark && s.backupsLost)
+          : true;
+  s.done.push({ guard: guard.id, action: task.action, room: task.room, atMs: s.timeMs, hit });
 
   switch (task.action) {
     case 'patrol':
