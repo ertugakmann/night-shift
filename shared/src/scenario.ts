@@ -68,6 +68,8 @@ export interface Scenario {
     minStaySec: number;
     /** The first spread tick comes this soon after the break-in, and in it the gang always splits. */
     firstSplitSec: number;
+    /** Where the group that splits off goes. */
+    firstSplitTo: RoomId;
     vandaliseAfterSec: number;
     vaultLoseAfterSec: number;
   };
@@ -79,6 +81,8 @@ export interface Scenario {
     repairSec: number;
     candlelightSec: number;
     candlelightModifier: number;
+    /** How many rooms can be locked at the same time (the padlocks on the desk). */
+    maxLocks: number;
   };
   guards: { id: string; name: string; startRoom: RoomId }[];
   rooms: Room[];

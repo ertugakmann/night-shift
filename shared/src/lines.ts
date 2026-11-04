@@ -52,6 +52,7 @@ const FALLBACK: GuardLines = LINES.sam;
 const DISPATCH: Record<ActionKind, string[]> = {
   patrol: ['{name}, check {target}.', '{name}, take a look in {target}.', '{name}, shine a light in {target}, please.'],
   lock: ['{name}, lock {target}.', '{name}, seal {target}.', '{name}, lock up {target} now.'],
+  unlock: ['{name}, take the padlock off {target}.', '{name}, open {target} again.'],
   evict: ['{name}, clear out {target}.', '{name}, show them out of {target}.', '{name}, get them out of {target}.'],
   repair: ['{name}, repair {target}.', '{name}, get {target} running again.', '{name}, fix up {target}.'],
   candlelight: ['{name}, light the candles in {target}.', '{name}, switch {target} to candlelight.'],

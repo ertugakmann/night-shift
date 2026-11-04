@@ -5,7 +5,7 @@ import { useId } from 'react';
 import { motion } from 'motion/react';
 import type { Room as RoomData, Snapshot } from '@night-shift/shared';
 import { guardPose } from '../building/geometry';
-import { DOORS, ROOMS, SLICE_H, SLICE_W, intersects, sliceRect, type BuildingScreenId } from '../building/layout';
+import { DOORS, ROOMS, SLICE_H, SLICE_W, doorBounds, intersects, sliceRect, type BuildingScreenId } from '../building/layout';
 import { wrap } from '../desk/util';
 import { worldOf } from '../game/view';
 import { selectRoom, useGame } from '../net/game';
@@ -150,7 +150,7 @@ function RealityRoom({ room, snapshot, uid, selected }: { room: RoomData; snapsh
   const scanner = scanning ? snapshot.guards.find((g) => g.id === rs.litBy)?.name : null;
   const downtime = snapshot.candlelight[room.wing] && (rs.locked || rs.dark);
   const clip = `${uid}-r-${room.id}`;
-  const labelX = rect.x + 34;
+  const labelX = rect.x + 34 + (layout.labelDx ?? 0);
   // Long department names shrink to fit the room (about 0.56 em per character in this font).
   // Corridors keep their right half for the system card, so their label gets the left half.
   const labelRoom = layout.corridor ? rect.w * 0.5 : rect.w - 120;
@@ -259,7 +259,7 @@ export function RealityBuilding({ screen, strip = 'split' }: { screen: BuildingS
   if (!snapshot) return null;
   const w = worldOf(snapshot);
   const rooms = w.sc.rooms.filter((r) => intersects(ROOMS[r.id].rect, slice));
-  const doors = DOORS.filter((d) => intersects({ x: d.x - 60, y: d.y - 60, w: 120, h: 120 }, slice));
+  const doors = DOORS.filter((d) => intersects(doorBounds(d), slice));
 
   return (
     <svg viewBox={`${slice.x} 0 ${SLICE_W} ${SLICE_H}`} preserveAspectRatio="xMidYMid meet" className="soc-text block h-full w-full select-none" role="img" aria-label="Hospital network, reality view">
@@ -283,6 +283,35 @@ export function RealityBuilding({ screen, strip = 'split' }: { screen: BuildingS
       {doors.map((d) => {
         const isolated = snapshot.rooms[d.a].locked || snapshot.rooms[d.b].locked;
         const v = d.orient === 'v';
+        if (d.tube) {
+          // The mail tube: a direct link from the email server into the internal network.
+          const path = d.tube.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ');
+          const ends = [d.tube[0], d.tube[d.tube.length - 1]];
+          return (
+            <g key={`${d.a}-${d.b}`} pointerEvents="none">
+              <path d={path} fill="none" stroke={isolated ? C.isolated : '#3a5680'} strokeWidth={6} strokeDasharray="14 10" strokeLinejoin="round" className={isolated ? '' : 'march'} />
+              <g transform="translate(1110,22)">
+                <rect x={-150} y={-15} width={300} height={30} rx={8} fill="#0d1729" stroke={isolated ? C.isolated : '#3a5680'} strokeWidth={2} />
+                <text y={6} textAnchor="middle" fontSize={15} fontWeight={600} fill={isolated ? C.isolated : C.sub}>
+                  direct link: email → internal network
+                </text>
+              </g>
+              {ends.map((p, i) => (
+                <g key={i} transform={`translate(${p.x},${p.y})`}>
+                  <circle r={14} fill="#0d1729" stroke={isolated ? C.isolated : '#3a5680'} strokeWidth={3} />
+                  {isolated ? (
+                    <g>
+                      <path d="M-6 -1 V-6 A6 6 0 0 1 6 -6 V-1" fill="none" stroke={C.isolated} strokeWidth={3} />
+                      <rect x={-9} y={-2} width={18} height={13} rx={3} fill={C.isolated} />
+                    </g>
+                  ) : (
+                    <circle r={6} fill={C.ok} className="shimmer" />
+                  )}
+                </g>
+              ))}
+            </g>
+          );
+        }
         return (
           <g key={`${d.a}-${d.b}`} pointerEvents="none">
             <rect x={v ? d.x - 14 : d.x - 40} y={v ? d.y - 40 : d.y - 14} width={v ? 28 : 80} height={v ? 80 : 28} rx={8} fill="#0d1729" stroke={isolated ? C.isolated : '#3a5680'} strokeWidth={3} />

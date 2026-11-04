@@ -161,6 +161,7 @@ function some(items: string[], max: number, noun: string): string {
 const VERB: Record<ActionKind, [hit: string, miss: string]> = {
   patrol: ['caught intruders in', 'checked'],
   lock: ['locked', 'locked'],
+  unlock: ['reopened', 'reopened'],
   evict: ['showed the gang out of', 'tried to clear'],
   repair: ['fixed up', 'tried to fix'],
   candlelight: ['lit the candles in', 'lit the candles in'],
@@ -176,7 +177,7 @@ function guardLine(g: NightFacts['guards'][number]): string {
     return idle[g.name] ?? `${g.name} had a quiet night.`;
   }
   // Each place once, by its most useful moment (an eviction says more than the lock before it).
-  const rank = (a: (typeof g.actions)[number]) => (a.success ? 0 : 10) + ['evict', 'patrol', 'repair', 'lock', 'candlelight'].indexOf(a.action);
+  const rank = (a: (typeof g.actions)[number]) => (a.success ? 0 : 10) + ['evict', 'patrol', 'repair', 'lock', 'unlock', 'candlelight'].indexOf(a.action);
   const best = new Map<string, (typeof g.actions)[number]>();
   for (const a of g.actions) {
     const cur = best.get(a.gallery);

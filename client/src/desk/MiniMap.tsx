@@ -98,9 +98,21 @@ export function MiniMap({ snapshot, selected, reality = false }: { snapshot: Sna
         );
       })}
 
-      {DOORS.map((d) => (
-        <circle key={`${d.a}-${d.b}`} cx={mapX(d.x)} cy={mapY(d.y)} r={d.grand ? 7 : 5} fill={d.grand ? '#f2c65e' : '#8a7cf0'} pointerEvents="none" />
-      ))}
+      {DOORS.map((d) =>
+        d.tube ? (
+          <polyline
+            key={`${d.a}-${d.b}`}
+            points={d.tube.map((p) => `${mapX(p.x)},${mapY(p.y)}`).join(' ')}
+            fill="none"
+            stroke={reality ? '#3a5680' : '#c9913c'}
+            strokeWidth={3}
+            strokeDasharray={reality ? '5 4' : undefined}
+            pointerEvents="none"
+          />
+        ) : (
+          <circle key={`${d.a}-${d.b}`} cx={mapX(d.x)} cy={mapY(d.y)} r={d.grand ? 7 : 5} fill={d.grand ? '#f2c65e' : '#8a7cf0'} pointerEvents="none" />
+        ),
+      )}
 
       {/* the gang: only where a lantern is shining (or in debug) */}
       {snapshot.groups.map((g, i) => {

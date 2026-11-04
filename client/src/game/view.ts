@@ -21,6 +21,7 @@ export function logClock(snapshot: Snapshot, atMs: number): string {
 export const ACTION_LABEL: Record<ActionKind, string> = {
   patrol: 'Patrol',
   lock: 'Lock doors',
+  unlock: 'Unlock',
   evict: 'Evict',
   repair: 'Repair',
   candlelight: 'Candlelight',

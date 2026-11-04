@@ -139,7 +139,7 @@ export function Room({ room, snapshot, uid, selected, onSelect, dawnDelay = 0 }:
   const clip = `${uid}-${room.id}-clip`;
   const mask = `${uid}-${room.id}-mask`;
   const exhibits = Object.entries(layout.exhibits);
-  const labelX = layout.corridor ? rect.x + 70 : rect.x + (layout.columns ? 100 : 34);
+  const labelX = (layout.corridor ? rect.x + 70 : rect.x + (layout.columns ? 100 : 34)) + (layout.labelDx ?? 0);
   const labelY = layout.corridor ? rect.y + 64 : rect.y + 62;
 
   return (

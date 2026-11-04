@@ -17,10 +17,11 @@ function act(s: GameState, action: ActionKind, room: string, guard?: string): Ga
 /** A won night: both groups trapped and evicted early on. */
 function wonNight(): GameState {
   let s = runUntil(started(), (x) => x.brokenIn);
+  s = act(s, 'patrol', 'mail-room', 'priya');
+  s = runUntil(s, (x) => x.groups.length > 1);
   s = act(s, 'lock', 'mail-room', 'sam');
   s = act(s, 'lock', 'entrance-hall', 'tom');
-  s = act(s, 'patrol', 'mail-room', 'priya');
-  s = runUntil(s, (x) => x.groups.length > 1 && !x.guards.some((g) => g.task));
+  s = runUntil(s, (x) => !x.guards.some((g) => g.task));
   s = act(s, 'evict', 'mail-room', 'sam');
   s = act(s, 'evict', 'entrance-hall', 'tom');
   return runUntil(s, () => false);

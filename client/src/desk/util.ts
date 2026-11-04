@@ -1,4 +1,4 @@
-import { shortestPath, type ActionKind, type Guard, type RoomId, type Snapshot, type World } from '@night-shift/shared';
+import { shortestPath, type ActionKind, type Guard, type RoomId, type Snapshot, type World, padlocks } from '@night-shift/shared';
 import { worldOf } from '../game/view';
 
 // ---------- Mini map: the whole building, scaled down onto the desk ----------
@@ -81,7 +81,10 @@ export function actionBlocked(s: Snapshot, room: RoomId, action: ActionKind): st
     case 'patrol':
       return null;
     case 'lock':
-      return rs.locked ? 'Already locked.' : null;
+      if (rs.locked) return 'Already locked.';
+      return padlocks(s).free === 0 ? `All ${w.sc.actions.maxLocks} padlocks are in use. Unlock or repair a room first.` : null;
+    case 'unlock':
+      return rs.locked ? null : 'Not locked.';
     case 'evict':
       return rs.locked ? null : 'Lock the room first, so they cannot slip away.';
     case 'repair':

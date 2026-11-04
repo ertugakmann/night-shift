@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { Snapshot } from '@night-shift/shared';
+import { padlocks, type Snapshot } from '@night-shift/shared';
 import { selectRoom, useGame } from '../net/game';
 import { RealityStrip, type StripMode } from '../reality/RealityStrip';
 import { ScreenEndWash } from '../end/EndMoment';
@@ -60,6 +60,54 @@ function NistStrip({ snapshot, reality }: { snapshot: Snapshot; reality: boolean
   );
 }
 
+/**
+ * The padlocks: at most three rooms can be locked at once. Used ones go dim; unlocking or repairing a
+ * room gives its padlock back. Reality view: the SOC's isolation capacity.
+ */
+function PadlockTray({ snapshot, reality }: { snapshot: Snapshot; reality: boolean }) {
+  const { max, used } = padlocks(snapshot);
+  const x = 1296;
+  const y = 290;
+  const w = 274;
+  return (
+    <g className={reality ? 'soc-text' : 'game-text'} aria-label={`${max - used} of ${max} padlocks free`}>
+      <rect x={x} y={y} width={w} height={56} rx={reality ? 12 : 22} fill={reality ? '#0d1729' : '#5a3a22'} stroke={reality ? '#2f4a73' : '#c9913c'} strokeWidth={3} />
+      {reality ? (
+        <>
+          <text x={x + 16} y={y + 24} fontSize={15} fontWeight={700} fill="#7f8ea8" letterSpacing={1}>
+            ISOLATION CAPACITY: {max}
+          </text>
+          <text x={x + 16} y={y + 45} fontSize={15} fill={used === max ? '#ff9a8a' : '#cfe0f5'}>
+            {max - used} free
+          </text>
+          {Array.from({ length: max }, (_, i) => {
+            const free = i < max - used;
+            return (
+              <rect key={i} x={x + 120 + i * 50} y={y + 31} width={40} height={16} rx={4} fill={free ? '#9c86f5' : '#16243d'} stroke={free ? '#c9b8ff' : '#2f4a73'} strokeWidth={2} style={{ transition: 'fill 400ms ease' }} />
+            );
+          })}
+        </>
+      ) : (
+        <>
+          <text x={x + 18} y={y + 35} fontSize={17} fontWeight={700} fill="#f2c65e">
+            PADLOCKS
+          </text>
+          {Array.from({ length: max }, (_, i) => {
+            const free = i < max - used;
+            return (
+              <g key={i} transform={`translate(${x + 146 + i * 44},${y + 28})`} style={{ opacity: free ? 1 : 0.28, transition: 'opacity 400ms ease' }}>
+                <path d="M-8 -3 V-10 A8 8 0 0 1 8 -10 V-3" fill="none" stroke={free ? '#e8e0ff' : '#a08a6a'} strokeWidth={4} />
+                <rect x={-12} y={-4} width={24} height={19} rx={5} fill={free ? '#9c86f5' : '#8a7a6a'} />
+                <circle cy={5} r={3} fill="#2a1d5c" />
+              </g>
+            );
+          })}
+        </>
+      )}
+    </g>
+  );
+}
+
 /** A sticky note for the moments between play: before the shift, paused, and the end of the night. */
 function StickyNote({ snapshot }: { snapshot: Snapshot }) {
   let title: string | null = null;
@@ -75,8 +123,9 @@ function StickyNote({ snapshot }: { snapshot: Snapshot }) {
     sub = `Care ${Math.round(snapshot.care)} · R to reset`;
   }
   if (!title) return null;
-  const x = 1312;
-  const y = 284;
+  // over the CCTV monitor, clear of the padlocks
+  const x = 1300;
+  const y = 556;
   return (
     <g className="game-text" transform={`rotate(3 ${x + 130} ${y + 40})`} pointerEvents="none">
       <rect x={x + 4} y={y + 6} width={258} height={80} rx={6} fill="#000" opacity={0.25} />
@@ -139,6 +188,7 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
         <g className={reality ? 'soc-text' : undefined} transform={reality && strip !== 'none' ? 'translate(64,0) scale(0.92)' : undefined}>
           <MiniMap snapshot={snapshot} selected={selected} reality={reality} />
           <NistStrip snapshot={snapshot} reality={reality} />
+          <PadlockTray snapshot={snapshot} reality={reality} />
           <Radio snapshot={snapshot} reality={reality} />
           <GuardCards snapshot={snapshot} reality={reality} />
           <Cctv snapshot={snapshot} reality={reality} />

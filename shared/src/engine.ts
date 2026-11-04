@@ -33,8 +33,8 @@ export const STEP_MS = 100;
 const MAX_CATCH_UP_MS = 1000;
 
 export type Phase = 'idle' | 'intro' | 'running' | 'paused' | 'ended';
-export type ActionKind = 'patrol' | 'lock' | 'evict' | 'repair' | 'candlelight';
-export const ACTIONS: readonly ActionKind[] = ['patrol', 'lock', 'evict', 'repair', 'candlelight'];
+export type ActionKind = 'patrol' | 'lock' | 'unlock' | 'evict' | 'repair' | 'candlelight';
+export const ACTIONS: readonly ActionKind[] = ['patrol', 'lock', 'unlock', 'evict', 'repair', 'candlelight'];
 
 export interface RoomState {
   locked: boolean;
@@ -152,7 +152,6 @@ export interface GameState {
   entrySplit: boolean;
   nextSpreadMs: number;
   masterKeys: boolean;
-  bypassUsed: boolean;
   backupsLost: boolean;
 
   care: number;
@@ -226,7 +225,6 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     entrySplit: false,
     nextSpreadMs: 0,
     masterKeys: false,
-    bypassUsed: false,
     backupsLost: false,
     care: 100,
     lowestCare: 100,
@@ -339,12 +337,13 @@ function tick(s: GameState, w: World): void {
   const hour = sc.night.realSecondsPerGameHour;
 
   // Scheduled events.
-  if (!s.brokenIn && now >= ms.breakIn) {
+  // A locked door keeps everyone out, the gang too: if the way in is locked, they wait outside.
+  if (!s.brokenIn && now >= ms.breakIn && !s.rooms[sc.intruders.entryRoom].locked) {
     s.brokenIn = true;
     s.stats.brokenInMs = now;
     addGroup(s, sc.intruders.entryRoom, [sc.intruders.entryRoom]);
     s.entrySplit = true;
-    s.nextSpreadMs = ms.breakIn + ms.firstSplit;
+    s.nextSpreadMs = now + ms.firstSplit;
   }
   for (const d of sc.clues.decoyChatter) {
     if (reached(clockToMs(d.at, hour))) log(s, { kind: 'staff', speaker: d.speaker, text: d.text, truth: false });
@@ -390,17 +389,16 @@ function spread(s: GameState, w: World): void {
   const { intruders } = w.sc;
   if (s.entrySplit) {
     s.entrySplit = false;
-    // Right after getting in, the gang splits up: some stay, the rest slip into the next room towards
-    // the Vault. This is part of the break-in, so even a door locked in advance does not stop it
-    // (reality: the payload beaconed out before isolation). Finding one group is never enough.
-    // Three draws, exactly as an ordinary move-and-split, so the rest of the seeded night is unchanged.
+    // Right after getting in, the gang splits up: some stay, the rest slip into the next room
+    // (firstSplitTo). Finding one group is never enough. Like every move, a locked door stops it.
+    // Three draws, exactly as an ordinary move-and-split, so the seeded night stays the same.
     const g = s.groups[0];
     if (g) {
       rand(s); // move?
       rand(s); // which door
       rand(s); // split?
-      const dest = [...w.neighbours.get(g.room)!].sort((x, y) => w.distToVault.get(x)! - w.distToVault.get(y)!)[0];
-      if (dest) {
+      const dest = intruders.firstSplitTo;
+      if (!s.rooms[g.room].locked && !s.rooms[dest].locked) {
         addGroup(s, dest, [...g.visited, dest]);
         g.enteredMs = s.timeMs;
       }
@@ -435,19 +433,19 @@ function moveGroup(s: GameState, g: Group, dest: RoomId): void {
   if (!g.visited.includes(dest)) g.visited.push(dest);
 }
 
-/** Weighted choice of a neighbouring room. Locked doors stop the gang, unless they have unused master keys. */
+/** Weighted choice of a neighbouring room. Locked doors always stop the gang. */
 function pickDestination(s: GameState, w: World, g: Group, fleeing: boolean): RoomId | null {
   const { intruders } = w.sc;
   const here = g.room;
-  const options: { room: RoomId; weight: number; bypass: boolean }[] = [];
+  const options: { room: RoomId; weight: number }[] = [];
   for (const n of w.neighbours.get(here)!) {
     const blocked = s.rooms[here].locked || s.rooms[n].locked;
-    if (blocked && !(s.masterKeys && !s.bypassUsed)) continue;
+    if (blocked) continue; // nobody gets in or out of a locked room
     if (fleeing && s.guards.some((guard) => guard.room === n)) continue;
     let weight = w.room.get(n)!.lure;
     if (w.distToVault.get(n)! < w.distToVault.get(here)!) weight *= intruders.towardVaultFactor;
     if (g.visited.includes(n)) weight *= intruders.revisitFactor;
-    options.push({ room: n, weight, bypass: blocked });
+    options.push({ room: n, weight });
   }
   if (options.length === 0) return null;
 
@@ -460,15 +458,7 @@ function pickDestination(s: GameState, w: World, g: Group, fleeing: boolean): Ro
       break;
     }
   }
-  if (choice.bypass) {
-    s.bypassUsed = true;
-    log(s, {
-      kind: 'event',
-      room: choice.room,
-      text: 'The gang used the master keys on a locked door!',
-      real: 'Isolation bypassed with stolen admin credentials.',
-    });
-  }
+
   return choice.room;
 }
 
@@ -504,8 +494,8 @@ function vandalise(s: GameState, w: World, roomId: RoomId): void {
     log(s, {
       kind: 'event',
       room: roomId,
-      text: 'The gang took the master keys. They move faster and can open one locked door.',
-      real: 'Admin credentials stolen: faster spread, one isolation can be bypassed.',
+      text: 'The gang took the master keys. They move faster now.',
+      real: 'Admin credentials stolen: faster spread.',
     });
   }
   if (room.special === 'backups' && !s.backupsLost) {
@@ -646,6 +636,7 @@ export const ACTION_REAL: Record<ActionKind, string> = {
   evict: 'Eradicate',
   repair: 'Restore from backup',
   candlelight: 'Downtime procedures',
+  unlock: 'Reconnect',
 };
 
 function complete(s: GameState, w: World, guard: Guard, task: Task): void {
@@ -714,6 +705,11 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       s.stats.repairs++;
       fx(s, 'repaired', task.room);
       say(s, guard, repairedLine(guard.id, n, name), task.room, `${room.real} restored from backup and back online.`);
+      break;
+
+    case 'unlock':
+      rs.locked = false;
+      say(s, guard, `Padlock off. ${upper(name)} is open again.`, task.room, `${room.real} reconnected to the network.`);
       break;
 
     case 'candlelight':
@@ -831,6 +827,7 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
 const WORK_SEC: Record<ActionKind, (w: World) => number> = {
   patrol: (w) => w.sc.actions.patrolSec,
   lock: (w) => w.sc.actions.lockSec,
+  unlock: (w) => w.sc.actions.lockSec,
   evict: (w) => w.sc.actions.evictSec,
   repair: (w) => w.sc.actions.repairSec,
   candlelight: (w) => w.sc.actions.candlelightSec,
@@ -861,6 +858,13 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
       if (rs.locked) return fail(`${upper(name)} is already locked.`);
       const other = busyWith('lock', (t) => t.room === room.id);
       if (other) return fail(`${other.name} is already locking ${name}.`);
+      if (padlocks(state).free === 0) return fail(`All ${w.sc.actions.maxLocks} padlocks are in use. Unlock or repair a room to free one.`);
+      break;
+    }
+    case 'unlock': {
+      if (!rs.locked) return fail(`${upper(name)} is not locked.`);
+      const other = busyWith('unlock', (t) => t.room === room.id);
+      if (other) return fail(`${other.name} is already unlocking ${name}.`);
       break;
     }
     case 'evict': {
@@ -940,6 +944,18 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
 
 function upper(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * The padlocks on the desk: at most `maxLocks` rooms locked at once. A lock on its way counts as used;
+ * an unlock or a repair gives its padlock back once it is done.
+ */
+export function padlocks(state: GameState): { max: number; used: number; free: number } {
+  const max = world(state.scenarioId).sc.actions.maxLocks;
+  const locked = Object.values(state.rooms).filter((r) => r.locked).length;
+  const coming = state.guards.filter((g) => g.task?.action === 'lock' && !state.rooms[g.task.room].locked).length;
+  const used = Math.min(max, locked + coming);
+  return { max, used, free: max - used };
 }
 
 // ---------- Snapshot helpers ----------

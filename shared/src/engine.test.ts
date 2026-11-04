@@ -7,6 +7,7 @@ import {
   isIntent,
   msToClock,
   world,
+  padlocks,
   type ActionKind,
   type GameState,
 } from './index';
@@ -185,11 +186,21 @@ describe('find, trap, evict, repair', () => {
     expect(s.groups.map((g) => g.room)).toEqual(['mail-room', 'entrance-hall']);
   });
 
-  it('even a Mail Room locked in advance does not stop the split', () => {
+  it('a Mail Room locked in advance keeps the gang outside until it opens', () => {
     let s = act(started(), 'lock', 'mail-room', 'sam');
-    s = runUntil(s, (x) => x.groups.length > 1);
-    expect(s.rooms['mail-room'].locked).toBe(true);
-    expect(s.groups.map((g) => g.room)).toEqual(['mail-room', 'entrance-hall']);
+    s = runFor(s, w.ms.breakIn + 5000);
+    expect(s.brokenIn).toBe(false);
+    expect(s.groups).toHaveLength(0);
+    s = act(s, 'unlock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.brokenIn);
+    expect(s.groups.map((g) => g.room)).toEqual(['mail-room']);
+  });
+
+  it('a lock on the Entrance Hall stops the split', () => {
+    let s = act(started(), 'lock', 'entrance-hall', 'tom');
+    s = runUntil(s, (x) => x.brokenIn);
+    s = runFor(s, 5000);
+    expect(s.groups.map((g) => g.room)).toEqual(['mail-room']);
   });
 
   it('a patrol reveals the gang, and spotted intruders flee at the next spread tick', () => {
@@ -204,20 +215,22 @@ describe('find, trap, evict, repair', () => {
   });
 
   it('catching the first group alone does not win the night', () => {
-    let s = act(afterBreakIn(), 'lock', 'mail-room', 'sam');
-    s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.groups.length > 1);
+    let s = runUntil(afterBreakIn(), (x) => x.groups.length > 1);
+    s = act(s, 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked);
     expect(s.care).toBe(98);
     s = act(s, 'evict', 'mail-room', 'sam');
     s = runUntil(s, (x) => x.stats.evicted === 1);
     expect(s.phase).toBe('running');
-    expect(s.groups).toHaveLength(1);
-    expect(s.groups[0].room).not.toBe('mail-room');
+    expect(s.groups.length).toBeGreaterThan(0); // the other group is still out there (and may have split again)
+    expect(s.groups.some((g) => g.room === 'mail-room')).toBe(false);
   });
 
   it('trapping and evicting both groups wins the night', () => {
-    let s = act(afterBreakIn(), 'lock', 'mail-room', 'sam');
+    let s = runUntil(afterBreakIn(), (x) => x.groups.length > 1);
+    s = act(s, 'lock', 'mail-room', 'sam');
     s = act(s, 'lock', 'entrance-hall', 'tom');
-    s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.rooms['entrance-hall'].locked && x.groups.length > 1);
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.rooms['entrance-hall'].locked);
     expect(s.groups.every((g) => s.rooms[g.room].locked)).toBe(true);
 
     s = act(s, 'evict', 'mail-room', 'sam');
@@ -226,6 +239,10 @@ describe('find, trap, evict, repair', () => {
     expect(s.phase).toBe('ended');
     expect(s.outcome?.result).toBe('won');
     expect(s.stats.evicted).toBe(2);
+  });
+
+  it('the Mail Room has a second door, straight into the West Corridor', () => {
+    expect(w.neighbours.get('mail-room')).toEqual(expect.arrayContaining(['entrance-hall', 'west-corridor']));
   });
 
   it('evict needs a locked room', () => {
@@ -258,6 +275,63 @@ describe('find, trap, evict, repair', () => {
     const near = act(started(), 'patrol', 'lab', 'sam').guards.find((g) => g.id === 'sam')!.task!;
     const far = act(started(), 'patrol', 'vault', 'sam').guards.find((g) => g.id === 'sam')!.task!;
     expect(far.walkMs).toBeGreaterThan(near.walkMs);
+  });
+});
+
+describe('padlocks and the lock rule', () => {
+  const afterBreakIn = () => runUntil(started(), (s) => s.brokenIn);
+
+  it('three padlocks: a fourth lock is refused, a lock on its way counts', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = act(s, 'lock', 'pharmacy', 'priya');
+    expect(padlocks(s)).toEqual({ max: 3, used: 2, free: 1 });
+    s = act(s, 'lock', 'radiology', 'tom');
+    expect(padlocks(s).free).toBe(0);
+    s = runUntil(s, (x) => !x.guards.some((g) => g.task));
+    const fourth = applyIntent(s, { type: 'action', action: 'lock', room: 'ward4' });
+    expect(fourth.error).toMatch(/padlocks are in use/);
+  });
+
+  it('unlocking gives a padlock back and reopens the exhibits', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    expect(s.care).toBe(86);
+    s = act(s, 'unlock', 'lab', 'sam');
+    s = runUntil(s, (x) => !x.rooms.lab.locked);
+    expect(s.care).toBe(100);
+    expect(padlocks(s).free).toBe(3);
+    expect(applyIntent(s, { type: 'action', action: 'unlock', room: 'lab' }).error).toMatch(/not locked/);
+  });
+
+  it('a repair gives the padlock back too', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    s = act(s, 'repair', 'lab', 'sam');
+    s = runUntil(s, (x) => !x.rooms.lab.locked);
+    expect(padlocks(s).free).toBe(3);
+  });
+
+  it('nobody gets out of a locked room: a trapped group stays put all night', () => {
+    let s = placeGang(afterBreakIn(), 'west-corridor');
+    s.rooms['west-corridor'].locked = true;
+    s.groups[0].spotted = true; // even a spotted group, which always tries to flee
+    s = runFor(s, 6 * w.ms.spreadTick);
+    expect(s.groups.map((g) => g.room)).toEqual(['west-corridor']);
+  });
+
+  it('nobody gets in: a locked room next to the gang is never entered', () => {
+    let s = placeGang(afterBreakIn(), 'west-corridor');
+    for (const id of ['lab', 'pharmacy', 'east-corridor']) s.rooms[id].locked = true;
+    s = runFor(s, 8 * w.ms.spreadTick);
+    for (const id of ['lab', 'pharmacy', 'east-corridor']) expect(s.groups.some((g) => g.room === id)).toBe(false);
+  });
+
+  it('master keys make the gang faster, but never open a locked door', () => {
+    let s = placeGang(afterBreakIn(), 'key-room');
+    s.rooms['key-room'].locked = true;
+    s = runUntil(s, (x) => x.masterKeys);
+    s = runFor(s, 10 * w.ms.masterKeysTick);
+    expect(s.groups.map((g) => g.room)).toEqual(['key-room']);
   });
 });
 
@@ -363,9 +437,10 @@ describe('end of night summary', () => {
   });
 
   it('a quick catch: MTTD from break-in to spotted, MTTR from spotted to trapped', () => {
-    let s = act(runUntil(started(), (x) => x.brokenIn), 'lock', 'mail-room', 'sam');
+    let s = act(runUntil(started(), (x) => x.brokenIn), 'patrol', 'mail-room', 'priya');
+    s = runUntil(s, (x) => x.groups.length > 1);
+    s = act(s, 'lock', 'mail-room', 'sam');
     s = act(s, 'lock', 'entrance-hall', 'tom');
-    s = act(s, 'patrol', 'mail-room', 'priya');
     s = runUntil(s, (x) => x.stats.firstSpottedMs !== null && x.stats.containedMs !== null);
     const { brokenInMs, firstSpottedMs, containedMs } = s.stats;
     s = runUntil(s, (x) => !x.guards.some((g) => g.task));
@@ -380,12 +455,12 @@ describe('end of night summary', () => {
   });
 
   it('containment is undone when a group roams free again', () => {
-    let s = act(runUntil(started(), (x) => x.brokenIn), 'lock', 'mail-room', 'sam');
+    let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
+    s = act(s, 'lock', 'mail-room', 'sam');
     s = act(s, 'lock', 'entrance-hall', 'tom');
-    s = runUntil(s, (x) => x.groups.length > 1 && x.stats.containedMs !== null);
-    const free: GameState = JSON.parse(JSON.stringify(s));
-    free.rooms['entrance-hall'].locked = false;
-    const after = advance(free, 100);
-    expect(after.stats.containedMs).toBeNull();
+    s = runUntil(s, (x) => x.stats.containedMs !== null);
+    s = act(s, 'unlock', 'entrance-hall', 'tom');
+    s = runUntil(s, (x) => !x.rooms['entrance-hall'].locked);
+    expect(s.stats.containedMs).toBeNull();
   });
 });

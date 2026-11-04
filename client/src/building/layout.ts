@@ -54,6 +54,8 @@ export interface RoomLayout {
   spots: Pt[];
   exhibits: Record<string, ExhibitLayout>;
   corridor?: boolean;
+  /** Moves the room name right (the West Corridor makes room for the mail tube outlet). */
+  labelDx?: number;
   /** x positions of picture frames hanging on the top wall. */
   frames?: number[];
   /** Stone columns in the corners. */
@@ -77,6 +79,21 @@ export interface DoorLayout extends Pt {
   orient: 'h' | 'v';
   /** Drawn as a big steel vault portal. */
   grand?: boolean;
+  /**
+   * A door that is a passage, not a gap in a wall: the pneumatic mail tube from the Mail Room to the
+   * West Corridor, along the Entrance Hall's walls. Points run from room `a` to room `b`; (x, y) is the far end.
+   */
+  tube?: Pt[];
+}
+
+/** Where a door is drawn, for deciding which screens show it. */
+export function doorBounds(d: DoorLayout): Rect {
+  if (!d.tube) return { x: d.x - 60, y: d.y - 60, w: 120, h: 120 };
+  const xs = d.tube.map((p) => p.x);
+  const ys = d.tube.map((p) => p.y);
+  const x = Math.min(...xs) - 40;
+  const y = Math.min(...ys) - 40;
+  return { x, y, w: Math.max(...xs) + 40 - x, h: Math.max(...ys) + 40 - y };
 }
 
 export const ROOMS: Record<string, RoomLayout> = {
@@ -120,6 +137,7 @@ export const ROOMS: Record<string, RoomLayout> = {
     spots: [{ x: 2240, y: 528 }, { x: 2900, y: 528 }, { x: 1980, y: 528 }],
     exhibits: { 'west-lamps': { kind: 'lamps', x: 2400, y: 470 } },
     corridor: true,
+    labelDx: 110,
   },
   lab: {
     rect: { x: 1608, y: 8, w: 1584, h: 372 },
@@ -208,6 +226,23 @@ export const ROOMS: Record<string, RoomLayout> = {
 
 export const DOORS: DoorLayout[] = [
   { a: 'mail-room', b: 'entrance-hall', x: 628, y: 250, orient: 'v' },
+  // The mail tube: out of the Mail Room's east wall, up the Entrance Hall's west wall, across its top,
+  // down its east wall and into the West Corridor on screen 3 (reality: email server wired to the internal network).
+  {
+    a: 'mail-room',
+    b: 'west-corridor',
+    x: 1644,
+    y: 414,
+    orient: 'v',
+    tube: [
+      { x: 594, y: 180 },
+      { x: 636, y: 180 },
+      { x: 636, y: 22 },
+      { x: 1582, y: 22 },
+      { x: 1582, y: 414 },
+      { x: 1644, y: 414 },
+    ],
+  },
   { a: 'entrance-hall', b: 'key-room', x: 628, y: 680, orient: 'v' },
   { a: 'entrance-hall', b: 'west-corridor', x: 1600, y: 500, orient: 'v' },
   { a: 'west-corridor', b: 'lab', x: 2040, y: 380, orient: 'h' },

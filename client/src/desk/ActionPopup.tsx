@@ -27,6 +27,14 @@ function ActionIcon({ action }: { action: ActionKind }) {
           <circle cy={7} r={3} fill={INK} />
         </g>
       );
+    case 'unlock':
+      return (
+        <g>
+          <path d="M-9 -2 V-9 A9 9 0 0 1 9 -9 V-14" fill="none" stroke="#e8e0ff" strokeWidth={4} transform="rotate(-18 -9 -2)" />
+          <rect x={-13} y={-3} width={26} height={20} rx={5} fill="#c9b8ff" />
+          <circle cy={7} r={3} fill={INK} />
+        </g>
+      );
     case 'evict':
       return (
         <g>
@@ -121,12 +129,15 @@ export function ActionPopup({
         <path d={`M${x + W - 37} ${y + 23} l14 14 M${x + W - 23} ${y + 23} l-14 14`} stroke={INK} strokeWidth={4} strokeLinecap="round" />
       </g>
 
-      {ACTIONS.map((action, i) => {
+      {/* five slots: Lock turns into Unlock on a locked room */}
+      {ACTIONS.filter((a) => a !== 'unlock')
+        .map((a) => (a === 'lock' && snapshot.rooms[roomId].locked ? ('unlock' as const) : a))
+        .map((action, i) => {
         const blocked = !canAct || actionBlocked(snapshot, roomId, action) !== null;
         const bx = x + 18 + i * 88;
         const by = y + 124;
         const label = reality
-          ? ({ patrol: 'EDR scan', lock: 'Isolate', evict: 'Eradicate', repair: 'Restore', candlelight: 'Downtime' } as const)[action]
+          ? ({ patrol: 'EDR scan', lock: 'Isolate', unlock: 'Reconnect', evict: 'Eradicate', repair: 'Restore', candlelight: 'Downtime' } as const)[action]
           : action === 'candlelight'
             ? 'Candles'
             : action === 'lock'

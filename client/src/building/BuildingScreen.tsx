@@ -9,6 +9,7 @@ import { guardPose } from './geometry';
 import {
   DOORS,
   DOOR_WIDTH,
+  doorBounds,
   ROOMS,
   SLICE_H,
   SLICE_W,
@@ -32,7 +33,7 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
 
   const w = worldOf(snapshot);
   const rooms = w.sc.rooms.filter((r) => intersects(ROOMS[r.id].rect, slice));
-  const doors = DOORS.filter((d) => intersects({ x: d.x - 60, y: d.y - 60, w: 120, h: 120 }, slice));
+  const doors = DOORS.filter((d) => intersects(doorBounds(d), slice));
   const visibleRooms = new Set(rooms.map((r) => r.id));
 
   return (
@@ -155,7 +156,78 @@ function VaultPortal({ door }: { door: DoorLayout }) {
   );
 }
 
+/** A small brass padlock that drops onto a locked door. */
+function DoorPadlock({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <motion.g
+        initial={{ scale: 0, opacity: 0, y: -30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+      >
+        <circle r={30} fill="#9c86f5" opacity={0.25} />
+        <path d="M-12 -4 V-14 A12 12 0 0 1 12 -14 V-4" fill="none" stroke="#e8e0ff" strokeWidth={6} />
+        <rect x={-19} y={-6} width={38} height={30} rx={8} fill="#9c86f5" />
+        <circle cy={7} r={5} fill="#2a1d5c" />
+      </motion.g>
+    </g>
+  );
+}
+
+const REDUCED_MOTION = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/** The pneumatic mail tube: a brass pipe along the walls, with a capsule whooshing through now and then. */
+function MailTube({ door, locked }: { door: DoorLayout; locked: boolean }) {
+  const pts = door.tube!;
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ');
+  const start = pts[0];
+  const end = pts[pts.length - 1];
+  // brackets every so often along the long runs
+  const brackets: { x: number; y: number; v: boolean }[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    for (let s = 110; s < len - 40; s += 190) {
+      brackets.push({ x: a.x + ((b.x - a.x) * s) / len, y: a.y + ((b.y - a.y) * s) / len, v: a.x === b.x });
+    }
+  }
+  return (
+    <g pointerEvents="none">
+      <path d={d} fill="none" stroke="#5a3a22" strokeWidth={20} strokeLinejoin="round" strokeLinecap="round" />
+      <path d={d} fill="none" stroke="#c9913c" strokeWidth={14} strokeLinejoin="round" strokeLinecap="round" />
+      <path d={d} fill="none" stroke="#f2c65e" strokeWidth={4} strokeLinejoin="round" strokeLinecap="round" opacity={0.8} transform="translate(-2,-2)" />
+      {brackets.map((b, i) => (
+        <rect key={i} x={b.x - (b.v ? 13 : 4)} y={b.y - (b.v ? 4 : 13)} width={b.v ? 26 : 8} height={b.v ? 8 : 26} rx={3} fill="#8a5a2a" />
+      ))}
+      {!REDUCED_MOTION && !locked && (
+        <rect x={-13} y={-7} width={26} height={14} rx={7} fill="#9fd7ef" stroke="#fff4d2" strokeWidth={2}>
+          <animateMotion dur="7s" repeatCount="indefinite" rotate="auto" path={d} keyPoints="0;1;1" keyTimes="0;0.45;1" calcMode="linear" />
+        </rect>
+      )}
+      {/* intake in the Mail Room, outlet in the West Corridor */}
+      <rect x={start.x - 22} y={start.y - 26} width={30} height={52} rx={8} fill="#c9913c" stroke="#5a3a22" strokeWidth={4} />
+      <rect x={start.x - 16} y={start.y - 16} width={14} height={32} rx={5} fill="#2a1d5c" />
+      <circle cx={end.x + 4} cy={end.y} r={20} fill="#c9913c" stroke="#5a3a22" strokeWidth={4} />
+      <circle cx={end.x + 4} cy={end.y} r={10} fill="#2a1d5c" />
+      {/* name plate on the top run */}
+      <g transform="translate(1150,22)">
+        <rect x={-62} y={-15} width={124} height={30} rx={8} fill="#5a3a22" stroke="#f2c65e" strokeWidth={2} />
+        <text y={6} textAnchor="middle" className="game-text" fontSize={16} fontWeight={700} fill="#f2c65e" letterSpacing={1}>
+          MAIL TUBE
+        </text>
+      </g>
+      <AnimatePresence>
+        {locked && <DoorPadlock key="a" x={start.x - 54} y={start.y} />}
+        {locked && <DoorPadlock key="b" x={end.x + 4} y={end.y + 50} />}
+      </AnimatePresence>
+    </g>
+  );
+}
+
 function Door({ door, locked }: { door: DoorLayout; locked: boolean }) {
+  if (door.tube) return <MailTube door={door} locked={locked} />;
   const half = (door.grand ? 132 : DOOR_WIDTH) / 2;
   const v = door.orient === 'v';
   return (
