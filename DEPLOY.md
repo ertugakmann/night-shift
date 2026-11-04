@@ -30,5 +30,5 @@ npm ci
 npm run build
 npm start
 ```
-Put `PRESENTER_KEY=...` in `.env` (see `.env.example`), or leave it empty and use the one-off link
-printed in the terminal. Other devices on the same network: `http://<laptop-ip>:3001/screen/3`.
+Put `PRESENTER_KEY=...` in `.env` (see `.env.example`). Without it the local default key
+`nightshift-dev` is used, which anyone on the same network could guess: set your own for the demo. Other devices on the same network: `http://<laptop-ip>:3001/screen/3`.

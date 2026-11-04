@@ -1,5 +1,4 @@
 import express from 'express';
-import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -19,6 +18,7 @@ import {
   type Snapshot,
 } from '@night-shift/shared';
 import { Control } from './control';
+import { resolvePresenterKey } from './presenterKey';
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -30,12 +30,13 @@ const ENV_FILE = path.join(ROOT, '.env');
 if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
 const PORT = Number(process.env.PORT) || 3001;
-const PUBLIC_URL = (process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+/** `npm run dev`: Vite serves the client on 5173 and proxies /socket.io here. */
+const DEV = process.argv.includes('--dev');
+const VITE_URL = 'http://localhost:5173';
+const PUBLIC_URL = (process.env.RENDER_EXTERNAL_URL || (DEV ? VITE_URL : `http://localhost:${PORT}`)).replace(/\/$/, '');
 
-// Presenter access needs ?presenter=<PRESENTER_KEY>. Without a configured key there is no guessable
-// fallback: a random key is made for this run and printed to the server log.
-const configuredKey = process.env.PRESENTER_KEY?.trim();
-const PRESENTER_KEY = configuredKey || randomBytes(9).toString('base64url');
+// Presenter access needs ?presenter=<key>. See presenterKey.ts for where the key comes from.
+const { key: PRESENTER_KEY, source: KEY_SOURCE } = resolvePresenterKey(process.env);
 
 const app = express();
 const httpServer = createServer(app);
@@ -49,8 +50,10 @@ app.get('/healthz', (_req, res) => {
   res.json({ ok: true, phase: state.phase, clients: io.engine.clientsCount });
 });
 
-// Serve the built client (npm start). In development Vite serves it and proxies /socket.io here.
-if (existsSync(CLIENT_DIST)) {
+// Serve the built client (npm start). In development Vite serves the live client instead, so an old
+// build in client/dist is never served by mistake.
+const SERVE_DIST = !DEV && existsSync(CLIENT_DIST);
+if (SERVE_DIST) {
   app.use(express.static(CLIENT_DIST));
   app.use((req, res, next) => {
     if (req.method !== 'GET') return next();
@@ -153,12 +156,18 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-  const mode = existsSync(CLIENT_DIST) ? 'serving client/dist' : 'API only (run the Vite dev server)';
+  const mode = SERVE_DIST ? 'serving client/dist' : DEV ? `dev: open the pages on ${VITE_URL}` : 'API only (build the client first)';
   console.log(`NIGHT SHIFT server on http://localhost:${PORT} (${mode})`);
-  if (configuredKey) {
-    console.log('Presenter access: open any page with ?presenter=<PRESENTER_KEY>');
+  const link = `${PUBLIC_URL}/screen/2?presenter=${encodeURIComponent(PRESENTER_KEY)}`;
+  if (KEY_SOURCE === 'env') {
+    console.log('Presenter key: from PRESENTER_KEY. Presenter link:');
+    // On Render the log is visible to anyone with dashboard access, so the key itself is not printed there.
+    console.log(process.env.RENDER ? `  ${PUBLIC_URL}/screen/2?presenter=<PRESENTER_KEY>` : `  ${link}`);
+  } else if (KEY_SOURCE === 'dev-default') {
+    console.log(`Presenter key: "${PRESENTER_KEY}" (local default; set PRESENTER_KEY in .env to change it). Presenter link:`);
+    console.log(`  ${link}`);
   } else {
-    console.warn('PRESENTER_KEY is not set. One-off presenter key for this run (changes on every restart):');
-    console.warn(`  ${PUBLIC_URL}/wall?presenter=${PRESENTER_KEY}`);
+    console.warn('PRESENTER_KEY is not set on Render. One-off presenter key for this run (changes on every restart):');
+    console.warn(`  ${link}`);
   }
 });
