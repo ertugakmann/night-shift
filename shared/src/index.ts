@@ -130,7 +130,7 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  hello: (hello: Hello) => void;
+  hello: (hello: Hello, ack: (role: Role) => void) => void;
   intent: (intent: Intent) => void;
   enterCode: (code: string, ack: (result: CodeResult) => void) => void;
 }

@@ -1,4 +1,5 @@
 import express from 'express';
+import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -20,13 +21,29 @@ import { Control } from './control';
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
+const ROOT = path.resolve(import.meta.dirname, '../..');
+const CLIENT_DIST = path.join(ROOT, 'client/dist');
+
+// Local secrets live in the repo-root .env (git-ignored). On Render they come from the dashboard.
+const ENV_FILE = path.join(ROOT, '.env');
+if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
+
 const PORT = Number(process.env.PORT) || 3001;
-const PRESENTER_KEY = process.env.PRESENTER_KEY?.trim() || null;
-const CLIENT_DIST = path.resolve(import.meta.dirname, '../../client/dist');
+const PUBLIC_URL = (process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+
+// Presenter access needs ?presenter=<PRESENTER_KEY>. Without a configured key there is no guessable
+// fallback: a random key is made for this run and printed to the server log.
+const configuredKey = process.env.PRESENTER_KEY?.trim();
+const PRESENTER_KEY = configuredKey || randomBytes(9).toString('base64url');
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
+
+// Health check for Render, and a quick way to see that the server is up.
+app.get('/healthz', (_req, res) => {
+  res.json({ ok: true, phase: state.phase, clients: io.engine.clientsCount });
+});
 
 // Serve the built client (npm start). In development Vite serves it and proxies /socket.io here.
 if (existsSync(CLIENT_DIST)) {
@@ -80,12 +97,13 @@ io.on('connection', (socket) => {
   socket.emit('snapshot', snapshot());
   sendControl(socket);
 
-  socket.on('hello', (raw: Partial<Hello> | undefined) => {
+  socket.on('hello', (raw: Partial<Hello> | undefined, ack: unknown) => {
     const hello: Hello = {
       presenterKey: typeof raw?.presenterKey === 'string' ? raw.presenterKey : null,
       code: typeof raw?.code === 'string' ? raw.code : null,
     };
-    control.register(socket.id, hello);
+    const role = control.register(socket.id, hello);
+    if (typeof ack === 'function') ack(role);
     sendControl(socket);
     broadcast();
   });
@@ -133,5 +151,10 @@ io.on('connection', (socket) => {
 httpServer.listen(PORT, () => {
   const mode = existsSync(CLIENT_DIST) ? 'serving client/dist' : 'API only (run the Vite dev server)';
   console.log(`NIGHT SHIFT server on http://localhost:${PORT} (${mode})`);
-  if (PRESENTER_KEY) console.log('Presenter pages need ?presenter=<PRESENTER_KEY>');
+  if (configuredKey) {
+    console.log('Presenter access: open any page with ?presenter=<PRESENTER_KEY>');
+  } else {
+    console.warn('PRESENTER_KEY is not set. One-off presenter key for this run (changes on every restart):');
+    console.warn(`  ${PUBLIC_URL}/wall?presenter=${PRESENTER_KEY}`);
+  }
 });

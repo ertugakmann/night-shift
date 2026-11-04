@@ -17,29 +17,56 @@ export interface GameView {
   /** The control code, only known to presenter pages. */
   code: string | null;
   notice: { id: number; text: string } | null;
+  /** 'websocket' once upgraded, 'polling' while (or if stuck) on HTTP long-polling. */
+  transport: string | null;
 }
 
 const CODE_STORAGE_KEY = 'night-shift:control-code';
-const presenterKey = new URLSearchParams(window.location.search).get('presenter');
+const PRESENTER_STORAGE_KEY = 'night-shift:presenter-key';
 
 // sessionStorage: survives a refresh of this tab, but a fresh tab starts as a watcher.
-function readCode(): string | null {
+function readStored(key: string): string | null {
   try {
-    return sessionStorage.getItem(CODE_STORAGE_KEY);
+    return sessionStorage.getItem(key);
   } catch {
     return null;
   }
 }
-function writeCode(code: string | null): void {
+function writeStored(key: string, value: string | null): void {
   try {
-    if (code) sessionStorage.setItem(CODE_STORAGE_KEY, code);
-    else sessionStorage.removeItem(CODE_STORAGE_KEY);
+    if (value) sessionStorage.setItem(key, value);
+    else sessionStorage.removeItem(key);
   } catch {
     /* storage unavailable: control just won't survive refresh */
   }
 }
+const readCode = () => readStored(CODE_STORAGE_KEY);
+const writeCode = (code: string | null) => writeStored(CODE_STORAGE_KEY, code);
 
-let view: GameView = { connected: false, snapshot: null, role: 'watcher', code: null, notice: null };
+/**
+ * ?presenter=<PRESENTER_KEY> is read once, kept in this tab's sessionStorage and removed from the
+ * address bar, so the key is not visible on the projector or in screen shares and in-app links
+ * don't need to carry it.
+ */
+function takePresenterKey(): string | null {
+  const url = new URL(window.location.href);
+  const fromUrl = url.searchParams.get('presenter');
+  if (fromUrl === null) return readStored(PRESENTER_STORAGE_KEY);
+  url.searchParams.delete('presenter');
+  window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  writeStored(PRESENTER_STORAGE_KEY, fromUrl);
+  return fromUrl;
+}
+let presenterKey = takePresenterKey();
+
+let view: GameView = {
+  connected: false,
+  snapshot: null,
+  role: 'watcher',
+  code: null,
+  notice: null,
+  transport: null,
+};
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<GameView>): void {
@@ -58,10 +85,19 @@ export function showNotice(text: string): void {
 const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
 
 socket.on('connect', () => {
-  set({ connected: true });
-  socket.emit('hello', { presenterKey, code: readCode() });
+  const engine = socket.io.engine;
+  set({ connected: true, transport: engine.transport.name });
+  engine.once('upgrade', () => set({ transport: engine.transport.name }));
+  socket.emit('hello', { presenterKey, code: readCode() }, (role) => {
+    if (presenterKey && role !== 'presenter') {
+      // Wrong key: forget it so refreshes don't keep retrying it.
+      presenterKey = null;
+      writeStored(PRESENTER_STORAGE_KEY, null);
+      showNotice('Presenter key not accepted. You are watching.');
+    }
+  });
 });
-socket.on('disconnect', () => set({ connected: false }));
+socket.on('disconnect', () => set({ connected: false, transport: null }));
 socket.on('snapshot', (snapshot) => set({ snapshot }));
 socket.on('control', ({ role, code }) => {
   if (role === 'watcher') writeCode(null);

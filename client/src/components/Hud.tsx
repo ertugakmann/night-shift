@@ -3,7 +3,7 @@ import { enterCode, showNotice, useGame } from '../net/game';
 
 /** Page-level overlay: connection state, role badge, code entry for watchers, presenter key hints, notices. */
 export function Hud() {
-  const { connected, role, snapshot, notice } = useGame();
+  const { connected, role, snapshot, notice, transport } = useGame();
 
   return (
     <>
@@ -28,6 +28,11 @@ export function Hud() {
             {snapshot && (
               <span className="rounded-md bg-night-950/80 px-2 py-1 text-ink/60">
                 {snapshot.viewers} open · {snapshot.controllers} joined
+              </span>
+            )}
+            {transport && (
+              <span className={`rounded-md bg-night-950/80 px-2 py-1 ${transport === 'websocket' ? 'text-safe' : 'text-suspect'}`}>
+                {transport === 'websocket' ? 'WebSocket' : 'Polling'}
               </span>
             )}
             <Badge className="bg-flash text-night-950">Presenter</Badge>

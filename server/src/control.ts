@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { PRESENTER_ONLY, type CodeResult, type Hello, type IntentType, type Role } from '@night-shift/shared';
 
 const MAX_FAILURES = 8;
@@ -16,7 +16,12 @@ export class Control {
   /** Current code, or null when hidden. Codes are only accepted while visible. */
   code: string | null = null;
 
-  constructor(private presenterKey: string | null) {}
+  private presenterDigest: Buffer;
+
+  constructor(presenterKey: string) {
+    if (!presenterKey) throw new Error('Presenter key must not be empty');
+    this.presenterDigest = digest(presenterKey);
+  }
 
   get controllerCount(): number {
     return this.controllers.size;
@@ -90,8 +95,12 @@ export class Control {
   }
 
   private isPresenterKey(key: string | null): boolean {
-    if (typeof key !== 'string') return false;
-    // With PRESENTER_KEY set (on the public deploy), ?presenter=<key> is required instead of ?presenter=1.
-    return this.presenterKey ? key === this.presenterKey : key === '1';
+    if (typeof key !== 'string' || key.length === 0) return false;
+    // Fixed-length digests compared in constant time, so response timing reveals nothing about the key.
+    return timingSafeEqual(digest(key), this.presenterDigest);
   }
+}
+
+function digest(value: string): Buffer {
+  return createHash('sha256').update(value).digest();
 }

@@ -1,0 +1,25 @@
+# Render Blueprint: Dashboard → New → Blueprint → pick this repo.
+# The game state lives in server memory, so this must stay a single instance (no scaling).
+services:
+  - type: web
+    name: night-shift
+    runtime: node
+    # free: sleeps after 15 min without traffic (about 1 min to wake) and loses state on restart.
+    # Switch to "starter" for the demo day so the wall never cold-starts.
+    plan: free
+    region: frankfurt
+    # Vite, Tailwind and TypeScript are devDependencies; --include=dev keeps them for the build.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Render generates a long random key. Copy it from the Environment tab and open
+      # https://<your-app>.onrender.com/wall?presenter=<key>
+      - key: PRESENTER_KEY
+        generateValue: true
+      # Phase 6 (Morning report). Optional: without it the template report is used.
+      - key: ANTHROPIC_API_KEY
+        sync: false

@@ -8,13 +8,14 @@
     "client"
   ],
   "engines": {
-    "node": ">=20.11"
+    "node": ">=20.12"
   },
   "scripts": {
     "dev": "concurrently -k -n server,client -c magenta,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
     "start": "npm run start -w server",
-    "typecheck": "tsc -p shared && tsc -p server && tsc -p client"
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
+    "check:deploy": "node scripts/check-deploy.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",
