@@ -7,7 +7,10 @@ export function Hud() {
   const { connected, role, snapshot, notice, transport } = useGame();
   // The building screens (1, 3, 4, 5) are view-only displays on the wall: no code box over the art.
   // Remote judges join from the desk (screen 2) or /wall.
-  const buildingScreen = /^\/screen\/[1345]$/.test(useLocation().pathname);
+  const { pathname } = useLocation();
+  const buildingScreen = /^\/screen\/[1345]$/.test(pathname);
+  // On /preview the tab bar runs along the bottom; sit above it so no tab is covered.
+  const bottom = pathname === '/preview' ? 'bottom-20' : 'bottom-3';
 
   return (
     <>
@@ -21,7 +24,7 @@ export function Hud() {
         </div>
       )}
 
-      <div className="fixed right-3 bottom-3 z-40 flex flex-col items-end gap-2 text-base">
+      <div className={`fixed right-3 ${bottom} z-40 flex flex-col items-end gap-2 text-base`}>
         {!connected && <Badge className="bg-danger/90 text-night-950">Reconnecting…</Badge>}
 
         {role === 'presenter' && (
