@@ -100,6 +100,8 @@ body {
 .sneak { animation: sneak 1.8s ease-in-out infinite alternate; }
 .glance { animation: glance 2.6s ease-in-out infinite; }
 .march { animation: march 1.2s linear infinite; }
+.pendulum { animation: pendulum 1.6s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 0 -20px; }
+.note-float { animation: note-float 3s ease-in-out infinite; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
@@ -118,10 +120,16 @@ body {
 @keyframes sneak { from { transform: translateX(-5px); } to { transform: translateX(5px); } }
 @keyframes glance { 0%, 100% { transform: translateX(-2px); } 50% { transform: translateX(3px); } }
 @keyframes march { to { stroke-dashoffset: -48; } }
+@keyframes pendulum { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
+@keyframes note-float {
+  0% { transform: translateY(8px); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(-26px); opacity: 0; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .spin-slow, .spin-slow-reverse, .sway, .bob, .breathe, .blink, .flame, .flicker,
-  .shimmer, .lamp-glow, .sneak, .glance, .march {
+  .shimmer, .lamp-glow, .sneak, .glance, .march, .pendulum, .note-float {
     animation: none !important;
   }
   .dust { animation: none !important; opacity: 0.2; }

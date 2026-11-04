@@ -109,16 +109,57 @@ function Defs({ uid }: { uid: string }) {
   );
 }
 
+/** The Emergency Hall's second door: a heavy steel vault portal, split across the screen border. */
+function VaultPortal({ door }: { door: DoorLayout }) {
+  // side -1: the frame on the left of the border (Emergency Hall), +1: on the right (the Vault).
+  const frame = (side: -1 | 1) => (
+    <g key={side} transform={`translate(${door.x},${door.y}) scale(${side},1)`}>
+      <rect x={0} y={-104} width={92} height={208} rx={20} fill="#8b82c4" stroke="#5b4ba8" strokeWidth={6} />
+      <rect x={0} y={-70} width={36} height={140} fill="#1c1645" />
+      {[-84, 84].map((y) => (
+        <circle key={y} cx={66} cy={y} r={7} fill="#f2c65e" />
+      ))}
+      <g transform="translate(64,0)">
+        <circle r={20} fill="#5b4ba8" stroke="#f2c65e" strokeWidth={3} />
+        {[0, 60, 120].map((a) => (
+          <line key={a} x1={-15} y1={0} x2={15} y2={0} stroke="#f2c65e" strokeWidth={4} strokeLinecap="round" transform={`rotate(${a})`} />
+        ))}
+      </g>
+    </g>
+  );
+  return (
+    <g>
+      {frame(-1)}
+      {frame(1)}
+      {/* this way to the Vault */}
+      {[-270, -220, -170].map((dx, i) => (
+        <path
+          key={dx}
+          d={`M${door.x + dx} ${door.y - 22} L${door.x + dx + 22} ${door.y} L${door.x + dx} ${door.y + 22}`}
+          fill="none"
+          stroke="#f2c65e"
+          strokeWidth={8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="shimmer"
+          style={{ animationDelay: `${i * 0.3}s` }}
+        />
+      ))}
+    </g>
+  );
+}
+
 function Door({ door, locked }: { door: DoorLayout; locked: boolean }) {
-  const half = DOOR_WIDTH / 2;
+  const half = (door.grand ? 132 : DOOR_WIDTH) / 2;
   const v = door.orient === 'v';
   return (
     <g pointerEvents="none">
+      {door.grand && <VaultPortal door={door} />}
       <rect
         x={v ? door.x - 9 : door.x - half}
         y={v ? door.y - half : door.y - 9}
-        width={v ? 18 : DOOR_WIDTH}
-        height={v ? DOOR_WIDTH : 18}
+        width={v ? 18 : half * 2}
+        height={v ? half * 2 : 18}
         fill="#1c1645"
       />
       {[-1, 1].map((s) => (

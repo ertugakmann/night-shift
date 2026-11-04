@@ -151,8 +151,8 @@ function Scales() {
 }
 
 /** Corridor wall lamps, spread along the corridor (the exhibit is the whole run of lamps). */
-function Lamps() {
-  const xs = [-660, -220, 220, 660];
+function Lamps({ span = 1600 }: { span?: number }) {
+  const xs = [-0.4125, -0.1375, 0.1375, 0.4125].map((f) => Math.round(f * span));
   return (
     <g>
       {xs.map((x) => (
@@ -262,6 +262,158 @@ function KeyCabinet() {
   );
 }
 
+/** Music Boxes (infusion pumps): an open music box playing, with a little drip stand beside it. */
+function MusicBox() {
+  return (
+    <g>
+      <g transform="translate(0,52)">
+        <Plinth w={170} />
+      </g>
+      {/* drip stand */}
+      <g transform="translate(96,0)">
+        <rect x={-3} y={-110} width={6} height={160} rx={3} fill={STONE_DARK} />
+        <rect x={-22} y={-112} width={44} height={6} rx={3} fill={STONE_DARK} />
+        <rect x={-18} y={-104} width={22} height={34} rx={8} fill={GLASS} stroke="#8f7ae0" strokeWidth={3} />
+        <path d="M-7 -70 Q-7 -40 -30 -20" fill="none" stroke="#8f7ae0" strokeWidth={3} />
+      </g>
+      {/* open lid */}
+      <path d="M-86 -16 L-74 -86 L74 -86 L86 -16 Z" fill={WOOD_LIGHT} />
+      <path d="M-70 -28 L-62 -76 L62 -76 L70 -28 Z" fill="#ff9ec7" opacity={0.7} />
+      {/* box */}
+      <rect x={-90} y={-18} width={180} height={70} rx={12} fill={WOOD} />
+      <rect x={-70} y={-8} width={140} height={22} rx={6} fill={GOLD_DARK} />
+      {[-50, -30, -10, 10, 30, 50].map((x) => (
+        <rect key={x} x={x} y={-2} width={6} height={12} rx={2} fill={GOLD} />
+      ))}
+      <circle cx={0} cy={36} r={7} fill={GOLD} />
+      {/* notes floating up */}
+      <g className="note-float">
+        <circle cx={-118} cy={-34} r={8} fill={GOLD} />
+        <rect x={-112} y={-66} width={4} height={32} fill={GOLD} />
+      </g>
+      <g className="note-float" style={{ animationDelay: '-1.4s' }}>
+        <circle cx={-98} cy={-72} r={7} fill="#c9a6ff" />
+        <rect x={-93} y={-102} width={4} height={30} fill="#c9a6ff" />
+      </g>
+    </g>
+  );
+}
+
+/** Night Lanterns (bedside monitors and nurse call): three lanterns hanging from a brass stand. */
+function NightLanterns() {
+  return (
+    <g>
+      <g transform="translate(0,64)">
+        <Plinth w={150} />
+      </g>
+      <rect x={-6} y={-120} width={12} height={184} rx={5} fill={GOLD_DARK} />
+      <rect x={-96} y={-124} width={192} height={12} rx={6} fill={GOLD} />
+      {[-76, 0, 76].map((x, i) => (
+        <g key={x} transform={`translate(${x},${i === 1 ? -60 : -84})`}>
+          <line x1={0} y1={-28} x2={0} y2={-10} stroke={GOLD_DARK} strokeWidth={3} />
+          <path d="M-18 -10 L18 -10 L22 30 L-22 30 Z" fill={GOLD_DARK} />
+          <rect x={-14} y={-4} width={28} height={30} rx={6} fill="#fff1b8" className="lamp-glow" />
+          <path d="M-12 -10 L0 -22 L12 -10 Z" fill={GOLD} />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/** The Great Clock (emergency triage board): a tall clock with a swinging pendulum. */
+function GreatClock() {
+  return (
+    <g>
+      <rect x={-56} y={-150} width={112} height={258} rx={18} fill={WOOD} />
+      <path d="M-62 -150 Q0 -196 62 -150 Z" fill={WOOD_LIGHT} />
+      <circle cx={0} cy={-170} r={9} fill={GOLD} />
+      {/* face */}
+      <circle cx={0} cy={-82} r={46} fill="#fff4d2" stroke={GOLD} strokeWidth={8} />
+      {[0, 90, 180, 270].map((a) => (
+        <rect key={a} x={-3} y={-122} width={6} height={10} rx={2} fill={INK} transform={`rotate(${a} 0 -82)`} />
+      ))}
+      <rect x={-3} y={-116} width={6} height={36} rx={3} fill={INK} />
+      <rect x={-3} y={-82} width={26} height={6} rx={3} fill={INK} />
+      <circle cx={0} cy={-82} r={6} fill={GOLD_DARK} />
+      {/* pendulum window */}
+      <rect x={-34} y={-24} width={68} height={112} rx={12} fill={GLASS} opacity={0.5} />
+      <g className="pendulum">
+        <line x1={0} y1={-20} x2={0} y2={50} stroke={GOLD_DARK} strokeWidth={4} />
+        <circle cx={0} cy={58} r={16} fill={GOLD} />
+      </g>
+      <rect x={-64} y={104} width={128} height={18} rx={6} fill={WOOD_LIGHT} />
+    </g>
+  );
+}
+
+/** Signal Beacons (ambulance pre-alert link): three little lighthouse beacons with glowing lamps. */
+function SignalBeacons() {
+  const towers = [
+    { x: -78, h: 110 },
+    { x: 0, h: 160 },
+    { x: 78, h: 125 },
+  ];
+  return (
+    <g>
+      <g transform="translate(0,62)">
+        <Plinth w={210} />
+      </g>
+      {towers.map(({ x, h }) => (
+        <g key={x} transform={`translate(${x},54)`}>
+          <path d={`M-22 0 L-14 ${-h} L14 ${-h} L22 0 Z`} fill={STONE} />
+          <rect x={-18} y={-h * 0.62} width={36} height={14} fill="#9c86f5" />
+          <rect x={-20} y={-h * 0.3} width={40} height={14} fill="#9c86f5" />
+          <rect x={-18} y={-h - 30} width={36} height={30} rx={6} fill="#fff1b8" className="lamp-glow" />
+          <path d={`M-22 ${-h - 30} L0 ${-h - 50} L22 ${-h - 30} Z`} fill={GOLD} />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/** The Shadow Theatre (imaging archive): a glowing lightbox wall with shadow pictures. */
+function ShadowTheatre() {
+  return (
+    <g>
+      <rect x={-160} y={-96} width={320} height={160} rx={16} fill={WOOD} />
+      {[-104, 0, 104].map((x, i) => (
+        <g key={x} transform={`translate(${x},-16)`}>
+          <rect x={-46} y={-66} width={92} height={126} rx={8} fill="#d6f6fa" />
+          {i === 0 && <path d="M-26 20 Q-20 -30 0 -36 Q8 -50 18 -40 Q12 -28 20 -10 Q24 16 8 30 Z" fill={INK} />}
+          {i === 1 && (
+            <g fill={INK}>
+              <ellipse cx={0} cy={-6} rx={22} ry={30} />
+              <ellipse cx={-10} cy={-44} rx={6} ry={18} />
+              <ellipse cx={10} cy={-44} rx={6} ry={18} />
+            </g>
+          )}
+          {i === 2 && <path d="M-30 0 Q-12 -30 0 -8 Q14 -36 30 -6 Q16 -16 6 6 Q0 -6 -10 8 Z" fill={INK} />}
+        </g>
+      ))}
+      <rect x={-150} y={64} width={20} height={18} rx={4} fill={WOOD} />
+      <rect x={130} y={64} width={20} height={18} rx={4} fill={WOOD} />
+    </g>
+  );
+}
+
+/** The Great Lens (CT scanner): a big brass ring with a little bed running through it. */
+function GreatLens() {
+  return (
+    <g>
+      <g transform="translate(0,58)">
+        <Plinth w={190} />
+      </g>
+      <rect x={-150} y={8} width={300} height={22} rx={11} fill="#c9a6ff" />
+      <rect x={-136} y={30} width={14} height={28} rx={4} fill={STONE_DARK} />
+      <rect x={122} y={30} width={14} height={28} rx={4} fill={STONE_DARK} />
+      <circle cx={30} cy={-40} r={78} fill={GOLD} />
+      <circle cx={30} cy={-40} r={52} fill={GLASS} opacity={0.6} />
+      <circle cx={30} cy={-40} r={52} fill="none" stroke={GOLD_DARK} strokeWidth={6} />
+      <path d="M8 -70 Q20 -84 36 -82" fill="none" stroke="#ffffff" strokeWidth={6} strokeLinecap="round" opacity={0.7} />
+    </g>
+  );
+}
+
 /** Stand-in for exhibits on screens that are not drawn yet. */
 function Pedestal() {
   return (
@@ -275,7 +427,7 @@ function Pedestal() {
   );
 }
 
-const DRAW: Partial<Record<ExhibitKind, () => React.JSX.Element>> = {
+const DRAW: Partial<Record<ExhibitKind, (props: { span?: number }) => React.JSX.Element>> = {
   microscopes: Microscopes,
   clockwork: Clockwork,
   apothecary: Apothecary,
@@ -284,6 +436,12 @@ const DRAW: Partial<Record<ExhibitKind, () => React.JSX.Element>> = {
   letters: LetterPress,
   turnstile: Turnstiles,
   keys: KeyCabinet,
+  musicbox: MusicBox,
+  lanterns: NightLanterns,
+  clock: GreatClock,
+  beacons: SignalBeacons,
+  theatre: ShadowTheatre,
+  lens: GreatLens,
 };
 
 /** Exhibits that stand free, without a velvet rope in front. */
@@ -299,6 +457,12 @@ export const EXHIBIT_BOX: Partial<Record<ExhibitKind, { half: number; bottom: nu
   letters: { half: 126, bottom: 74 },
   turnstile: { half: 170, bottom: 50 },
   keys: { half: 106, bottom: 84 },
+  musicbox: { half: 120, bottom: 86 },
+  lanterns: { half: 100, bottom: 98 },
+  clock: { half: 64, bottom: 122 },
+  beacons: { half: 112, bottom: 96 },
+  theatre: { half: 160, bottom: 82 },
+  lens: { half: 150, bottom: 92 },
 };
 const DEFAULT_BOX = { half: 60, bottom: 38 };
 
@@ -307,9 +471,9 @@ export function exhibitBox(kind: ExhibitKind, scale = 1): { half: number; bottom
   return { half: box.half * scale, bottom: box.bottom * scale };
 }
 
-export const ExhibitArt = memo(function ExhibitArt({ kind }: { kind: ExhibitKind }) {
+export const ExhibitArt = memo(function ExhibitArt({ kind, span }: { kind: ExhibitKind; span?: number }) {
   const Draw = DRAW[kind] ?? Pedestal;
-  return <Draw />;
+  return <Draw span={span} />;
 });
 
 // ---------- Museum decor ----------

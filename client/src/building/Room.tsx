@@ -99,7 +99,7 @@ function Exhibits({ layout }: { layout: RoomLayout }) {
     <>
       {Object.entries(layout.exhibits).map(([id, ex]) => (
         <g key={id} transform={`translate(${ex.x},${ex.y}) scale(${ex.scale ?? 1})`}>
-          <ExhibitArt kind={ex.kind} />
+          <ExhibitArt kind={ex.kind} span={ex.span} />
         </g>
       ))}
     </>
@@ -236,6 +236,21 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
         strokeWidth={WALL}
         style={{ transition: 'stroke 600ms ease' }}
       />
+      {layout.vip && (
+        // The most critical room: a gold trim just inside the walls.
+        <rect
+          x={rect.x + 14}
+          y={rect.y + 14}
+          width={rect.w - 28}
+          height={rect.h - 28}
+          rx={12}
+          fill="none"
+          stroke="#f2c65e"
+          strokeWidth={5}
+          opacity={0.9}
+          pointerEvents="none"
+        />
+      )}
       {selected && (
         <rect
           x={rect.x + 16}
@@ -253,6 +268,20 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
 
       {/* Name, with the real hospital system underneath */}
       <g className="game-text" pointerEvents="none">
+        {layout.vip && (
+          // A brass name plaque behind the label.
+          <rect
+            x={labelX - 24}
+            y={labelY - NAME_SIZE - 6}
+            width={Math.max(room.name.length * 22, room.real.length * 13) + 48}
+            height={NAME_SIZE + REAL_SIZE + 44}
+            rx={14}
+            fill={lit ? '#f6e3b0' : '#3a2f6e'}
+            stroke="#f2c65e"
+            strokeWidth={5}
+            style={{ transition: 'fill 500ms ease' }}
+          />
+        )}
         <text
           x={labelX}
           y={labelY}

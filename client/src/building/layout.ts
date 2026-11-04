@@ -46,6 +46,8 @@ export interface ExhibitLayout extends Pt {
   kind: ExhibitKind;
   /** Drawing scale (1 = base size). */
   scale?: number;
+  /** Corridor lamps: how long the run of lamps is (defaults to a full 1600 corridor). */
+  span?: number;
 }
 
 export interface RoomLayout {
@@ -68,6 +70,8 @@ export interface RoomLayout {
   letterbox?: Pt;
   /** The museum front door in the bottom wall. */
   frontDoor?: Pt;
+  /** The most critical room: gold wall trim and a brass name plaque. */
+  vip?: boolean;
 }
 
 /** A door in a vertical wall ('v', walk through it left/right) or a horizontal wall ('h', up/down). */
@@ -75,6 +79,8 @@ export interface DoorLayout extends Pt {
   a: string;
   b: string;
   orient: 'h' | 'v';
+  /** Drawn as a big steel vault portal. */
+  grand?: boolean;
 }
 
 export const ROOMS: Record<string, RoomLayout> = {
@@ -144,52 +150,58 @@ export const ROOMS: Record<string, RoomLayout> = {
 
   // ---------- Screen 4: East Wing (x 3200–4800) ----------
   'east-corridor': {
-    rect: { x: 3200, y: 380, w: 1540, h: 180 },
-    anchor: { x: 3900, y: 524 },
-    spots: [{ x: 3700, y: 528 }, { x: 4250, y: 528 }, { x: 3450, y: 528 }],
-    exhibits: { 'east-lamps': { kind: 'lamps', x: 3970, y: 470 } },
+    rect: { x: 3200, y: 380, w: 760, h: 180 },
+    anchor: { x: 3720, y: 524 },
+    spots: [{ x: 3820, y: 528 }, { x: 3460, y: 528 }, { x: 3300, y: 528 }],
+    exhibits: { 'east-lamps': { kind: 'lamps', x: 3580, y: 470, span: 760 } },
     corridor: true,
   },
   ward4: {
-    rect: { x: 3280, y: 70, w: 680, h: 310 },
-    anchor: { x: 3620, y: 290 },
-    spots: [{ x: 3420, y: 150 }, { x: 3820, y: 160 }, { x: 3400, y: 300 }],
+    rect: { x: 3208, y: 8, w: 752, h: 372 },
+    anchor: { x: 3330, y: 345 },
+    spots: [{ x: 3640, y: 350 }, { x: 3860, y: 350 }, { x: 3420, y: 210 }],
     exhibits: {
-      'music-boxes': { kind: 'musicbox', x: 3480, y: 180 },
-      lanterns: { kind: 'lanterns', x: 3800, y: 200 },
+      'music-boxes': { kind: 'musicbox', x: 3545, y: 245, scale: 0.9 },
+      lanterns: { kind: 'lanterns', x: 3790, y: 240, scale: 0.9 },
     },
+    columns: true,
   },
   emergency: {
-    rect: { x: 3960, y: 70, w: 840, h: 310 },
-    anchor: { x: 4360, y: 290 },
-    spots: [{ x: 4120, y: 150 }, { x: 4600, y: 300 }, { x: 4700, y: 140 }],
+    rect: { x: 3960, y: 8, w: 832, h: 552 },
+    anchor: { x: 4090, y: 405 },
+    spots: [{ x: 4580, y: 410 }, { x: 4330, y: 410 }, { x: 4200, y: 230 }],
     exhibits: {
-      'great-clock': { kind: 'clock', x: 4180, y: 200 },
-      'signal-beacons': { kind: 'beacons', x: 4580, y: 170 },
+      'great-clock': { kind: 'clock', x: 4465, y: 245, scale: 1 },
+      'signal-beacons': { kind: 'beacons', x: 4665, y: 268, scale: 0.95 },
     },
+    columns: true,
+    vip: true,
+    // The corridor carpet runs straight through the hall to the Vault door.
+    runners: [{ x: 3940, y: 432, w: 880, h: 76 }],
   },
   radiology: {
-    rect: { x: 3280, y: 560, w: 1520, h: 270 },
-    anchor: { x: 4000, y: 610 },
-    spots: [{ x: 3500, y: 720 }, { x: 4400, y: 760 }, { x: 4650, y: 640 }],
+    rect: { x: 3208, y: 560, w: 1584, h: 332 },
+    anchor: { x: 3500, y: 840 },
+    spots: [{ x: 4150, y: 860 }, { x: 4690, y: 860 }, { x: 3330, y: 770 }],
     exhibits: {
-      'shadow-theatre': { kind: 'theatre', x: 3560, y: 690 },
-      'great-lens': { kind: 'lens', x: 4300, y: 700 },
+      'shadow-theatre': { kind: 'theatre', x: 3930, y: 720, scale: 1.25 },
+      'great-lens': { kind: 'lens', x: 4430, y: 720, scale: 1.25 },
     },
+    columns: true,
   },
 
   // ---------- Screen 5: The Vault (x 4800–6400) ----------
   vault: {
-    rect: { x: 4800, y: 70, w: 1520, h: 450 },
-    anchor: { x: 5000, y: 260 },
-    spots: [{ x: 5560, y: 300 }, { x: 5800, y: 220 }, { x: 5300, y: 380 }],
-    exhibits: { 'crown-ledger': { kind: 'ledger', x: 5560, y: 290 } },
+    rect: { x: 4808, y: 8, w: 1584, h: 592 },
+    anchor: { x: 5000, y: 560 },
+    spots: [{ x: 5560, y: 400 }, { x: 5800, y: 320 }, { x: 5300, y: 480 }],
+    exhibits: { 'crown-ledger': { kind: 'ledger', x: 5560, y: 300 } },
   },
   archive: {
-    rect: { x: 4800, y: 520, w: 960, h: 310 },
-    anchor: { x: 5000, y: 690 },
-    spots: [{ x: 5400, y: 720 }, { x: 5600, y: 640 }, { x: 5200, y: 760 }],
-    exhibits: { 'copy-scrolls': { kind: 'scrolls', x: 5450, y: 680 } },
+    rect: { x: 4808, y: 600, w: 960, h: 292 },
+    anchor: { x: 5000, y: 840 },
+    spots: [{ x: 5400, y: 840 }, { x: 5600, y: 760 }, { x: 5200, y: 860 }],
+    exhibits: { 'copy-scrolls': { kind: 'scrolls', x: 5450, y: 760 } },
   },
 };
 
@@ -200,12 +212,12 @@ export const DOORS: DoorLayout[] = [
   { a: 'west-corridor', b: 'lab', x: 2040, y: 380, orient: 'h' },
   { a: 'west-corridor', b: 'pharmacy', x: 2760, y: 560, orient: 'h' },
   { a: 'west-corridor', b: 'east-corridor', x: 3200, y: 500, orient: 'v' },
-  { a: 'east-corridor', b: 'emergency', x: 4360, y: 380, orient: 'h' },
-  { a: 'east-corridor', b: 'ward4', x: 3620, y: 380, orient: 'h' },
-  { a: 'east-corridor', b: 'radiology', x: 4000, y: 560, orient: 'h' },
-  { a: 'radiology', b: 'archive', x: 4800, y: 690, orient: 'v' },
-  { a: 'emergency', b: 'vault', x: 4800, y: 250, orient: 'v' },
-  { a: 'archive', b: 'vault', x: 5000, y: 520, orient: 'h' },
+  { a: 'east-corridor', b: 'emergency', x: 3960, y: 500, orient: 'v' },
+  { a: 'east-corridor', b: 'ward4', x: 3580, y: 380, orient: 'h' },
+  { a: 'east-corridor', b: 'radiology', x: 3600, y: 560, orient: 'h' },
+  { a: 'radiology', b: 'archive', x: 4800, y: 750, orient: 'v' },
+  { a: 'emergency', b: 'vault', x: 4800, y: 470, orient: 'v', grand: true },
+  { a: 'archive', b: 'vault', x: 5000, y: 600, orient: 'h' },
 ];
 
 export const DOOR_WIDTH = 96;
