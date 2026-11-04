@@ -192,16 +192,21 @@ export const ROOMS: Record<string, RoomLayout> = {
 
   // ---------- Screen 5: The Vault (x 4800–6400) ----------
   vault: {
-    rect: { x: 4808, y: 8, w: 1584, h: 592 },
-    anchor: { x: 5000, y: 560 },
-    spots: [{ x: 5560, y: 400 }, { x: 5800, y: 320 }, { x: 5300, y: 480 }],
-    exhibits: { 'crown-ledger': { kind: 'ledger', x: 5560, y: 300 } },
+    rect: { x: 4808, y: 8, w: 1152, h: 592 },
+    anchor: { x: 5130, y: 575 },
+    spots: [{ x: 5330, y: 575 }, { x: 5800, y: 575 }, { x: 5850, y: 300 }],
+    exhibits: { 'crown-ledger': { kind: 'ledger', x: 5480, y: 300 } },
+    columns: true,
+    vip: true,
+    // The carpet from the Emergency Hall carries on through the portal up to the vault door.
+    runners: [{ x: 4780, y: 432, w: 560, h: 76 }],
   },
   archive: {
-    rect: { x: 4808, y: 600, w: 960, h: 292 },
-    anchor: { x: 5000, y: 840 },
-    spots: [{ x: 5400, y: 840 }, { x: 5600, y: 760 }, { x: 5200, y: 860 }],
-    exhibits: { 'copy-scrolls': { kind: 'scrolls', x: 5450, y: 760 } },
+    rect: { x: 4808, y: 600, w: 1152, h: 292 },
+    anchor: { x: 5110, y: 860 },
+    spots: [{ x: 5760, y: 860 }, { x: 5850, y: 720 }, { x: 5300, y: 865 }],
+    exhibits: { 'copy-scrolls': { kind: 'scrolls', x: 5480, y: 755, scale: 0.9 } },
+    columns: true,
   },
 };
 
@@ -221,6 +226,9 @@ export const DOORS: DoorLayout[] = [
 ];
 
 export const DOOR_WIDTH = 96;
+
+/** Screen 5: the stone tower beside the Vault that holds the museum clock and the patient counters. */
+export const CLOCK_TOWER: Rect = { x: 5968, y: 8, w: 424, h: 884 };
 
 export function sliceRect(screen: BuildingScreenId): Rect {
   return { x: SLICE_INDEX[screen] * SLICE_W, y: 0, w: SLICE_W, h: SLICE_H };

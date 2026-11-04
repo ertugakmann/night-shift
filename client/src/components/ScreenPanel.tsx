@@ -12,7 +12,7 @@ const PHASE_LABEL: Record<Phase, string> = { idle: 'Waiting', running: 'Night sh
 const PHASE_COLOR: Record<Phase, string> = { idle: 'text-ink/60', running: 'text-safe', paused: 'text-suspect', ended: 'text-flash' };
 
 /** Screens already drawn in the game style (the rest follow during Phase 4). */
-export const STYLED: ReadonlySet<ScreenId> = new Set<ScreenId>([1, 3, 4]);
+export const STYLED: ReadonlySet<ScreenId> = new Set<ScreenId>([1, 3, 4, 5]);
 
 /** One wall screen. Phase 3: raw data as plain lists. Sizes scale with the panel (container query units). */
 export function ScreenPanel({ id }: { id: ScreenId }) {

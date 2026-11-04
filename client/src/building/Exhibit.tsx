@@ -414,6 +414,79 @@ function GreatLens() {
   );
 }
 
+/** The Crown Ledger (patient records): the great round vault door, with the ledger emblem at its heart. */
+function VaultDoor() {
+  const bolts = Array.from({ length: 16 }, (_, i) => (i / 16) * Math.PI * 2);
+  return (
+    <g>
+      {/* soft golden aura */}
+      <circle r={232} fill="#ffd27a" opacity={0.12} className="lamp-glow" />
+      {/* hinges */}
+      <rect x={-232} y={-120} width={44} height={56} rx={10} fill={GOLD_DARK} />
+      <rect x={-232} y={64} width={44} height={56} rx={10} fill={GOLD_DARK} />
+      {/* outer ring with bolts */}
+      <circle r={205} fill="#8b82c4" />
+      <circle r={205} fill="none" stroke={GOLD} strokeWidth={12} />
+      {bolts.map((a, i) => (
+        <circle key={i} cx={Math.cos(a) * 182} cy={Math.sin(a) * 182} r={9} fill={GOLD} />
+      ))}
+      {/* door face */}
+      <circle r={160} fill="#b3abe0" />
+      <circle r={160} fill="none" stroke="#6f61d0" strokeWidth={6} />
+      <circle r={118} fill="none" stroke="#9c92d6" strokeWidth={4} />
+      {/* wheel */}
+      <g className="spin-slow">
+        {[0, 60, 120].map((a) => (
+          <rect key={a} x={-112} y={-9} width={224} height={18} rx={9} fill={GOLD} transform={`rotate(${a})`} />
+        ))}
+        {[0, 60, 120, 180, 240, 300].map((a) => (
+          <circle key={a} cx={Math.cos((a * Math.PI) / 180) * 112} cy={Math.sin((a * Math.PI) / 180) * 112} r={14} fill={GOLD_DARK} />
+        ))}
+      </g>
+      {/* hub with the ledger emblem */}
+      <circle r={56} fill={GOLD} stroke={GOLD_DARK} strokeWidth={6} />
+      <g transform="translate(0,4)">
+        <path d="M-34 -18 Q-17 -26 0 -16 L0 22 Q-17 12 -34 20 Z" fill="#fff7e6" />
+        <path d="M34 -18 Q17 -26 0 -16 L0 22 Q17 12 34 20 Z" fill="#fbe7c4" />
+        <line x1={-26} y1={-8} x2={-8} y2={-6} stroke={INK} strokeWidth={2} opacity={0.5} />
+        <line x1={-26} y1={2} x2={-8} y2={4} stroke={INK} strokeWidth={2} opacity={0.5} />
+        <line x1={8} y1={-6} x2={26} y2={-8} stroke={INK} strokeWidth={2} opacity={0.5} />
+      </g>
+      {/* floor plinth */}
+      <rect x={-150} y={196} width={300} height={18} rx={8} fill={STONE_DARK} />
+    </g>
+  );
+}
+
+/** The Copy Scrolls (backups): a wooden archive shelf full of scrolls and boxes. */
+function ScrollShelf() {
+  const rows = [-62, -8, 46];
+  return (
+    <g>
+      <rect x={-170} y={-100} width={340} height={186} rx={14} fill={WOOD} />
+      {rows.map((y, r) => (
+        <g key={y}>
+          <rect x={-156} y={y + 30} width={312} height={8} rx={3} fill={WOOD_LIGHT} />
+          {Array.from({ length: 6 }, (_, i) => {
+            const x = -140 + i * 48 + (r % 2) * 12;
+            return r === 1 && i === 2 ? (
+              <rect key={i} x={x - 4} y={y - 6} width={56} height={36} rx={5} fill="#c9a6ff" />
+            ) : (
+              <g key={i}>
+                <rect x={x} y={y} width={40} height={28} rx={14} fill="#fff7e6" />
+                <circle cx={x + 6} cy={y + 14} r={9} fill={GOLD} />
+                <circle cx={x + 34} cy={y + 14} r={9} fill={GOLD} />
+              </g>
+            );
+          })}
+        </g>
+      ))}
+      <rect x={-160} y={84} width={20} height={14} rx={4} fill={WOOD} />
+      <rect x={140} y={84} width={20} height={14} rx={4} fill={WOOD} />
+    </g>
+  );
+}
+
 /** Stand-in for exhibits on screens that are not drawn yet. */
 function Pedestal() {
   return (
@@ -442,6 +515,8 @@ const DRAW: Partial<Record<ExhibitKind, (props: { span?: number }) => React.JSX.
   beacons: SignalBeacons,
   theatre: ShadowTheatre,
   lens: GreatLens,
+  ledger: VaultDoor,
+  scrolls: ScrollShelf,
 };
 
 /** Exhibits that stand free, without a velvet rope in front. */
@@ -463,6 +538,8 @@ export const EXHIBIT_BOX: Partial<Record<ExhibitKind, { half: number; bottom: nu
   beacons: { half: 112, bottom: 96 },
   theatre: { half: 160, bottom: 82 },
   lens: { half: 150, bottom: 92 },
+  ledger: { half: 210, bottom: 214 },
+  scrolls: { half: 170, bottom: 98 },
 };
 const DEFAULT_BOX = { half: 60, bottom: 38 };
 

@@ -1,9 +1,13 @@
 import { useState, type FormEvent } from 'react';
+import { useLocation } from 'react-router';
 import { enterCode, showNotice, useGame } from '../net/game';
 
 /** Page-level overlay: connection state, role badge, code entry for watchers, presenter key hints, notices. */
 export function Hud() {
   const { connected, role, snapshot, notice, transport } = useGame();
+  // The building screens (1, 3, 4, 5) are view-only displays on the wall: no code box over the art.
+  // Remote judges join from the desk (screen 2) or /wall.
+  const buildingScreen = /^\/screen\/[1345]$/.test(useLocation().pathname);
 
   return (
     <>
@@ -39,7 +43,7 @@ export function Hud() {
           </div>
         )}
         {role === 'controller' && <Badge className="bg-safe text-night-950">In control</Badge>}
-        {role === 'watcher' && <WatcherBox codeOpen={snapshot?.codeVisible ?? false} />}
+        {role === 'watcher' && !buildingScreen && <WatcherBox codeOpen={snapshot?.codeVisible ?? false} />}
       </div>
     </>
   );

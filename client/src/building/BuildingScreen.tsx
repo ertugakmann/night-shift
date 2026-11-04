@@ -19,6 +19,7 @@ import {
   type Rect,
 } from './layout';
 import { INTRUDER_SCALE, Room } from './Room';
+import { VaultExtras } from './VaultExtras';
 
 /** A building screen: its slice of the one continuous museum floor plan. */
 export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
@@ -61,6 +62,7 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
       {snapshot.debug && <GangGhosts snapshot={snapshot} />}
       <Guards snapshot={snapshot} uid={uid} />
       <Dust slice={slice} />
+      {screen === 5 && <VaultExtras snapshot={snapshot} slice={slice} uid={uid} />}
     </svg>
   );
 }
