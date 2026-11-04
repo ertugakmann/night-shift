@@ -1,16 +1,37 @@
 import { AnimatePresence, motion } from 'motion/react';
 import type { Room as RoomData, Snapshot } from '@night-shift/shared';
 import { IntruderArt } from './Characters';
-import { Barrier, Column, ExhibitArt, Frame, exhibitBox } from './Exhibit';
+import { Barrier, Column, ExhibitArt, Frame, FrontDoor, Letterbox, NO_BARRIER, Statue, exhibitBox } from './Exhibit';
 import { guardPose } from './geometry';
-import { ROOMS, type RoomLayout } from './layout';
+import { ROOMS, type Rect, type RoomLayout } from './layout';
 
 const LIGHT_SPRING = { type: 'spring', stiffness: 26, damping: 11 } as const;
 const WALL = 16;
 /** Room name and real system name sizes, in plan units (1600 wide → ×1.2 on a 1080p screen: 48 px and 29 px). */
 const NAME_SIZE = 40;
 const REAL_SIZE = 24;
-const INTRUDER_SCALE = 1.3;
+export const INTRUDER_SCALE = 1.3;
+
+/** Carpet runners: corridors get one down the middle; halls can declare their own. */
+function runnersOf(layout: RoomLayout): Rect[] {
+  const { rect } = layout;
+  const own = layout.runners ?? [];
+  return layout.corridor ? [{ x: rect.x - 20, y: rect.y + 52, w: rect.w + 40, h: rect.h - 104 }, ...own] : own;
+}
+
+function Runners({ layout, fill, edge }: { layout: RoomLayout; fill: string; edge: string }) {
+  return (
+    <>
+      {/* Edged first, then filled again on top, so joins between runners show no seam. */}
+      {runnersOf(layout).map((r, i) => (
+        <rect key={`e${i}`} x={r.x} y={r.y} width={r.w} height={r.h} rx={30} fill={fill} stroke={edge} strokeWidth={6} />
+      ))}
+      {runnersOf(layout).map((r, i) => (
+        <rect key={`f${i}`} x={r.x} y={r.y} width={r.w} height={r.h} rx={30} fill={fill} />
+      ))}
+    </>
+  );
+}
 
 function farthestCorner(cx: number, cy: number, r: { x: number; y: number; w: number; h: number }): number {
   const xs = [r.x, r.x + r.w];
@@ -61,8 +82,11 @@ function Decor({ layout }: { layout: RoomLayout }) {
           [rect.x + rect.w - inset, rect.y + rect.h - 16],
         ].map(([x, y]) => <Column key={`${x}-${y}`} x={x} baseY={y} height={height} />)}
       {layout.frames?.map((x, i) => <Frame key={x} x={x} top={rect.y + WALL / 2} variant={i + Math.round(rect.y / 100)} />)}
+      {layout.statues?.map((p) => <Statue key={`${p.x}-${p.y}`} x={p.x} y={p.y} />)}
+      {layout.frontDoor && <FrontDoor x={layout.frontDoor.x} y={layout.frontDoor.y} />}
+      {layout.letterbox && <Letterbox x={layout.letterbox.x} y={layout.letterbox.y} />}
       {Object.entries(layout.exhibits).map(([id, ex]) => {
-        if (ex.kind === 'lamps') return null;
+        if (NO_BARRIER.has(ex.kind)) return null;
         const box = exhibitBox(ex.kind, ex.scale);
         return <Barrier key={id} x={ex.x} y={ex.y + box.bottom + 34} half={box.half + 10} />;
       })}
@@ -128,9 +152,7 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
       <g clipPath={`url(#${clip})`}>
         {/* Dark room: chequered museum floor in night tones, everything else as outlines */}
         <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={`url(#${uid}-checker-dark)`} />
-        {layout.corridor && (
-          <rect x={rect.x - 20} y={rect.y + 52} width={rect.w + 40} height={rect.h - 104} rx={30} fill="#33296f" />
-        )}
+        <Runners layout={layout} fill="#1e1748" edge="#5a4eb8" />
         <g className={`ex-dark ${status === 'broken' ? 'ex-off' : ''}`}>
           <Decor layout={layout} />
           <Exhibits layout={layout} />
@@ -156,9 +178,7 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
         <g mask={`url(#${mask})`}>
           <g className="flicker">
             <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={`url(#${uid}-checker-lit)`} />
-            {layout.corridor && (
-              <rect x={rect.x - 20} y={rect.y + 52} width={rect.w + 40} height={rect.h - 104} rx={30} fill="#8a4f8f" />
-            )}
+            <Runners layout={layout} fill="#8a4f8f" edge="#c98fb8" />
             <Decor layout={layout} />
             <g className={status === 'broken' ? 'ex-broken' : status === 'closed' ? 'ex-closed' : ''}>
               <Exhibits layout={layout} />
@@ -202,20 +222,6 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
             );
           })}
 
-        {/* Debug: where the gang really is, even in the dark */}
-        {snapshot.debug &&
-          !lit &&
-          groups.map((g, i) => {
-            const spot = layout.spots[i % layout.spots.length];
-            return (
-              <g key={g.id} transform={`translate(${spot.x},${spot.y}) scale(${INTRUDER_SCALE})`}>
-                <IntruderArt spotted={false} ghost />
-                <text y={-84} textAnchor="middle" className="game-text" fontSize={22} fontWeight={600} fill="#ff6b6b">
-                  {Math.floor(rs.occupiedMs / 1000)}s
-                </text>
-              </g>
-            );
-          })}
       </g>
 
       {/* Walls */}

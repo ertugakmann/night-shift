@@ -60,6 +60,14 @@ export interface RoomLayout {
   frames?: number[];
   /** Stone columns in the corners. */
   columns?: boolean;
+  /** Carpet runners on the floor (corridors get one automatically). */
+  runners?: Rect[];
+  /** Busts on plinths, purely decorative. */
+  statues?: Pt[];
+  /** Brass letterbox on the left wall, with letters on the floor (the phishing way in). */
+  letterbox?: Pt;
+  /** The museum front door in the bottom wall. */
+  frontDoor?: Pt;
 }
 
 /** A door in a vertical wall ('v', walk through it left/right) or a horizontal wall ('h', up/down). */
@@ -72,22 +80,35 @@ export interface DoorLayout extends Pt {
 export const ROOMS: Record<string, RoomLayout> = {
   // ---------- Screen 1: Lobby and Offices (x 0–1600) ----------
   'mail-room': {
-    rect: { x: 80, y: 80, w: 740, h: 300 },
-    anchor: { x: 700, y: 250 },
-    spots: [{ x: 300, y: 240 }, { x: 420, y: 300 }, { x: 200, y: 310 }],
-    exhibits: { 'letter-press': { kind: 'letters', x: 420, y: 210 } },
+    rect: { x: 8, y: 8, w: 620, h: 432 },
+    anchor: { x: 500, y: 405 },
+    spots: [{ x: 200, y: 395 }, { x: 420, y: 410 }, { x: 110, y: 230 }],
+    exhibits: { 'letter-press': { kind: 'letters', x: 300, y: 285, scale: 1.35 } },
+    frames: [440],
+    columns: true,
+    letterbox: { x: 16, y: 228 },
   },
   'entrance-hall': {
-    rect: { x: 820, y: 80, w: 780, h: 740 },
-    anchor: { x: 1180, y: 450 },
-    spots: [{ x: 1000, y: 300 }, { x: 1080, y: 640 }, { x: 1400, y: 260 }],
-    exhibits: { turnstiles: { kind: 'turnstile', x: 1200, y: 640 } },
+    rect: { x: 628, y: 8, w: 964, h: 884 },
+    anchor: { x: 1330, y: 830 },
+    spots: [{ x: 800, y: 650 }, { x: 760, y: 850 }, { x: 1470, y: 560 }],
+    exhibits: { turnstiles: { kind: 'turnstile', x: 1110, y: 640, scale: 1.3 } },
+    frames: [1330],
+    columns: true,
+    // The corridor carpet starts at the front door and runs on into the West Corridor.
+    runners: [
+      { x: 1060, y: 432, w: 100, h: 460 },
+      { x: 1060, y: 432, w: 560, h: 76 },
+    ],
+    statues: [{ x: 820, y: 400 }, { x: 1440, y: 390 }],
+    frontDoor: { x: 1110, y: 892 },
   },
   'key-room': {
-    rect: { x: 80, y: 560, w: 740, h: 260 },
-    anchor: { x: 700, y: 690 },
-    spots: [{ x: 300, y: 680 }, { x: 420, y: 740 }, { x: 200, y: 750 }],
-    exhibits: { 'key-cabinet': { kind: 'keys', x: 380, y: 680 } },
+    rect: { x: 8, y: 440, w: 620, h: 452 },
+    anchor: { x: 490, y: 860 },
+    spots: [{ x: 200, y: 860 }, { x: 420, y: 860 }, { x: 110, y: 640 }],
+    exhibits: { 'key-cabinet': { kind: 'keys', x: 290, y: 735, scale: 1.3 } },
+    columns: true,
   },
 
   // ---------- Screen 3: West Wing (x 1600–3200) ----------
@@ -173,12 +194,12 @@ export const ROOMS: Record<string, RoomLayout> = {
 };
 
 export const DOORS: DoorLayout[] = [
-  { a: 'mail-room', b: 'entrance-hall', x: 820, y: 250, orient: 'v' },
-  { a: 'entrance-hall', b: 'key-room', x: 820, y: 690, orient: 'v' },
-  { a: 'entrance-hall', b: 'west-corridor', x: 1600, y: 470, orient: 'v' },
+  { a: 'mail-room', b: 'entrance-hall', x: 628, y: 250, orient: 'v' },
+  { a: 'entrance-hall', b: 'key-room', x: 628, y: 680, orient: 'v' },
+  { a: 'entrance-hall', b: 'west-corridor', x: 1600, y: 500, orient: 'v' },
   { a: 'west-corridor', b: 'lab', x: 2040, y: 380, orient: 'h' },
   { a: 'west-corridor', b: 'pharmacy', x: 2760, y: 560, orient: 'h' },
-  { a: 'west-corridor', b: 'east-corridor', x: 3200, y: 470, orient: 'v' },
+  { a: 'west-corridor', b: 'east-corridor', x: 3200, y: 500, orient: 'v' },
   { a: 'east-corridor', b: 'emergency', x: 4360, y: 380, orient: 'h' },
   { a: 'east-corridor', b: 'ward4', x: 3620, y: 380, orient: 'h' },
   { a: 'east-corridor', b: 'radiology', x: 4000, y: 560, orient: 'h' },

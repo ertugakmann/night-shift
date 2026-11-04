@@ -171,6 +171,97 @@ function Lamps() {
   );
 }
 
+/** The Letter Press: an iron printing press with a big brass wheel, on a wooden table. */
+function LetterPress() {
+  return (
+    <g>
+      {/* table */}
+      <rect x={-118} y={36} width={236} height={18} rx={6} fill={WOOD_LIGHT} />
+      <rect x={-104} y={52} width={16} height={22} rx={4} fill={WOOD} />
+      <rect x={88} y={52} width={16} height={22} rx={4} fill={WOOD} />
+      {/* press frame */}
+      <rect x={-64} y={-86} width={18} height={124} rx={6} fill={INK} />
+      <rect x={46} y={-86} width={18} height={124} rx={6} fill={INK} />
+      <rect x={-80} y={-102} width={160} height={24} rx={8} fill={INK} />
+      <rect x={-6} y={-78} width={12} height={58} fill={GOLD_DARK} />
+      <rect x={-48} y={-22} width={96} height={16} rx={5} fill="#8f7ae0" />
+      {/* paper on the bed */}
+      <rect x={-44} y={18} width={88} height={14} rx={3} fill="#fff7e6" />
+      <line x1={-34} y1={25} x2={30} y2={25} stroke={INK} strokeWidth={2} opacity={0.5} />
+      {/* wheel */}
+      <g transform="translate(92,-36)">
+        <g className="spin-slow">
+          <circle r={34} fill="none" stroke={GOLD} strokeWidth={8} />
+          {[0, 60, 120].map((a) => (
+            <line key={a} x1={-30} y1={0} x2={30} y2={0} stroke={GOLD} strokeWidth={5} transform={`rotate(${a})`} />
+          ))}
+          <circle r={8} fill={GOLD_DARK} />
+        </g>
+      </g>
+      {/* a little stack of letters */}
+      <g transform="translate(-92,22)">
+        <rect x={-18} y={-4} width={36} height={22} rx={3} fill="#fff7e6" transform="rotate(-8)" />
+        <rect x={-18} y={-12} width={36} height={22} rx={3} fill="#fbe7c4" transform="rotate(6)" />
+        <path d="M-18 -12 L0 2 L18 -12" fill="none" stroke={GOLD_DARK} strokeWidth={2} transform="rotate(6)" />
+      </g>
+    </g>
+  );
+}
+
+/** Brass Turnstiles: three gates with rotating arms. */
+function Turnstiles() {
+  return (
+    <g>
+      {[-130, 0, 130].map((x) => (
+        <g key={x} transform={`translate(${x},0)`}>
+          <ellipse cy={42} rx={34} ry={9} fill={INK} opacity={0.6} />
+          <rect x={-12} y={-46} width={24} height={88} rx={8} fill={GOLD_DARK} />
+          <rect x={-16} y={-58} width={32} height={18} rx={7} fill={GOLD} />
+          <g transform="translate(0,-34)">
+            <g className="sway">
+              <rect x={0} y={-5} width={58} height={10} rx={5} fill={GOLD} />
+              <rect x={-58} y={-5} width={58} height={10} rx={5} fill={GOLD} transform="rotate(35)" />
+            </g>
+            <circle r={9} fill="#fff4d2" />
+          </g>
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/** The Master Key Cabinet: glass-fronted cabinet of keys, with the big master key on top. */
+function KeyCabinet() {
+  const keys = [-66, -33, 0, 33, 66];
+  return (
+    <g>
+      <rect x={-104} y={-82} width={208} height={154} rx={14} fill={WOOD} />
+      <rect x={-90} y={-68} width={180} height={124} rx={10} fill={GLASS} opacity={0.5} />
+      <rect x={-84} y={-58} width={168} height={8} rx={4} fill={WOOD_LIGHT} />
+      {keys.map((x, i) => (
+        <g key={x} transform={`translate(${x},-50)`}>
+          <line x1={0} y1={0} x2={0} y2={12} stroke={GOLD_DARK} strokeWidth={3} />
+          <circle cy={22} r={10} fill="none" stroke={i === 2 ? "#c9a6ff" : GOLD} strokeWidth={5} />
+          <rect x={-3} y={30} width={6} height={30} rx={2} fill={i === 2 ? "#c9a6ff" : GOLD} />
+          <rect x={0} y={48} width={10} height={5} fill={i === 2 ? "#c9a6ff" : GOLD} />
+          <rect x={0} y={56} width={7} height={4} fill={i === 2 ? "#c9a6ff" : GOLD} />
+        </g>
+      ))}
+      <path d="M-40 -68 L-28 -68 L-46 -30 L-52 -36 Z" fill="#ffffff" opacity={0.6} />
+      <rect x={-96} y={70} width={20} height={14} rx={4} fill={WOOD} />
+      <rect x={76} y={70} width={20} height={14} rx={4} fill={WOOD} />
+      {/* the master key on a velvet cushion */}
+      <g transform="translate(0,-98)">
+        <rect x={-62} y={-8} width={124} height={22} rx={11} fill="#a04f86" />
+        <circle cx={-34} cy={-6} r={16} fill="none" stroke={GOLD} strokeWidth={7} />
+        <rect x={-18} y={-10} width={70} height={9} rx={3} fill={GOLD} />
+        <rect x={36} y={-2} width={9} height={14} fill={GOLD} />
+        <rect x={48} y={-2} width={7} height={10} fill={GOLD} />
+      </g>
+    </g>
+  );
+}
+
 /** Stand-in for exhibits on screens that are not drawn yet. */
 function Pedestal() {
   return (
@@ -190,7 +281,13 @@ const DRAW: Partial<Record<ExhibitKind, () => React.JSX.Element>> = {
   apothecary: Apothecary,
   scales: Scales,
   lamps: Lamps,
+  letters: LetterPress,
+  turnstile: Turnstiles,
+  keys: KeyCabinet,
 };
+
+/** Exhibits that stand free, without a velvet rope in front. */
+export const NO_BARRIER: ReadonlySet<ExhibitKind> = new Set<ExhibitKind>(['lamps', 'turnstile']);
 
 /** Half-width and the y of the bottom edge of each drawing at scale 1 (for barriers, glows, cracks). */
 export const EXHIBIT_BOX: Partial<Record<ExhibitKind, { half: number; bottom: number }>> = {
@@ -199,6 +296,9 @@ export const EXHIBIT_BOX: Partial<Record<ExhibitKind, { half: number; bottom: nu
   apothecary: { half: 104, bottom: 88 },
   scales: { half: 100, bottom: 92 },
   lamps: { half: 0, bottom: 0 },
+  letters: { half: 126, bottom: 74 },
+  turnstile: { half: 170, bottom: 50 },
+  keys: { half: 106, bottom: 84 },
 };
 const DEFAULT_BOX = { half: 60, bottom: 38 };
 
@@ -277,6 +377,56 @@ export function Frame({ x, top, variant }: { x: number; top: number; variant: nu
         </clipPath>
         <g clipPath={`url(#frame-${variant}-${x})`}>{paint(w, h)}</g>
       </g>
+    </g>
+  );
+}
+
+/** A marble bust on a plinth. Stands on (x, y). */
+export function Statue({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <rect x={-44} y={-66} width={88} height={66} rx={8} fill={STONE_DARK} />
+      <rect x={-52} y={-76} width={104} height={14} rx={6} fill={STONE} />
+      <path d="M-44 -76 Q-40 -116 0 -118 Q40 -116 44 -76 Z" fill={STONE} />
+      <circle cy={-142} r={30} fill={STONE} />
+      <path d="M-30 -150 Q-26 -178 0 -176 Q26 -178 30 -150 Q14 -162 0 -160 Q-14 -162 -30 -150 Z" fill={STONE_DARK} />
+      <path d="M-28 -128 Q-36 -150 -24 -166 M28 -128 Q36 -150 24 -166" fill="none" stroke="#a8e07a" strokeWidth={6} strokeLinecap="round" />
+      <circle cx={-10} cy={-150} r={6} fill="#ffffff" opacity={0.5} />
+    </g>
+  );
+}
+
+/** The museum front door, set in the bottom wall at (x, y). */
+export function FrontDoor({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <path d="M-90 0 V-70 Q-90 -110 0 -112 Q90 -110 90 -70 V0 Z" fill={STONE_DARK} />
+      <path d="M-74 0 V-66 Q-74 -96 0 -98 Q74 -96 74 -66 V0 Z" fill={WOOD} />
+      <line x1={0} y1={-98} x2={0} y2={0} stroke={WOOD_LIGHT} strokeWidth={5} />
+      <circle cx={-12} cy={-44} r={6} fill={GOLD} />
+      <circle cx={12} cy={-44} r={6} fill={GOLD} />
+      <rect x={-56} y={-80} width={40} height={26} rx={6} fill={WOOD_LIGHT} opacity={0.6} />
+      <rect x={16} y={-80} width={40} height={26} rx={6} fill={WOOD_LIGHT} opacity={0.6} />
+    </g>
+  );
+}
+
+/** A brass letterbox on the left wall at (x, y), with letters fallen on the floor. */
+export function Letterbox({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <rect x={0} y={-44} width={26} height={88} rx={8} fill={GOLD} />
+      <rect x={8} y={-30} width={8} height={60} rx={4} fill={GOLD_DARK} />
+      {[
+        [56, -30, -14],
+        [78, 18, 10],
+        [48, 44, 4],
+      ].map(([lx, ly, r], i) => (
+        <g key={i} transform={`translate(${lx},${ly}) rotate(${r})`}>
+          <rect x={-22} y={-14} width={44} height={28} rx={3} fill="#fff7e6" />
+          <path d="M-22 -14 L0 4 L22 -14" fill="none" stroke={GOLD_DARK} strokeWidth={2} />
+        </g>
+      ))}
     </g>
   );
 }

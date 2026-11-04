@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { Snapshot } from '@night-shift/shared';
 import { worldOf } from '../game/view';
 import { selectRoom, useGame } from '../net/game';
-import { GuardArt } from './Characters';
+import { GuardArt, IntruderArt } from './Characters';
 import { Effects } from './Effects';
 import { guardPose } from './geometry';
 import {
@@ -18,7 +18,7 @@ import {
   type DoorLayout,
   type Rect,
 } from './layout';
-import { Room } from './Room';
+import { INTRUDER_SCALE, Room } from './Room';
 
 /** A building screen: its slice of the one continuous museum floor plan. */
 export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
@@ -58,6 +58,7 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
       ))}
 
       <Effects snapshot={snapshot} rooms={visibleRooms} />
+      {snapshot.debug && <GangGhosts snapshot={snapshot} />}
       <Guards snapshot={snapshot} uid={uid} />
       <Dust slice={slice} />
     </svg>
@@ -156,6 +157,38 @@ function Guards({ snapshot, uid }: { snapshot: Snapshot; uid: string }) {
 }
 
 const GUARD_SCALE = 1.4;
+
+/**
+ * Debug only (D): where the gang really is, even in the dark. Drawn over the whole building and
+ * gliding between rooms, so a group moving across a screen border leaves one screen and enters the next.
+ */
+function GangGhosts({ snapshot }: { snapshot: Snapshot }) {
+  return (
+    <g pointerEvents="none">
+      {snapshot.groups.map((g) => {
+        const inRoom = snapshot.groups.filter((o) => o.room === g.room);
+        const spots = ROOMS[g.room].spots;
+        const spot = spots[inRoom.indexOf(g) % spots.length];
+        const occupied = Math.floor(snapshot.rooms[g.room].occupiedMs / 1000);
+        return (
+          <motion.g
+            key={g.id}
+            initial={false}
+            animate={{ x: spot.x, y: spot.y }}
+            transition={{ type: 'spring', stiffness: 40, damping: 14 }}
+          >
+            <g transform={`scale(${INTRUDER_SCALE})`}>
+              <IntruderArt spotted={false} ghost />
+            </g>
+            <text y={-112} textAnchor="middle" className="game-text" fontSize={26} fontWeight={600} fill="#ff6b6b">
+              #{g.id} · {occupied}s
+            </text>
+          </motion.g>
+        );
+      })}
+    </g>
+  );
+}
 
 /** Small rounded label floating above a guard. */
 function NameTag({ name, y }: { name: string; y: number }) {

@@ -2,6 +2,7 @@ import { SCREENS, type Phase, type ScreenId, type Snapshot } from '@night-shift/
 import { gameClock } from '../game/view';
 import { useGame } from '../net/game';
 import { BuildingScreen } from '../building/BuildingScreen';
+import type { BuildingScreenId } from '../building/layout';
 import { ControlCodeCard } from './ControlCodeCard';
 import { DeskPanel } from './DeskPanel';
 import { RoomList } from './RoomList';
@@ -10,15 +11,17 @@ import { VaultStats } from './VaultStats';
 const PHASE_LABEL: Record<Phase, string> = { idle: 'Waiting', running: 'Night shift', paused: 'Paused', ended: 'Over' };
 const PHASE_COLOR: Record<Phase, string> = { idle: 'text-ink/60', running: 'text-safe', paused: 'text-suspect', ended: 'text-flash' };
 
+/** Screens already drawn in the game style (the rest follow during Phase 4). */
+export const STYLED: ReadonlySet<ScreenId> = new Set<ScreenId>([1, 3]);
+
 /** One wall screen. Phase 3: raw data as plain lists. Sizes scale with the panel (container query units). */
 export function ScreenPanel({ id }: { id: ScreenId }) {
   const { snapshot } = useGame();
 
-  // Screens already drawn in the game style. The rest still show raw data until their turn in Phase 4.
-  if (id === 3) {
+  if (STYLED.has(id)) {
     return (
       <section className="panel relative h-full w-full overflow-hidden bg-[#0c0922]">
-        <BuildingScreen screen={id} />
+        <BuildingScreen screen={id as BuildingScreenId} />
       </section>
     );
   }
