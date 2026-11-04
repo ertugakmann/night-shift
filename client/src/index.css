@@ -116,6 +116,7 @@ body {
 .power-on { animation: power-on 700ms steps(1, end) forwards; }
 .fade-up { animation: fade-up 900ms ease-out both; }
 .rain { animation: rain 0.9s linear infinite; }
+.cheer { animation: cheer 0.55s ease-in-out infinite alternate; }
 .steam { animation: steam 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: bottom center; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -151,6 +152,7 @@ body {
   40% { opacity: 0.55; }
   100% { opacity: 0; transform: translateY(-26px) scaleY(1.15); }
 }
+@keyframes cheer { from { transform: translateY(0); } to { transform: translateY(-34px); } }
 @keyframes danger-pulse { from { opacity: 0.6; } to { opacity: 1; } }
 @keyframes pendulum { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
 @keyframes note-float {
@@ -161,7 +163,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .spin-slow, .spin-slow-reverse, .sway, .bob, .breathe, .blink, .flame, .flicker,
-  .shimmer, .lamp-glow, .sneak, .glance, .march, .pendulum, .note-float, .danger-pulse, .rain, .steam, .scanline {
+  .shimmer, .lamp-glow, .sneak, .glance, .march, .pendulum, .note-float, .danger-pulse, .rain, .steam, .scanline, .cheer {
     animation: none !important;
   }
   .dust { animation: none !important; opacity: 0.2; }

@@ -415,7 +415,7 @@ function GreatLens() {
 }
 
 /** The Crown Ledger (patient records): the great round vault door, with the ledger emblem at its heart. */
-function VaultDoor() {
+export function VaultDoor() {
   const bolts = Array.from({ length: 16 }, (_, i) => (i / 16) * Math.PI * 2);
   return (
     <g>

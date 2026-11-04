@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { Snapshot } from '@night-shift/shared';
 import { selectRoom, useGame } from '../net/game';
 import { RealityStrip, type StripMode } from '../reality/RealityStrip';
+import { ScreenEndWash } from '../end/EndMoment';
 import { ActionPopup } from './ActionPopup';
 import { Cctv } from './Cctv';
 import { GuardCards } from './Guards';
@@ -146,6 +147,7 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
           {selected && <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} reality={reality} />}
         </g>
       )}
+      <ScreenEndWash screen={2} rect={{ x: 0, y: 0, w: 1600, h: 900 }} reality={reality} />
       {reality && <RealityStrip x0={0} y={832} mode={strip} screen={2} />}
     </svg>
   );

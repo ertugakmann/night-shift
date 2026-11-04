@@ -1,5 +1,5 @@
 // Screen 5 extras: the museum clock and care gauge in the stone tower, the patient impact plaques,
-// the red glow that builds as the gang closes in on the Vault, and the end-of-night banner.
+// and the red glow that builds as the gang closes in on the Vault.
 import { IMPACT_LABELS, IMPACT_TYPES, type ImpactType, type Snapshot } from '@night-shift/shared';
 import { gameClock, worldOf } from '../game/view';
 import { CLOCK_TOWER, SLICE_H, SLICE_W, type Rect } from './layout';
@@ -214,25 +214,6 @@ export function DangerGlow({ snapshot, slice, uid }: { snapshot: Snapshot; slice
   );
 }
 
-/** End of the night: a big plaque over the Vault. */
-export function OutcomeBanner({ snapshot }: { snapshot: Snapshot }) {
-  const outcome = snapshot.outcome;
-  if (!outcome) return null;
-  const won = outcome.result === 'won';
-  const cx = 5384;
-  return (
-    <g className="game-text" pointerEvents="none">
-      <rect x={cx - 520} y={330} width={1040} height={150} rx={24} fill="#17123a" opacity={0.92} stroke={won ? '#3ee0d8' : '#ff6b6b'} strokeWidth={6} />
-      <text x={cx} y={398} textAnchor="middle" fontSize={50} fontWeight={700} fill={won ? '#3ee0d8' : '#ff6b6b'}>
-        {outcome.reason}
-      </text>
-      <text x={cx} y={446} textAnchor="middle" fontSize={26} fill="#e8e0ff" opacity={0.85}>
-        {outcome.real}
-      </text>
-    </g>
-  );
-}
-
 export function VaultExtras({ snapshot, slice, uid }: { snapshot: Snapshot; slice: Rect; uid: string }) {
   return (
     <>
@@ -241,7 +222,6 @@ export function VaultExtras({ snapshot, slice, uid }: { snapshot: Snapshot; slic
       <CareGauge snapshot={snapshot} />
       <ImpactPlaques snapshot={snapshot} />
       <DangerGlow snapshot={snapshot} slice={slice} uid={uid} />
-      <OutcomeBanner snapshot={snapshot} />
     </>
   );
 }

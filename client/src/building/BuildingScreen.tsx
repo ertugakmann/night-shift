@@ -20,12 +20,14 @@ import {
 } from './layout';
 import { INTRUDER_SCALE, Room } from './Room';
 import { VaultExtras } from './VaultExtras';
+import { BuildingEnd, useDawnDelay } from '../end/EndMoment';
 
 /** A building screen: its slice of the one continuous museum floor plan. */
 export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
   const { snapshot, selected } = useGame();
   const uid = useId().replace(/:/g, '');
   const slice = sliceRect(screen);
+  const dawnDelay = useDawnDelay(screen);
   if (!snapshot) return <svg viewBox={`${slice.x} 0 ${SLICE_W} ${SLICE_H}`} className="h-full w-full" />;
 
   const w = worldOf(snapshot);
@@ -52,6 +54,7 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
           uid={uid}
           selected={selected === room.id}
           onSelect={(id) => selectRoom(selected === id ? null : id)}
+          dawnDelay={dawnDelay}
         />
       ))}
       {doors.map((d) => (
@@ -63,6 +66,7 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
       <Guards snapshot={snapshot} uid={uid} />
       <Dust slice={slice} />
       {screen === 5 && <VaultExtras snapshot={snapshot} slice={slice} uid={uid} />}
+      <BuildingEnd screen={screen} slice={slice} snapshot={snapshot} />
     </svg>
   );
 }
@@ -252,11 +256,14 @@ function GuardSprite({ snapshot, id, uid }: { snapshot: Snapshot; id: string; ui
   const last = useRef({ x: pose.x, facing: 1 as 1 | -1 });
   if (Math.abs(pose.x - last.current.x) > 0.5) last.current.facing = pose.x < last.current.x ? -1 : 1;
   last.current.x = pose.x;
+  const cheer = snapshot.outcome?.result === 'won';
   return (
     <motion.g initial={false} animate={{ x: pose.x, y: pose.y }} transition={{ duration: 0.12, ease: 'linear' }}>
       <circle r={150} cy={-40} fill={`url(#${uid}-glow)`} className="flicker" />
-      <g transform={`scale(${GUARD_SCALE})`}>
-        <GuardArt id={id} raised={pose.raised} walking={pose.walking} facing={last.current.facing} />
+      <g className={cheer ? 'cheer' : undefined} style={cheer ? { animationDelay: `${(id.length % 3) * -0.17}s` } : undefined}>
+        <g transform={`scale(${GUARD_SCALE})`}>
+          <GuardArt id={id} raised={pose.raised || cheer} walking={pose.walking} facing={last.current.facing} />
+        </g>
       </g>
       <NameTag name={guard.name} y={-170} />
     </motion.g>

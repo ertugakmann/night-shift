@@ -1,3 +1,4 @@
+import benchmarksJson from '../scenario/benchmarks.json';
 import demoJson from '../scenario/demo.json';
 import type { ScreenId } from './screens';
 
@@ -93,6 +94,9 @@ export interface Scenario {
 }
 
 export const DEMO: Scenario = demoJson as unknown as Scenario;
+
+/** Care continuity from test runs, for the comparison line on the end screen ("Average 72%, best 86%"). */
+export const BENCHMARKS: { averageCare: number; bestCare: number } = benchmarksJson;
 
 const scenarios = new Map<string, Scenario>([[DEMO.id, DEMO]]);
 

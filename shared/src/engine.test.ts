@@ -289,3 +289,41 @@ describe('intents', () => {
     expect(reset).toEqual(initialState());
   });
 });
+
+describe('end of night summary', () => {
+  it('an idle night: never detected, every bark ignored, care collapses after the loss', () => {
+    const s = idleNight();
+    const sum = s.outcome!.summary;
+    expect(sum.mttdMs).toBeNull();
+    expect(sum.mttrMs).toBeNull();
+    expect(s.stats.rexFollowed).toBe(0);
+    expect(s.stats.rexIgnored).toBe(s.stats.barks);
+    expect(s.stats.rexIgnoredRight).toBe(s.stats.barks - s.stats.wrongBarks);
+    expect(sum.careContinuity).toBeLessThan(60);
+  });
+
+  it('a quick catch: MTTD from break-in to spotted, MTTR from spotted to trapped', () => {
+    let s = act(runUntil(started(), (x) => x.brokenIn), 'patrol', 'mail-room', 'tom');
+    s = act(s, 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.groups[0].spotted);
+    const { brokenInMs, firstSpottedMs, containedMs } = s.stats;
+    expect(firstSpottedMs).not.toBeNull();
+    expect(containedMs).not.toBeNull();
+
+    s = act(s, 'evict', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.phase === 'ended');
+    const sum = s.outcome!.summary;
+    expect(sum.mttdMs).toBe(firstSpottedMs! - brokenInMs!);
+    expect(sum.mttrMs).toBe(Math.max(0, containedMs! - firstSpottedMs!));
+    expect(sum.careContinuity).toBeGreaterThan(95);
+  });
+
+  it('containment is undone when a group roams free again', () => {
+    let s = act(runUntil(started(), (x) => x.brokenIn), 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.stats.containedMs !== null);
+    const free: GameState = JSON.parse(JSON.stringify(s));
+    free.rooms['mail-room'].locked = false;
+    const after = advance(free, 100);
+    expect(after.stats.containedMs).toBeNull();
+  });
+});

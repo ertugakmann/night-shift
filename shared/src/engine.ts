@@ -102,11 +102,22 @@ export interface Fx {
 /** How many recent effects are kept. */
 const FX_KEEP = 12;
 
+/** End-of-night numbers, fixed the moment the night ends. All times are game-clock ms since 00:00. */
+export interface NightSummary {
+  /** Care continuity: the care score averaged over the whole night, 0–100. After a lost night the hours left until dawn count as 0. */
+  careContinuity: number;
+  /** Mean time to detect: break-in until the gang is first spotted. Null if never spotted. */
+  mttdMs: number | null;
+  /** Mean time to respond: first spotted until the gang is stopped (all trapped or evicted). Null if never stopped. */
+  mttrMs: number | null;
+}
+
 export interface Outcome {
   result: 'won' | 'lost';
   reason: string;
   real: string;
   atMs: number;
+  summary: NightSummary;
 }
 
 export interface GameState {
@@ -145,6 +156,8 @@ export interface GameState {
     mistakeDone: boolean;
     /** Rooms Rex is barking at whose bark the player has already acted on. */
     followed: RoomId[];
+    /** Rooms Rex is barking at right now, with whether the gang really was there when the bark started. */
+    barking: Partial<Record<RoomId, boolean>>;
   };
 
   stats: {
@@ -158,6 +171,15 @@ export interface GameState {
     wrongBarks: number;
     rexFollowed: number;
     rexFollowedWrong: number;
+    /** Barks that ended without the player acting on them, and how many of those were right. */
+    rexIgnored: number;
+    rexIgnoredRight: number;
+    /** Game time the gang broke in, was first spotted, and was last fully stopped (null while any group roams free). */
+    brokenInMs: number | null;
+    firstSpottedMs: number | null;
+    containedMs: number | null;
+    /** Care score integrated over time (score × ms), for care continuity. */
+    careMs: number;
   };
 
   log: LogEntry[];
@@ -195,7 +217,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     care: 100,
     lowestCare: 100,
     impact: Object.fromEntries(IMPACT_TYPES.map((t) => [t, 0])) as Record<ImpactType, number>,
-    rex: { estimates: perRoom(() => 0), mistake: null, mistakeDone: false, followed: [] },
+    rex: { estimates: perRoom(() => 0), mistake: null, mistakeDone: false, followed: [], barking: {} },
     stats: {
       dispatches: 0,
       patrols: 0,
@@ -207,6 +229,12 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
       wrongBarks: 0,
       rexFollowed: 0,
       rexFollowedWrong: 0,
+      rexIgnored: 0,
+      rexIgnoredRight: 0,
+      brokenInMs: null,
+      firstSpottedMs: null,
+      containedMs: null,
+      careMs: 0,
     },
     log: [],
     nextLogId: 1,
@@ -298,6 +326,7 @@ function tick(s: GameState, w: World): void {
   // Scheduled events.
   if (!s.brokenIn && now >= ms.breakIn) {
     s.brokenIn = true;
+    s.stats.brokenInMs = now;
     addGroup(s, sc.intruders.entryRoom, [sc.intruders.entryRoom]);
     s.nextSpreadMs = ms.breakIn + ms.spreadTick;
   }
@@ -322,6 +351,7 @@ function tick(s: GameState, w: World): void {
   }
 
   revealLitRooms(s, w);
+  updateContainment(s);
   updateCare(s, w);
 
   if (now >= ms.night) {
@@ -413,7 +443,7 @@ function updateRooms(s: GameState, w: World): void {
     else rs.occupiedMs = 0;
 
     if (room.special === 'vault' && rs.occupiedMs >= w.ms.vaultLose) {
-      end(s, 'lost', 'The gang cracked the Vault.', 'Major incident declared: patient records encrypted, ambulances diverted.');
+      end(s, 'lost', 'The gang cracked the Vault.', 'Major incident declared: ambulances diverted.');
       return;
     }
     if (!rs.dark && rs.occupiedMs >= w.ms.vandalise) vandalise(s, w, room.id);
@@ -491,12 +521,15 @@ function updateRex(s: GameState, w: World): void {
   for (const room of w.sc.rooms) {
     const barking = next[room.id] >= cfg.barkThreshold;
     const wasBarking = previous[room.id] >= cfg.barkThreshold;
+    const fresh = barking && (!wasBarking || room.id === mistakeStarts);
+    // A bark ends when Rex calms down (or barks anew): if nobody acted on it, it was ignored.
+    if (wasBarking && (!barking || fresh)) closeBark(s, room.id);
     // The mistake always gets its own bark, even if Rex was still on edge about that room.
-    if (barking && (!wasBarking || room.id === mistakeStarts)) {
+    if (fresh) {
       const truth = busy.has(room.id);
       s.stats.barks++;
       if (!truth) s.stats.wrongBarks++;
-      s.rex.followed = s.rex.followed.filter((id) => id !== room.id);
+      s.rex.barking[room.id] = truth;
       log(s, {
         kind: 'rex',
         speaker: 'Rex',
@@ -508,6 +541,25 @@ function updateRex(s: GameState, w: World): void {
     }
   }
   s.rex.estimates = next;
+}
+
+/** Trust analysis: a bark that ends without the player acting on it counts as ignored. */
+function closeBark(s: GameState, room: RoomId): void {
+  const truth = s.rex.barking[room];
+  if (truth !== undefined && !s.rex.followed.includes(room)) {
+    s.stats.rexIgnored++;
+    if (truth) s.stats.rexIgnoredRight++;
+  }
+  delete s.rex.barking[room];
+  s.rex.followed = s.rex.followed.filter((id) => id !== room);
+}
+
+/** The gang is stopped when every group is trapped behind locked doors. Escaping (master keys) undoes it. */
+function updateContainment(s: GameState): void {
+  if (!s.brokenIn || s.groups.length === 0) return;
+  const trapped = s.groups.every((g) => s.rooms[g.room].locked);
+  if (!trapped) s.stats.containedMs = null;
+  else if (s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
 }
 
 // ---------- Guards ----------
@@ -537,6 +589,7 @@ function revealLitRooms(s: GameState, w: World): void {
     if (!guardId || g.spotted) continue;
     g.spotted = true;
     s.stats.spotted++;
+    if (s.stats.firstSpottedMs === null) s.stats.firstSpottedMs = s.timeMs;
     fx(s, 'spotted', g.room);
     const guard = s.guards.find((x) => x.id === guardId)!;
     if (guard.task && !guard.task.found) {
@@ -642,14 +695,29 @@ function updateCare(s: GameState, w: World): void {
   }
   s.care = Math.max(0, Math.min(100, 100 - loss));
   s.lowestCare = Math.min(s.lowestCare, s.care);
+  s.stats.careMs += s.care * STEP_MS;
 }
 
 function end(s: GameState, result: Outcome['result'], reason: string, real: string): void {
   if (s.phase === 'ended') return;
   s.phase = 'ended';
-  s.outcome = { result, reason, real, atMs: s.timeMs };
+  for (const room of Object.keys(s.rex.barking)) closeBark(s, room);
+  if (s.groups.length === 0 && s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
+  s.outcome = { result, reason, real, atMs: s.timeMs, summary: summarise(s, result) };
   for (const rs of Object.values(s.rooms)) rs.litBy = null;
   log(s, { kind: 'event', text: reason, real });
+}
+
+function summarise(s: GameState, result: Outcome['result']): NightSummary {
+  const night = world(s.scenarioId).ms.night;
+  // An early win keeps the current care until dawn; a major incident means none until dawn.
+  const rest = Math.max(0, night - s.timeMs) * (result === 'won' ? s.care : 0);
+  const { brokenInMs, firstSpottedMs, containedMs } = s.stats;
+  return {
+    careContinuity: Math.round((s.stats.careMs + rest) / night),
+    mttdMs: brokenInMs !== null && firstSpottedMs !== null ? firstSpottedMs - brokenInMs : null,
+    mttrMs: firstSpottedMs !== null && containedMs !== null ? Math.max(0, containedMs - firstSpottedMs) : null,
+  };
 }
 
 // ---------- Intents ----------

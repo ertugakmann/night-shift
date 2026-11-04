@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { SCREENS, type Snapshot } from '@night-shift/shared';
 import { BEAT, after, powerOnAt } from '../intro/timeline';
+import { useEndMoment } from '../end/useEndMoment';
 import { BEZEL, DESK, MONITORS, MONITOR_ORDER, STAGE_H, STAGE_W } from './layout';
 
 const GOLD = '#f2c65e';
@@ -11,7 +12,11 @@ const GOLD_DARK = '#c9913c';
 const WOOD = '#6b4630';
 const WOOD_DARK = '#4a2f20';
 
+/** The window: night and rain, then dawn breaking (won) or the alarm's red glow (lost). */
 function Window() {
+  const { outcome, fresh } = useEndMoment();
+  const dawn = outcome?.result === 'won';
+  const alarm = outcome?.result === 'lost';
   const drops = useMemo(() => {
     let seed = 11;
     const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
@@ -30,6 +35,7 @@ function Window() {
         {[470, 610, 880, 990].map((x) => (
           <circle key={x} cx={x} cy={22 + (x % 3) * 6} r={1.6} fill="#fff4d2" opacity={0.7} />
         ))}
+        <motion.g initial={false} animate={{ opacity: dawn ? 0 : 1 }} transition={{ duration: fresh ? 3 : 0 }}>
         {drops.map((d, i) => (
           <line
             key={i}
@@ -44,7 +50,25 @@ function Window() {
             style={{ animationDelay: `${-d.d}s` }}
           />
         ))}
+        </motion.g>
+        {dawn && (
+          <motion.g initial={fresh ? { opacity: 0 } : false} animate={{ opacity: 1 }} transition={{ duration: 3, delay: 0.5 }}>
+            <rect x={410} y={12} width={780} height={40} fill="url(#wall-dawn)" />
+            <motion.g initial={fresh ? { y: 34 } : false} animate={{ y: 0 }} transition={{ duration: 3.5, delay: 0.8, ease: 'easeOut' }}>
+              <circle cx={1040} cy={50} r={22} fill="#ffd27a" />
+              <circle cx={1040} cy={50} r={34} fill="#ffd27a" opacity={0.3} />
+            </motion.g>
+          </motion.g>
+        )}
+        {alarm && <rect x={410} y={12} width={780} height={40} fill="#ff6b6b" opacity={0.55} className="danger-pulse" />}
       </g>
+      <defs>
+        <linearGradient id="wall-dawn" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#8fb8f0" />
+          <stop offset="0.55" stopColor="#ffb3a0" />
+          <stop offset="1" stopColor="#ffd27a" />
+        </linearGradient>
+      </defs>
       {[600, 800, 1000].map((x) => (
         <rect key={x} x={x - 3} y={12} width={6} height={40} fill="#3a2f6e" />
       ))}

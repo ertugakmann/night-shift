@@ -108,20 +108,29 @@ function Exhibits({ layout }: { layout: RoomLayout }) {
   );
 }
 
-/** One room: dark by default, filled with warm lantern light while a guard patrols it. */
-export function Room({ room, snapshot, uid, selected, onSelect }: {
+/**
+ * One room: dark by default, filled with warm lantern light while a guard patrols it.
+ * At dawn (night won) the same warm light fills every room, sweeping in from the east, after `dawnDelay` s.
+ */
+export function Room({ room, snapshot, uid, selected, onSelect, dawnDelay = 0 }: {
   room: RoomData;
   snapshot: Snapshot;
   uid: string;
   selected: boolean;
   onSelect: (id: string) => void;
+  dawnDelay?: number;
 }) {
   const layout = ROOMS[room.id];
   const rs = snapshot.rooms[room.id];
   const { rect } = layout;
   const lighter = rs.litBy ? snapshot.guards.find((g) => g.id === rs.litBy) : undefined;
-  const lit = !!lighter;
-  const center = lighter ? guardPose(lighter) : layout.anchor;
+  const dawn = snapshot.outcome?.result === 'won';
+  const lantern = !!lighter;
+  const lit = lantern || dawn;
+  // At dawn the name turns to its daylight colours once the light has reached the label (west side).
+  const labelDelay = dawn && !lantern ? dawnDelay + 1.6 : 0;
+  // Daylight comes in from the east wall; a lantern lights from the guard.
+  const center = lighter ? guardPose(lighter) : dawn ? { x: rect.x + rect.w, y: rect.y + rect.h / 2 } : layout.anchor;
   // The mask gradient is solid to 72% of the radius, so this lights the whole room with a soft edge.
   const radius = farthestCorner(center.x, center.y, rect) / 0.72 + 40;
   const status: 'ok' | 'closed' | 'broken' = rs.dark ? 'broken' : rs.locked ? 'closed' : 'ok';
@@ -146,7 +155,7 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
             fill={`url(#${uid}-lightmask)`}
             initial={false}
             animate={{ r: lit ? radius : 0.01 }}
-            transition={lit ? LIGHT_SPRING : LIGHT_OUT}
+            transition={lantern ? LIGHT_SPRING : dawn ? { duration: 2.6, delay: dawnDelay, ease: 'easeInOut' } : LIGHT_OUT}
           />
         </mask>
       </defs>
@@ -186,7 +195,7 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
               <Exhibits layout={layout} />
             </g>
             <AnimatePresence>
-              {lit &&
+              {lantern &&
                 groups.map((g, i) => {
                   const spot = layout.spots[i % layout.spots.length];
                   const scale = INTRUDER_SCALE * (layout.corridor ? 0.85 : 1);
@@ -281,7 +290,7 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
             fill={lit ? '#f6e3b0' : '#3a2f6e'}
             stroke="#f2c65e"
             strokeWidth={5}
-            style={{ transition: 'fill 500ms ease' }}
+            style={{ transition: `fill 500ms ease ${labelDelay}s` }}
           />
         )}
         <text
@@ -290,7 +299,7 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
           fontSize={NAME_SIZE}
           fontWeight={600}
           fill={lit ? '#5a3a22' : '#d8cffd'}
-          style={{ transition: 'fill 500ms ease' }}
+          style={{ transition: `fill 500ms ease ${labelDelay}s` }}
         >
           {room.name}
         </text>
@@ -301,7 +310,7 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
           fontWeight={500}
           fill={lit ? '#7a5638' : '#a99ce6'}
           opacity={lit ? 0.85 : 0.7}
-          style={{ transition: 'fill 500ms ease, opacity 500ms ease' }}
+          style={{ transition: `fill 500ms ease ${labelDelay}s, opacity 500ms ease ${labelDelay}s` }}
         >
           {room.real}
         </text>

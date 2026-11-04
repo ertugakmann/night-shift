@@ -9,7 +9,8 @@ import { DOORS, ROOMS, SLICE_H, SLICE_W, intersects, sliceRect, type BuildingScr
 import { wrap } from '../desk/util';
 import { worldOf } from '../game/view';
 import { selectRoom, useGame } from '../net/game';
-import { DangerGlow, OutcomeBanner } from '../building/VaultExtras';
+import { DangerGlow } from '../building/VaultExtras';
+import { BuildingEnd } from '../end/EndMoment';
 import { RealityStrip, type StripMode } from './RealityStrip';
 import { RealityVaultPanel } from './RealityVaultPanel';
 
@@ -308,7 +309,7 @@ export function RealityBuilding({ screen, strip = 'split' }: { screen: BuildingS
       })}
 
       {screen === 5 && <DangerGlow snapshot={snapshot} slice={slice} uid={uid} />}
-      {screen === 5 && <OutcomeBanner snapshot={snapshot} />}
+      <BuildingEnd screen={screen} slice={slice} snapshot={snapshot} reality />
     </svg>
   );
 }
