@@ -3,24 +3,24 @@ import { BuildingScreen } from '../building/BuildingScreen';
 import { DeskScreen } from '../desk/DeskScreen';
 import { IntroOverlay } from '../intro/IntroOverlay';
 import { RealityBuilding } from '../reality/RealityBuilding';
+import type { StripMode } from '../reality/RealityStrip';
 import { RealitySwitch } from '../reality/RealitySwitch';
 import { ControlCodeCard } from './ControlCodeCard';
 
 /**
  * One wall screen, drawn as an SVG scene that scales cleanly: full screen on the real wall, or inside a
  * small monitor in /wall. Screens 1, 3, 4, 5 are slices of the building; screen 2 is the head guard's desk.
+ * "Lights on" (L) flips each one into its reality view as the wave reaches it.
+ *
+ * `strip`: how the Input → NIGHT SHIFT → Output strip shows in the reality view. 'split' on the real
+ * wall (one line across the five screens), 'full' in /preview, 'none' inside /wall (the office shows it).
  */
-export function ScreenPanel({ id, embedded = false }: { id: ScreenId; embedded?: boolean }) {
+export function ScreenPanel({ id, embedded = false, strip = 'split' }: { id: ScreenId; embedded?: boolean; strip?: StripMode }) {
+  const museum = id === 2 ? <DeskScreen /> : <BuildingScreen screen={id} />;
+  const reality = id === 2 ? <DeskScreen reality strip={strip} /> : <RealityBuilding screen={id} strip={strip} />;
   return (
     <section className="panel relative h-full w-full overflow-hidden bg-[#0c0922]">
-      {id === 2 ? (
-        <DeskScreen />
-      ) : id === 3 ? (
-        // Reality view: screen 3 first, to agree the look. The others follow once it is approved.
-        <RealitySwitch id={id} museum={<BuildingScreen screen={id} />} reality={<RealityBuilding screen={id} />} />
-      ) : (
-        <BuildingScreen screen={id} />
-      )}
+      <RealitySwitch id={id} museum={museum} reality={reality} />
       {id === 2 && <ControlCodeCard />}
       <IntroOverlay id={id} quiet={embedded} />
     </section>

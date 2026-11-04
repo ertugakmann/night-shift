@@ -1,5 +1,5 @@
 import type { Snapshot } from '@night-shift/shared';
-import { theRoom } from '@night-shift/shared';
+import { ACTION_REAL, theRoom } from '@night-shift/shared';
 import { GuardArt } from '../building/Characters';
 import { ACTION_LABEL, worldOf } from '../game/view';
 import { truncate } from './util';
@@ -13,7 +13,7 @@ const GAP = 12;
 const RING: Record<string, string> = { sam: '#3ee0d8', priya: '#ff9ec7', tom: '#a8e07a' };
 
 /** ID badges for the three guards: portrait, name, what they are doing, and a progress ring. */
-export function GuardCards({ snapshot }: { snapshot: Snapshot }) {
+export function GuardCards({ snapshot, reality = false }: { snapshot: Snapshot; reality?: boolean }) {
   const w = worldOf(snapshot);
   return (
     <g className="game-text">
@@ -27,27 +27,40 @@ export function GuardCards({ snapshot }: { snapshot: Snapshot }) {
         const cy = y + H / 2;
         const r = 58;
         const circumference = 2 * Math.PI * r;
-        const where = theRoom(w.room.get(task ? task.room : g.room)!.name);
+        const here = w.room.get(task ? task.room : g.room)!;
+        const where = reality ? here.real : theRoom(here.name);
         const status = task
-          ? `${ACTION_LABEL[task.action]} · ${where}`
-          : `Free · ${where}`;
+          ? `${reality ? ACTION_REAL[task.action] : ACTION_LABEL[task.action]} · ${where}`
+          : `${reality ? 'Available' : 'Free'} · ${where}`;
         const clipId = `portrait-${g.id}`;
         return (
           <g key={g.id}>
             {/* badge card with a clip */}
-            <rect x={X} y={y} width={W} height={H} rx={20} fill="#fff4e0" />
+            <rect x={X} y={y} width={W} height={H} rx={reality ? 12 : 20} fill={reality ? '#0d1729' : '#fff4e0'} />
             <rect x={X} y={y} width={W} height={H} rx={20} fill="none" stroke={task ? '#f2994a' : RING[g.id]} strokeWidth={5} />
-            <rect x={X + W / 2 - 30} y={y - 10} width={60} height={18} rx={6} fill="#c9913c" />
+            {!reality && <rect x={X + W / 2 - 30} y={y - 10} width={60} height={18} rx={6} fill="#c9913c" />}
             {/* portrait */}
             <clipPath id={clipId}>
               <circle cx={cx} cy={cy} r={r - 6} />
             </clipPath>
             <circle cx={cx} cy={cy} r={r - 6} fill="#2c2468" />
-            <g clipPath={`url(#${clipId})`}>
-              <g transform={`translate(${cx},${cy + 92}) scale(1.35)`}>
-                <GuardArt id={g.id} raised={false} walking={false} facing={1} />
+            {reality ? (
+              // analyst avatar: initial and headset, as on the building screens
+              <g transform={`translate(${cx},${cy})`}>
+                <text y={14} textAnchor="middle" fontSize={40} fontWeight={700} fill="#3ee0d8">
+                  {g.name[0]}
+                </text>
+                <path d="M-30 -6 A30 30 0 0 1 30 -6" fill="none" stroke="#cfe0f5" strokeWidth={5} />
+                <rect x={-36} y={-8} width={10} height={18} rx={4} fill="#cfe0f5" />
+                <rect x={26} y={-8} width={10} height={18} rx={4} fill="#cfe0f5" />
               </g>
-            </g>
+            ) : (
+              <g clipPath={`url(#${clipId})`}>
+                <g transform={`translate(${cx},${cy + 92}) scale(1.35)`}>
+                  <GuardArt id={g.id} raised={false} walking={false} facing={1} />
+                </g>
+              </g>
+            )}
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e8dcc8" strokeWidth={8} />
             {task && (
               <circle
@@ -63,10 +76,10 @@ export function GuardCards({ snapshot }: { snapshot: Snapshot }) {
               />
             )}
             {/* name and status */}
-            <text x={X + 168} y={y + 58} fontSize={32} fontWeight={700} fill="#2a1d5c">
-              {g.name}
+            <text x={X + 168} y={y + 58} fontSize={reality ? 28 : 32} fontWeight={700} fill={reality ? '#e6edf7' : '#2a1d5c'}>
+              {reality ? `Analyst ${g.name}` : g.name}
             </text>
-            <text x={X + 168} y={y + 94} fontSize={19} fill="#5a4a7a">
+            <text x={X + 168} y={y + 94} fontSize={19} fill={reality ? '#7f8ea8' : '#5a4a7a'}>
               {truncate(status, 24)}
             </text>
             <text x={X + 168} y={y + 128} fontSize={19} fontWeight={600} fill={task ? '#c96a1a' : '#1f9c94'}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { animate, motion, useMotionValue } from 'motion/react';
+import { AnimatePresence, animate, motion, useMotionValue } from 'motion/react';
 import type { ScreenId } from '@night-shift/shared';
 import { ScreenPanel } from '../components/ScreenPanel';
 import { ActionPopup } from '../desk/ActionPopup';
@@ -7,6 +7,8 @@ import { selectRoom, useGame } from '../net/game';
 import { DESK, MONITORS, MONITOR_ORDER, STAGE_H, STAGE_W, focusBox, pct, type Focus, type MonitorId } from '../wall/layout';
 import { OfficeBack, OfficeFront } from '../wall/OfficeScene';
 import { WallIntro } from '../wall/WallIntro';
+import { RealityStrip } from '../reality/RealityStrip';
+import { SWEEP_MS, WAVE_STEP_MS } from '../reality/useRealityWave';
 
 const MAX_ZOOM = 6;
 const GLIDE = { duration: 0.55, ease: [0.4, 0, 0.2, 1] } as const; // within the 400–700 ms brief
@@ -50,6 +52,14 @@ export function WallPage() {
   const y = useMotionValue(0);
   const scale = useMotionValue(1);
   const [zoomed, setZoomed] = useState(false);
+  // The strip arrives as the wave reaches the last screen, and leaves as soon as the wave starts back.
+  const reality = snapshot?.reality ?? false;
+  const [stripShown, setStripShown] = useState(reality);
+  useEffect(() => {
+    if (!reality) return setStripShown(false);
+    const t = setTimeout(() => setStripShown(true), 4 * WAVE_STEP_MS + SWEEP_MS * 0.6);
+    return () => clearTimeout(t);
+  }, [reality]);
 
   // Stage pixels per stage unit, kept up to date as the window resizes.
   useLayoutEffect(() => {
@@ -181,7 +191,7 @@ export function WallPage() {
 
           {MONITOR_ORDER.map((id) => (
             <div key={id} className="absolute overflow-hidden rounded-[4px]" style={pct(MONITORS[id])}>
-              <ScreenPanel id={id} embedded />
+              <ScreenPanel id={id} embedded strip="none" />
               {focus !== id && (
                 // In the office (or zoomed elsewhere) a click on a monitor glides into it.
                 <button
@@ -198,7 +208,7 @@ export function WallPage() {
           ))}
 
           <div className="absolute overflow-hidden rounded-[10px]" style={pct(DESK)}>
-            <ScreenPanel id={2} embedded />
+            <ScreenPanel id={2} embedded strip="none" />
           </div>
 
           <OfficeFront snapshot={snapshot} />
@@ -208,15 +218,32 @@ export function WallPage() {
         {monitorFocus && snapshot && selected && (
           <svg viewBox={`0 0 ${STAGE_W} ${STAGE_H}`} className="pointer-events-none absolute inset-0 z-20 h-full w-full">
             <g style={{ pointerEvents: 'auto' }}>
-              <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} floating />
+              <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} floating reality={snapshot.reality} />
             </g>
           </svg>
         )}
 
+        {/* Lights on: the whole Input → NIGHT SHIFT → Output strip, once, over the window at the top of the office */}
+        <AnimatePresence>
+          {stripShown && (
+            <motion.svg
+              key="strip"
+              viewBox={`0 0 ${STAGE_W} ${STAGE_H}`}
+              className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+              initial={{ opacity: 0, y: -30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+            >
+              <RealityStrip x0={0} y={0} mode="full" screen={1} />
+            </motion.svg>
+          )}
+        </AnimatePresence>
+
         <WallIntro snapshot={snapshot} />
 
         {/* camera controls */}
-        <div className="game-text absolute top-3 left-3 z-30 flex gap-2">
+        <div className="game-text absolute bottom-3 left-3 z-30 flex gap-2">
           {zoomed && (
             <button
               type="button"

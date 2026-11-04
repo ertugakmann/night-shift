@@ -6,6 +6,8 @@ import { guardPose } from './geometry';
 import { ROOMS, type Rect, type RoomLayout } from './layout';
 
 const LIGHT_SPRING = { type: 'spring', stiffness: 26, damping: 11 } as const;
+// Closing uses an ease, not the spring: a spring overshoots below zero and SVG rejects a negative radius.
+const LIGHT_OUT = { duration: 0.6, ease: 'easeIn' } as const;
 const WALL = 16;
 /** Room name and real system name sizes, in plan units (1600 wide → ×1.2 on a 1080p screen: 48 px and 29 px). */
 const NAME_SIZE = 40;
@@ -143,8 +145,8 @@ export function Room({ room, snapshot, uid, selected, onSelect }: {
             cy={center.y}
             fill={`url(#${uid}-lightmask)`}
             initial={false}
-            animate={{ r: lit ? radius : 0 }}
-            transition={LIGHT_SPRING}
+            animate={{ r: lit ? radius : 0.01 }}
+            transition={lit ? LIGHT_SPRING : LIGHT_OUT}
           />
         </mask>
       </defs>

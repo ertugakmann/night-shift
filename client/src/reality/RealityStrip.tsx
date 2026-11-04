@@ -1,46 +1,141 @@
+import type { ScreenId } from '@night-shift/shared';
+
 /**
- * How NIGHT SHIFT plugs into a modular SOC: what goes in, what comes out. Drawn along the bottom of the
- * screen in the reality view, in plan units (x0 is the left edge of the screen's 1600-unit slice).
+ * How NIGHT SHIFT plugs into a modular SOC: what goes in, what comes out.
+ * - 'full': the whole strip on one screen (/preview, /wall).
+ * - 'split': the strip runs across the five real-room screens as one line: INPUT on screen 1,
+ *   NIGHT SHIFT in the middle on screen 3, OUTPUT on screen 5, flow arrows on 2 and 4.
+ * Drawn in plan units; x0 is the left edge of the screen's 1600-unit area.
  */
-export function RealityStrip({ x0, y = 826 }: { x0: number; y?: number }) {
-  const inputs = ['SOC alerts', 'Staff reports', 'Network data'];
-  const outputs = ['Containment actions', 'AI trust insight', 'Shift handover report'];
-  const chip = (x: number, label: string, w: number) => (
-    <g key={label}>
+export type StripMode = 'full' | 'split' | 'none';
+
+const INPUTS = ['SOC alerts', 'Staff reports', 'Network data'];
+const OUTPUTS = ['Containment actions', 'AI trust insight', 'Shift handover report'];
+const H = 68;
+
+function Chip({ x, y, label, w, size = 17 }: { x: number; y: number; label: string; w: number; size?: number }) {
+  return (
+    <g>
       <rect x={x} y={y + 16} width={w} height={36} rx={18} fill="#13233d" stroke="#2f4a73" strokeWidth={2} />
-      <text x={x + w / 2} y={y + 40} textAnchor="middle" fontSize={17} fontWeight={600} fill="#cfe0f5">
+      <text x={x + w / 2} y={y + 40} textAnchor="middle" fontSize={size} fontWeight={600} fill="#cfe0f5">
         {label}
       </text>
     </g>
   );
-  const arrow = (x: number) => (
-    <g key={`a${x}`}>
-      <line x1={x} y1={y + 34} x2={x + 34} y2={y + 34} stroke="#3ee0d8" strokeWidth={4} strokeDasharray="6 6" className="march" />
-      <path d={`M${x + 32} ${y + 26} L${x + 44} ${y + 34} L${x + 32} ${y + 42}`} fill="none" stroke="#3ee0d8" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+}
+
+/** Dashed flow with chevrons, from x1 to x2. */
+function Flow({ x1, x2, y }: { x1: number; x2: number; y: number }) {
+  const chevrons = [];
+  for (let x = x1 + 60; x < x2 - 20; x += 180) chevrons.push(x);
+  return (
+    <g>
+      <line x1={x1} y1={y + 34} x2={x2} y2={y + 34} stroke="#3ee0d8" strokeOpacity={0.8} strokeWidth={4} strokeDasharray="10 10" className="march" />
+      {chevrons.map((x) => (
+        <path key={x} d={`M${x} ${y + 24} L${x + 12} ${y + 34} L${x} ${y + 44}`} fill="none" stroke="#3ee0d8" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
     </g>
   );
-  const x = x0 + 16;
+}
+
+function Label({ x, y, text }: { x: number; y: number; text: string }) {
   return (
-    <g className="soc-text" pointerEvents="none">
-      <rect x={x} y={y} width={1568} height={68} rx={14} fill="#0a1424" fillOpacity={0.94} stroke="#2a3a58" strokeWidth={2} />
-      <text x={x + 18} y={y + 42} fontSize={16} fontWeight={700} fill="#7f8ea8" letterSpacing={2}>
-        INPUT
-      </text>
-      {chip(x + 82, inputs[0], 128)}
-      {chip(x + 218, inputs[1], 142)}
-      {chip(x + 368, inputs[2], 144)}
-      {arrow(x + 522)}
-      <rect x={x + 578} y={y + 10} width={238} height={48} rx={12} fill="#3ee0d8" />
-      <text x={x + 697} y={y + 42} textAnchor="middle" fontSize={22} fontWeight={800} fill="#04212a" letterSpacing={1.5}>
+    <text x={x} y={y + 42} fontSize={16} fontWeight={700} fill="#7f8ea8" letterSpacing={2}>
+      {text}
+    </text>
+  );
+}
+
+function Core({ x, y, w = 238, size = 22 }: { x: number; y: number; w?: number; size?: number }) {
+  return (
+    <g>
+      <rect x={x} y={y + 10} width={w} height={48} rx={12} fill="#3ee0d8" />
+      <text x={x + w / 2} y={y + 42} textAnchor="middle" fontSize={size} fontWeight={800} fill="#04212a" letterSpacing={1.5}>
         NIGHT SHIFT
       </text>
-      {arrow(x + 828)}
-      <text x={x + 884} y={y + 42} fontSize={16} fontWeight={700} fill="#7f8ea8" letterSpacing={2}>
-        OUTPUT
-      </text>
-      {chip(x + 966, outputs[0], 196)}
-      {chip(x + 1170, outputs[1], 160)}
-      {chip(x + 1338, outputs[2], 214)}
+    </g>
+  );
+}
+
+function Full({ x0, y }: { x0: number; y: number }) {
+  const x = x0 + 16;
+  return (
+    <g>
+      <rect x={x} y={y} width={1568} height={H} rx={14} fill="#0a1424" fillOpacity={0.94} stroke="#2a3a58" strokeWidth={2} />
+      <Label x={x + 18} y={y} text="INPUT" />
+      <Chip x={x + 82} y={y} label={INPUTS[0]} w={128} />
+      <Chip x={x + 218} y={y} label={INPUTS[1]} w={142} />
+      <Chip x={x + 368} y={y} label={INPUTS[2]} w={144} />
+      <Flow x1={x + 520} x2={x + 570} y={y} />
+      <Core x={x + 578} y={y} />
+      <Flow x1={x + 822} x2={x + 872} y={y} />
+      <Label x={x + 884} y={y} text="OUTPUT" />
+      <Chip x={x + 966} y={y} label={OUTPUTS[0]} w={196} />
+      <Chip x={x + 1170} y={y} label={OUTPUTS[1]} w={160} />
+      <Chip x={x + 1338} y={y} label={OUTPUTS[2]} w={214} />
+    </g>
+  );
+}
+
+/** This screen's piece of the wall-wide strip. Outer ends are rounded only on screens 1 and 5. */
+function Split({ x0, y, screen }: { x0: number; y: number; screen: ScreenId }) {
+  const left = screen === 1 ? x0 + 16 : x0;
+  const right = screen === 5 ? x0 + 1584 : x0 + 1600;
+  const bar = (
+    <rect x={left} y={y} width={right - left} height={H} rx={screen === 1 || screen === 5 ? 14 : 0} fill="#0a1424" fillOpacity={0.94} stroke="#2a3a58" strokeWidth={2} />
+  );
+  switch (screen) {
+    case 1:
+      return (
+        <g>
+          {bar}
+          <Label x={x0 + 40} y={y} text="INPUT" />
+          <Chip x={x0 + 130} y={y} label={INPUTS[0]} w={200} size={19} />
+          <Chip x={x0 + 346} y={y} label={INPUTS[1]} w={220} size={19} />
+          <Chip x={x0 + 582} y={y} label={INPUTS[2]} w={220} size={19} />
+          <Flow x1={x0 + 820} x2={x0 + 1600} y={y} />
+        </g>
+      );
+    case 3:
+      return (
+        <g>
+          {bar}
+          <Flow x1={x0} x2={x0 + 620} y={y} />
+          <Core x={x0 + 630} y={y} w={340} size={28} />
+          <Flow x1={x0 + 980} x2={x0 + 1600} y={y} />
+        </g>
+      );
+    case 5:
+      return (
+        <g>
+          {bar}
+          <Flow x1={x0} x2={x0 + 300} y={y} />
+          <Label x={x0 + 316} y={y} text="OUTPUT" />
+          <Chip x={x0 + 410} y={y} label={OUTPUTS[0]} w={250} size={19} />
+          <Chip x={x0 + 676} y={y} label={OUTPUTS[1]} w={210} size={19} />
+          <Chip x={x0 + 902} y={y} label={OUTPUTS[2]} w={270} size={19} />
+        </g>
+      );
+    default:
+      // screens 2 and 4: the flow carries on, with a hint of what is moving
+      return (
+        <g>
+          {bar}
+          <Flow x1={x0} x2={x0 + 1600} y={y} />
+          <rect x={x0 + 560} y={y + 18} width={480} height={32} rx={16} fill="#0a1424" />
+          <text x={x0 + 800} y={y + 41} textAnchor="middle" fontSize={17} fontWeight={600} fill="#7f8ea8">
+            {screen === 2 ? 'alerts · staff reports · network data' : 'containment · trust insight · handover'}
+          </text>
+        </g>
+      );
+  }
+}
+
+export function RealityStrip({ x0, y = 826, mode, screen }: { x0: number; y?: number; mode: StripMode; screen: ScreenId }) {
+  if (mode === 'none') return null;
+  return (
+    <g className="soc-text" pointerEvents="none">
+      {mode === 'full' ? <Full x0={x0} y={y} /> : <Split x0={x0} y={y} screen={screen} />}
     </g>
   );
 }

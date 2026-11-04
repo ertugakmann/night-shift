@@ -62,11 +62,13 @@ export function ActionPopup({
   roomId,
   canAct,
   floating = false,
+  reality = false,
 }: {
   snapshot: Snapshot;
   roomId: string;
   canAct: boolean;
   floating?: boolean;
+  reality?: boolean;
 }) {
   const w = worldOf(snapshot);
   const room = w.room.get(roomId);
@@ -97,17 +99,17 @@ export function ActionPopup({
       {/* pointer up to the room on the map */}
       {!floating && <path d={`M${anchorX - 16} ${y + 2} L${anchorX} ${Math.min(anchorY + 6, y - 10)} L${anchorX + 16} ${y + 2} Z`} fill="#fff4e0" />}
       <rect x={x + 6} y={y + 8} width={W} height={H} rx={24} fill="#000" opacity={0.3} />
-      <rect x={x} y={y} width={W} height={H} rx={24} fill="#fff4e0" stroke="#f2c65e" strokeWidth={5} />
+      <rect x={x} y={y} width={W} height={H} rx={reality ? 14 : 24} fill={reality ? '#0d1729' : '#fff4e0'} stroke={reality ? '#3ee0d8' : '#f2c65e'} strokeWidth={reality ? 3 : 5} />
 
       <text x={x + 24} y={y + 42} fontSize={30} fontWeight={700} fill={INK}>
-        {room.name}
+        {reality ? room.real : room.name}
       </text>
       <text x={x + 24} y={y + 70} fontSize={19} fill="#6a5a8a">
-        {room.real}
+        {reality ? `in the game: ${room.name}` : room.real}
       </text>
       <Paw x={x + 34} y={y + 100} scale={1.1} />
       <text x={x + 52} y={y + 106} fontSize={19} fontWeight={600} fill={barking ? '#7a4fd0' : '#6a5a8a'}>
-        Rex {estimate}%
+        {reality ? 'AI copilot' : 'Rex'} {estimate}%
       </text>
       <text x={x + 150} y={y + 106} fontSize={19} fill="#6a5a8a">
         · {who}
@@ -123,7 +125,13 @@ export function ActionPopup({
         const blocked = !canAct || actionBlocked(snapshot, roomId, action) !== null;
         const bx = x + 18 + i * 88;
         const by = y + 124;
-        const label = action === 'candlelight' ? 'Candles' : action === 'lock' ? 'Lock' : ACTION_LABEL[action];
+        const label = reality
+          ? ({ patrol: 'EDR scan', lock: 'Isolate', evict: 'Eradicate', repair: 'Restore', candlelight: 'Downtime' } as const)[action]
+          : action === 'candlelight'
+            ? 'Candles'
+            : action === 'lock'
+              ? 'Lock'
+              : ACTION_LABEL[action];
         return (
           <g key={action} onClick={() => act(action)} style={{ cursor: 'pointer' }} opacity={blocked ? 0.38 : 1}>
             <rect x={bx} y={by} width={82} height={98} rx={18} fill={blocked ? '#e8dcc8' : '#2c2468'} />

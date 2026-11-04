@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Snapshot } from '@night-shift/shared';
 import { selectRoom, useGame } from '../net/game';
+import { RealityStrip, type StripMode } from '../reality/RealityStrip';
 import { ActionPopup } from './ActionPopup';
 import { Cctv } from './Cctv';
 import { GuardCards } from './Guards';
@@ -10,7 +11,7 @@ import { Rex } from './Rex';
 import { NIST_STAGES, nistStage } from './util';
 
 /** Brass strip with the NIST incident response cycle; the current stage is lit. */
-function NistStrip({ snapshot }: { snapshot: Snapshot }) {
+function NistStrip({ snapshot, reality }: { snapshot: Snapshot; reality: boolean }) {
   const current = nistStage(snapshot);
   const x0 = 30;
   const y = 296;
@@ -18,8 +19,8 @@ function NistStrip({ snapshot }: { snapshot: Snapshot }) {
   const pillW = 172;
   return (
     <g className="game-text">
-      <rect x={x0} y={y} width={labelW + NIST_STAGES.length * pillW + 16} height={44} rx={22} fill="#5a3a22" stroke="#c9913c" strokeWidth={3} />
-      <text x={x0 + 22} y={y + 29} fontSize={17} fontWeight={700} fill="#f2c65e">
+      <rect x={x0} y={y} width={labelW + NIST_STAGES.length * pillW + 16} height={44} rx={22} fill={reality ? '#0d1729' : '#5a3a22'} stroke={reality ? '#2f4a73' : '#c9913c'} strokeWidth={3} />
+      <text x={x0 + 22} y={y + 29} fontSize={17} fontWeight={700} fill={reality ? '#7f8ea8' : '#f2c65e'}>
         NIST RESPONSE
       </text>
       {NIST_STAGES.map((stage, i) => {
@@ -33,10 +34,22 @@ function NistStrip({ snapshot }: { snapshot: Snapshot }) {
               width={pillW - 8}
               height={32}
               rx={16}
-              fill={state === 'now' ? '#ffd27a' : state === 'done' ? '#8a6a3a' : '#3a2a1a'}
+              fill={
+                reality
+                  ? state === 'now'
+                    ? '#3ee0d8'
+                    : state === 'done'
+                      ? '#1d4a55'
+                      : '#13233d'
+                  : state === 'now'
+                    ? '#ffd27a'
+                    : state === 'done'
+                      ? '#8a6a3a'
+                      : '#3a2a1a'
+              }
               style={{ transition: 'fill 500ms ease' }}
             />
-            <text x={px + (pillW - 8) / 2} y={y + 29} textAnchor="middle" fontSize={18} fontWeight={state === 'now' ? 700 : 500} fill={state === 'now' ? '#2a1d5c' : state === 'done' ? '#f3e3c3' : '#a08a6a'}>
+            <text x={px + (pillW - 8) / 2} y={y + 29} textAnchor="middle" fontSize={18} fontWeight={state === 'now' ? 700 : 500} fill={state === 'now' ? (reality ? '#04212a' : '#2a1d5c') : state === 'done' ? (reality ? '#cfe0f5' : '#f3e3c3') : reality ? '#7f8ea8' : '#a08a6a'}>
               {stage}
             </text>
           </g>
@@ -78,8 +91,11 @@ function StickyNote({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-/** Screen 2: the head guard's desk, seen from above. Works with mouse, touchpad and touch. */
-export function DeskScreen() {
+/**
+ * Screen 2: the head guard's desk, seen from above. Works with mouse, touchpad and touch.
+ * `reality`: the same desk as a SOC console (the content shrinks a little to make room for the strip).
+ */
+export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boolean; strip?: StripMode }) {
   const { snapshot, selected, role } = useGame();
 
   useEffect(() => {
@@ -98,26 +114,39 @@ export function DeskScreen() {
           <rect width={1600} height={44} fill="#62402c" />
           <path d="M0 44 H1600 M0 89 H1600 M420 0 V44 M1180 0 V44 M760 44 V90 M1460 44 V90" stroke="#4a2f20" strokeWidth={3} />
         </pattern>
+        <pattern id="desk-grid" width={40} height={40} patternUnits="userSpaceOnUse">
+          <path d="M40 0 L0 0 0 40" fill="none" stroke="#16243d" strokeWidth={1.5} />
+        </pattern>
         <radialGradient id="desk-lamp" cx="0.35" cy="0.75" r="0.8">
           <stop offset="0" stopColor="#ffd27a" stopOpacity={0.22} />
           <stop offset="1" stopColor="#0c0922" stopOpacity={0.45} />
         </radialGradient>
       </defs>
       {/* the desk; tapping bare wood closes the menu */}
-      <rect width={1600} height={900} fill="url(#desk-wood)" onClick={() => selectRoom(null)} />
-      <rect width={1600} height={900} fill="url(#desk-lamp)" pointerEvents="none" />
-      {snapshot && (
+      {reality ? (
         <>
-          <MiniMap snapshot={snapshot} selected={selected} />
-          <NistStrip snapshot={snapshot} />
-          <Radio snapshot={snapshot} />
-          <GuardCards snapshot={snapshot} />
-          <Cctv snapshot={snapshot} />
-          <Rex snapshot={snapshot} selected={selected} />
-          <StickyNote snapshot={snapshot} />
-          {selected && <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} />}
+          <rect width={1600} height={900} fill="#0a1120" onClick={() => selectRoom(null)} />
+          <rect width={1600} height={900} fill="url(#desk-grid)" pointerEvents="none" />
+        </>
+      ) : (
+        <>
+          <rect width={1600} height={900} fill="url(#desk-wood)" onClick={() => selectRoom(null)} />
+          <rect width={1600} height={900} fill="url(#desk-lamp)" pointerEvents="none" />
         </>
       )}
+      {snapshot && (
+        <g className={reality ? 'soc-text' : undefined} transform={reality && strip !== 'none' ? 'translate(64,0) scale(0.92)' : undefined}>
+          <MiniMap snapshot={snapshot} selected={selected} reality={reality} />
+          <NistStrip snapshot={snapshot} reality={reality} />
+          <Radio snapshot={snapshot} reality={reality} />
+          <GuardCards snapshot={snapshot} reality={reality} />
+          <Cctv snapshot={snapshot} reality={reality} />
+          <Rex snapshot={snapshot} selected={selected} reality={reality} />
+          <StickyNote snapshot={snapshot} />
+          {selected && <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} reality={reality} />}
+        </g>
+      )}
+      {reality && <RealityStrip x0={0} y={832} mode={strip} screen={2} />}
     </svg>
   );
 }

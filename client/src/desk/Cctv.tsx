@@ -9,7 +9,7 @@ const H = 290;
 const ROWS = 5;
 
 /** A little CRT on the desk with the CCTV alert feed: time, severity, camera. */
-export function Cctv({ snapshot }: { snapshot: Snapshot }) {
+export function Cctv({ snapshot, reality = false }: { snapshot: Snapshot; reality?: boolean }) {
   const w = worldOf(snapshot);
   const alerts = snapshot.log.filter((e) => e.kind === 'cctv').slice(-ROWS);
   return (
@@ -17,15 +17,15 @@ export function Cctv({ snapshot }: { snapshot: Snapshot }) {
       {/* stand */}
       <rect x={X + W / 2 - 50} y={Y + H - 6} width={100} height={30} rx={8} fill="#4b3f99" />
       {/* case */}
-      <rect x={X} y={Y} width={W} height={H} rx={30} fill="#d9cfe9" />
+      <rect x={X} y={Y} width={W} height={H} rx={reality ? 14 : 30} fill={reality ? '#0d1729' : '#d9cfe9'} stroke={reality ? '#2f4a73' : 'none'} strokeWidth={3} />
       <rect x={X + 22} y={Y + 22} width={W - 44} height={H - 62} rx={22} fill="#141033" stroke="#4a3d99" strokeWidth={4} />
       <circle cx={X + W - 40} cy={Y + H - 22} r={8} fill="#3ee0d8" />
       <text x={X + 40} y={Y + 58} fontSize={20} fontWeight={700} fill="#e8e0ff">
-        CCTV
+        {reality ? 'SIEM ALERTS' : 'CCTV'}
       </text>
-      <circle cx={X + 112} cy={Y + 51} r={7} fill="#ff6b6b" className="shimmer" />
-      <text x={X + 126} y={Y + 58} fontSize={17} fill="#ff9a8a">
-        REC
+      <circle cx={X + (reality ? 196 : 112)} cy={Y + 51} r={7} fill="#ff6b6b" className="shimmer" />
+      <text x={X + (reality ? 210 : 126)} y={Y + 58} fontSize={17} fill="#ff9a8a">
+        {reality ? 'LIVE' : 'REC'}
       </text>
       {alerts.length === 0 && (
         <text x={X + 40} y={Y + 110} fontSize={19} fill="#a99ce6">
@@ -46,7 +46,7 @@ export function Cctv({ snapshot }: { snapshot: Snapshot }) {
               {sev}
             </text>
             <text x={X + 168} y={y} fontSize={18} fill="#e8e0ff">
-              {truncate(a.text, 30)}
+              {truncate(reality && a.real ? a.real : a.text, reality ? 34 : 30)}
             </text>
             {snapshot.debug && a.truth === false && (
               <text x={X + W - 40} y={y} textAnchor="end" fontSize={16} fill="#ff6b6b">

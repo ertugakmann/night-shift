@@ -3,7 +3,7 @@ import { guardPose } from '../building/geometry';
 import { DOORS, ROOMS } from '../building/layout';
 import { worldOf } from '../game/view';
 import { selectRoom } from '../net/game';
-import { MAP_SCALE, MAP_X, MAP_Y, mapX, mapY } from './util';
+import { MAP_SCALE, MAP_X, MAP_Y, mapX, mapY, truncate } from './util';
 
 const GUARD_COLOR: Record<string, string> = { sam: '#3ee0d8', priya: '#ff9ec7', tom: '#a8e07a' };
 
@@ -20,7 +20,7 @@ function Paw({ x, y, scale = 1 }: { x: number; y: number; scale?: number }) {
 }
 
 /** The building plan pinned to the desk: every room, its state, the guards, and Rex's hunches. */
-export function MiniMap({ snapshot, selected }: { snapshot: Snapshot; selected: string | null }) {
+export function MiniMap({ snapshot, selected, reality = false }: { snapshot: Snapshot; selected: string | null; reality?: boolean }) {
   const w = worldOf(snapshot);
   const bark = w.sc.rex.barkThreshold;
   const width = 6400 * MAP_SCALE;
@@ -28,8 +28,8 @@ export function MiniMap({ snapshot, selected }: { snapshot: Snapshot; selected: 
   return (
     <g>
       {/* paper, taped to the desk */}
-      <rect x={MAP_X - 26} y={MAP_Y - 22} width={width + 52} height={height + 44} rx={14} fill="#1f1a4a" stroke="#4a3d99" strokeWidth={4} />
-      {[
+      <rect x={MAP_X - 26} y={MAP_Y - 22} width={width + 52} height={height + 44} rx={14} fill={reality ? '#0a1424' : '#1f1a4a'} stroke={reality ? '#2f4a73' : '#4a3d99'} strokeWidth={4} />
+      {!reality && [
         [MAP_X - 10, MAP_Y - 18, -12],
         [MAP_X + width - 30, MAP_Y - 18, 10],
       ].map(([x, y, r]) => (
@@ -47,7 +47,7 @@ export function MiniMap({ snapshot, selected }: { snapshot: Snapshot; selected: 
         const rw = r.w * MAP_SCALE;
         const rh = r.h * MAP_SCALE;
         const lit = rs.litBy !== null;
-        const fill = lit ? '#f3d9a4' : rs.dark ? '#4a2547' : '#2c2468';
+        const fill = reality ? (lit ? '#0f3a40' : rs.dark ? '#3a1220' : '#101a2c') : lit ? '#f3d9a4' : rs.dark ? '#4a2547' : '#2c2468';
         const stroke = rs.locked ? '#b9a8ff' : rs.dark ? '#ff6b6b' : '#6f61d0';
         const estimate = snapshot.rex.estimates[room.id] ?? 0;
         const isSelected = selected === room.id;
@@ -71,8 +71,8 @@ export function MiniMap({ snapshot, selected }: { snapshot: Snapshot; selected: 
                 strokeLinecap="round"
               />
             )}
-            <text x={x + 8} y={y + label + 5} className="game-text" fontSize={label} fontWeight={600} fill={lit ? '#5a3a22' : '#d8cffd'} pointerEvents="none">
-              {room.name}
+            <text x={x + 8} y={y + label + 5} className={reality ? 'soc-text' : 'game-text'} fontSize={label} fontWeight={600} fill={lit && !reality ? '#5a3a22' : reality ? '#e6edf7' : '#d8cffd'} pointerEvents="none">
+              {reality ? truncate(room.real, Math.floor((rw - (estimate >= bark ? 78 : 14)) / (label * 0.55))) : room.name}
             </text>
             {rs.locked && (
               <g transform={`translate(${x + rw - 18},${y + rh - 16})`} pointerEvents="none">

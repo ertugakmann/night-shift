@@ -9,7 +9,9 @@ import { DOORS, ROOMS, SLICE_H, SLICE_W, intersects, sliceRect, type BuildingScr
 import { wrap } from '../desk/util';
 import { worldOf } from '../game/view';
 import { selectRoom, useGame } from '../net/game';
-import { RealityStrip } from './RealityStrip';
+import { DangerGlow, OutcomeBanner } from '../building/VaultExtras';
+import { RealityStrip, type StripMode } from './RealityStrip';
+import { RealityVaultPanel } from './RealityVaultPanel';
 
 const C = {
   bg: '#0a1120',
@@ -39,32 +41,61 @@ function StatusChip({ x, y, status }: { x: number; y: number; status: Status }) 
 }
 
 /** A system as an asset card: icon, name, status, criticality. */
-function SystemCard({ x, y, name, status, criticality }: { x: number; y: number; name: string; status: Status; criticality: number }) {
-  const w = 360;
-  const h = 100;
-  const lines = wrap(name, 24, 2);
+function SystemCard({
+  x,
+  y,
+  name,
+  status,
+  criticality,
+  database = false,
+  width,
+  compact = false,
+}: {
+  x: number;
+  y: number;
+  name: string;
+  status: Status;
+  criticality: number;
+  database?: boolean;
+  width?: number;
+  compact?: boolean;
+}) {
+  const w = width ?? (database ? 440 : 360);
+  const h = database ? 120 : compact ? 84 : 100;
+  // about 10.5 units per character at 20px; the text starts 88 units in
+  const lines = wrap(name, Math.max(10, Math.floor((w - 104) / 10.5)), compact ? 1 : 2);
   const color = STATUS_COLOR[status];
   return (
     <g transform={`translate(${x - w / 2},${y - h / 2})`}>
       <rect width={w} height={h} rx={12} fill="#0d1729" stroke={color} strokeOpacity={0.55} strokeWidth={2} />
       <rect width={6} height={h} rx={3} fill={color} />
-      {/* server glyph */}
-      <g transform="translate(22,22)">
-        <rect width={50} height={56} rx={8} fill="#16243d" stroke="#2f4a73" strokeWidth={2} />
-        {[12, 26, 40].map((yy) => (
-          <g key={yy}>
-            <rect x={9} y={yy - 3} width={24} height={6} rx={3} fill="#2f4a73" />
-            <circle cx={40} cy={yy} r={3.5} fill={color} />
-          </g>
-        ))}
-      </g>
+      {database ? (
+        // database cylinder
+        <g transform="translate(22,22)">
+          <path d="M0 10 V62 A28 10 0 0 0 56 62 V10" fill="#16243d" stroke="#2f4a73" strokeWidth={2} />
+          <ellipse cx={28} cy={10} rx={28} ry={10} fill="#1d2f4d" stroke="#2f4a73" strokeWidth={2} />
+          <path d="M0 28 A28 10 0 0 0 56 28 M0 45 A28 10 0 0 0 56 45" fill="none" stroke="#2f4a73" strokeWidth={2} />
+          <circle cx={46} cy={56} r={4} fill={color} />
+        </g>
+      ) : (
+        // server glyph
+        <g transform="translate(22,22)">
+          <rect width={50} height={56} rx={8} fill="#16243d" stroke="#2f4a73" strokeWidth={2} />
+          {[12, 26, 40].map((yy) => (
+            <g key={yy}>
+              <rect x={9} y={yy - 3} width={24} height={6} rx={3} fill="#2f4a73" />
+              <circle cx={40} cy={yy} r={3.5} fill={color} />
+            </g>
+          ))}
+        </g>
+      )}
       {lines.map((l, i) => (
-        <text key={i} x={88} y={lines.length === 1 ? 44 : 34 + i * 24} fontSize={20} fontWeight={600} fill={C.text}>
+        <text key={i} x={database ? 96 : 88} y={lines.length === 1 ? 44 : 34 + i * 24} fontSize={database ? 22 : 20} fontWeight={600} fill={C.text}>
           {l}
         </text>
       ))}
-      <StatusChip x={88} y={84} status={status} />
-      <text x={w - 16} y={86} textAnchor="end" className="soc-mono" fontSize={14} fill={C.sub}>
+      <StatusChip x={database ? 96 : 88} y={h - 16} status={status} />
+      <text x={w - 16} y={h - 14} textAnchor="end" className="soc-mono" fontSize={14} fill={C.sub}>
         CRIT {criticality}
       </text>
     </g>
@@ -119,6 +150,17 @@ function RealityRoom({ room, snapshot, uid, selected }: { room: RoomData; snapsh
   const downtime = snapshot.candlelight[room.wing] && (rs.locked || rs.dark);
   const clip = `${uid}-r-${room.id}`;
   const labelX = rect.x + 34;
+  // Long department names shrink to fit the room (about 0.56 em per character in this font).
+  // Corridors keep their right half for the system card, so their label gets the left half.
+  const labelRoom = layout.corridor ? rect.w * 0.5 : rect.w - 120;
+  const labelSize = Math.min(36, Math.floor(labelRoom / (room.real.length * 0.56)));
+  const cards = room.exhibits;
+  const gap = 24;
+  const usable = layout.corridor ? rect.w * 0.45 - 30 : rect.w - 80;
+  const cardW = Math.min(room.special === 'vault' ? 440 : 380, (usable - gap * (cards.length - 1)) / cards.length);
+  const cardsLeft = layout.corridor ? rect.x + rect.w * 0.55 : rect.x + 40 + (usable - (cardW * cards.length + gap * (cards.length - 1))) / 2;
+  // Most critical rooms: cards just under the tier tag, clear of where analysts stand.
+  const cardY = layout.corridor ? rect.y + rect.h - 50 : layout.vip ? rect.y + 236 : rect.y + Math.max(170, rect.h * 0.58);
 
   return (
     <g onClick={() => selectRoom(selected ? null : room.id)} style={{ cursor: 'pointer' }}>
@@ -158,9 +200,17 @@ function RealityRoom({ room, snapshot, uid, selected }: { room: RoomData; snapsh
       {selected && <rect x={rect.x + 10} y={rect.y + 10} width={rect.w - 20} height={rect.h - 20} rx={8} fill="none" stroke={C.amber} strokeWidth={4} strokeDasharray="14 10" className="march" />}
 
       {/* department first, the game name underneath */}
-      <text x={labelX} y={rect.y + (layout.corridor ? 60 : 58)} fontSize={36} fontWeight={700} fill={C.text}>
+      <text x={labelX} y={rect.y + (layout.corridor ? 60 : 58)} fontSize={labelSize} fontWeight={700} fill={C.text}>
         {room.real}
       </text>
+      {layout.vip && (
+        <g transform={`translate(${labelX},${rect.y + 106})`}>
+          <rect width={196} height={26} rx={13} fill="#3a2a10" stroke={C.amber} strokeWidth={2} />
+          <text x={98} y={18} textAnchor="middle" fontSize={14} fontWeight={800} fill={C.amber} letterSpacing={1}>
+            TIER 1 · MOST CRITICAL
+          </text>
+        </g>
+      )}
       <text x={labelX} y={rect.y + (layout.corridor ? 88 : 86)} fontSize={19} fill={C.sub}>
         in the game: {room.name}
       </text>
@@ -177,11 +227,19 @@ function RealityRoom({ room, snapshot, uid, selected }: { room: RoomData; snapsh
         )}
       </g>
 
-      {Object.entries(layout.exhibits).map(([id, ex]) => {
-        const exhibit = room.exhibits.find((e) => e.id === id);
-        if (!exhibit) return null;
-        return <SystemCard key={id} x={ex.x} y={ex.y} name={exhibit.real} status={roomStatus} criticality={exhibit.criticality} />;
-      })}
+      {cards.map((exhibit, i) => (
+        <SystemCard
+          key={exhibit.id}
+          x={cardsLeft + cardW / 2 + i * (cardW + gap)}
+          y={cardY}
+          name={exhibit.real}
+          status={roomStatus}
+          criticality={exhibit.criticality}
+          database={room.special === 'vault'}
+          width={cardW}
+          compact={layout.corridor}
+        />
+      ))}
 
       {visible &&
         groups.map((g, i) => {
@@ -193,7 +251,7 @@ function RealityRoom({ room, snapshot, uid, selected }: { room: RoomData; snapsh
 }
 
 /** Reality view of one building screen. */
-export function RealityBuilding({ screen }: { screen: BuildingScreenId }) {
+export function RealityBuilding({ screen, strip = 'split' }: { screen: BuildingScreenId; strip?: StripMode }) {
   const { snapshot, selected } = useGame();
   const uid = useId().replace(/:/g, '');
   const slice = sliceRect(screen);
@@ -239,13 +297,18 @@ export function RealityBuilding({ screen }: { screen: BuildingScreenId }) {
         );
       })}
 
-      <RealityStrip x0={slice.x} />
+      {screen === 5 && <RealityVaultPanel snapshot={snapshot} />}
+
+      <RealityStrip x0={slice.x} mode={strip} screen={screen} />
 
       {/* analysts, on top of everything */}
       {snapshot.guards.map((g) => {
         const p = guardPose(g);
         return <Analyst key={g.id} x={p.x} y={p.y} name={g.name} initial={g.name[0]} />;
       })}
+
+      {screen === 5 && <DangerGlow snapshot={snapshot} slice={slice} uid={uid} />}
+      {screen === 5 && <OutcomeBanner snapshot={snapshot} />}
     </svg>
   );
 }

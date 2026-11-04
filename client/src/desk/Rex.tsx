@@ -59,8 +59,29 @@ function RexArt({ alert }: { alert: boolean }) {
   );
 }
 
+/** Rex in the reality view: an AI copilot module with a status ring. */
+function CopilotArt({ alert }: { alert: boolean }) {
+  return (
+    <g>
+      <circle r={92} fill="none" stroke={alert ? '#c9a6ff' : '#2f4a73'} strokeWidth={4} strokeDasharray="10 8" className={alert ? 'march' : ''} />
+      <rect x={-64} y={-64} width={128} height={128} rx={26} fill="#16243d" stroke={alert ? '#c9a6ff' : '#2f4a73'} strokeWidth={5} />
+      {[-36, -12, 12, 36].map((p) => (
+        <g key={p}>
+          <rect x={p - 4} y={-82} width={8} height={18} rx={3} fill="#2f4a73" />
+          <rect x={p - 4} y={64} width={8} height={18} rx={3} fill="#2f4a73" />
+          <rect x={-82} y={p - 4} width={18} height={8} rx={3} fill="#2f4a73" />
+          <rect x={64} y={p - 4} width={18} height={8} rx={3} fill="#2f4a73" />
+        </g>
+      ))}
+      <text y={20} textAnchor="middle" className="soc-text" fontSize={52} fontWeight={800} fill={alert ? '#c9a6ff' : '#3ee0d8'}>
+        AI
+      </text>
+    </g>
+  );
+}
+
 /** Rex in the corner, with a speech bubble: always a confidence percentage. */
-export function Rex({ snapshot, selected }: { snapshot: Snapshot; selected: string | null }) {
+export function Rex({ snapshot, selected, reality = false }: { snapshot: Snapshot; selected: string | null; reality?: boolean }) {
   const w = worldOf(snapshot);
   const threshold = w.sc.rex.barkThreshold;
   const estimates = snapshot.rex.estimates;
@@ -73,24 +94,39 @@ export function Rex({ snapshot, selected }: { snapshot: Snapshot; selected: stri
   const lastBark = snapshot.log.filter((e) => e.kind === 'rex').at(-1);
   const woof = !!lastBark && snapshot.timeMs - lastBark.atMs < 1800;
   const yawning = snapshot.phase === 'intro' && snapshot.introMs >= 5500 && snapshot.introMs < 7200;
-  const line = barking ? `Woof! ${name}` : selected ? `Hmm… ${name}` : 'Zzz… all calm';
+  const line = reality
+    ? barking
+      ? `AI copilot: likely compromise`
+      : 'AI copilot: monitoring'
+    : barking
+      ? `Woof! ${name}`
+      : selected
+        ? `Hmm… ${name}`
+        : 'Zzz… all calm';
+  const detail = reality ? `${focus.real} · ${value}% confidence` : `Rex is ${value}% sure`;
   return (
     <g className="game-text">
       {/* bubble */}
       <g transform={`translate(${X - 240},${Y - 186})`}>
-        <rect width={420} height={78} rx={22} fill="#fff4e0" stroke={barking ? '#c9a6ff' : '#e8dcc8'} strokeWidth={4} />
-        <path d="M300 76 L330 104 L340 76 Z" fill="#fff4e0" />
+        <rect width={420} height={78} rx={reality ? 12 : 22} fill={reality ? '#0d1729' : '#fff4e0'} stroke={barking ? '#c9a6ff' : reality ? '#2f4a73' : '#e8dcc8'} strokeWidth={4} />
+        <path d="M300 76 L330 104 L340 76 Z" fill={reality ? '#0d1729' : '#fff4e0'} />
         <Paw x={34} y={42} scale={1.4} />
-        <text x={64} y={36} fontSize={22} fontWeight={700} fill="#2a1d5c">
-          {line.length > 26 ? `${line.slice(0, 25)}…` : line}
+        <text x={64} y={36} fontSize={22} fontWeight={700} fill={reality ? '#e6edf7' : '#2a1d5c'}>
+          {line.length > 30 ? `${line.slice(0, 29)}…` : line}
         </text>
-        <text x={64} y={64} fontSize={19} fill="#6a5a8a">
-          Rex is {value}% sure
+        <text x={64} y={64} fontSize={19} fill={reality ? '#c9a6ff' : '#6a5a8a'}>
+          {detail.length > 36 ? `${detail.slice(0, 35)}…` : detail}
         </text>
       </g>
       <g transform={`translate(${X + 130},${Y - 6}) scale(0.8)`}>
         <motion.g animate={woof ? { y: [0, -14, 0, -8, 0] } : { y: 0 }} transition={{ duration: 0.6 }} key={lastBark?.id ?? 'calm'}>
-          <RexArt alert={anyBark || barking || woof} />
+          {reality ? (
+            <g transform="translate(40,-70)">
+              <CopilotArt alert={anyBark || barking || woof} />
+            </g>
+          ) : (
+            <RexArt alert={anyBark || barking || woof} />
+          )}
         </motion.g>
       </g>
       <AnimatePresence>
@@ -104,7 +140,7 @@ export function Rex({ snapshot, selected }: { snapshot: Snapshot; selected: stri
             style={{ originX: `${X - 60}px`, originY: `${Y - 60}px` }}
           >
             <text x={X - 60} y={Y - 50} textAnchor="middle" fontSize={34} fontWeight={800} fill={woof ? '#c9a6ff' : '#fff1cf'} stroke="#2a1d5c" strokeWidth={6} paintOrder="stroke">
-              {woof ? 'WOOF!' : '*yawn*'}
+              {woof ? (reality ? 'ALERT' : 'WOOF!') : '*yawn*'}
             </text>
           </motion.g>
         )}

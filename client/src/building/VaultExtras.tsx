@@ -119,7 +119,7 @@ function CareGauge({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-function ImpactIcon({ type }: { type: ImpactType }) {
+export function ImpactIcon({ type }: { type: ImpactType }) {
   switch (type) {
     case 'tests':
       return (
@@ -187,7 +187,7 @@ function ImpactPlaques({ snapshot }: { snapshot: Snapshot }) {
 }
 
 /** Red glow from the screen edges that grows as the gang gets closer to the Vault. */
-function DangerGlow({ snapshot, slice, uid }: { snapshot: Snapshot; slice: Rect; uid: string }) {
+export function DangerGlow({ snapshot, slice, uid }: { snapshot: Snapshot; slice: Rect; uid: string }) {
   const w = worldOf(snapshot);
   const distances = snapshot.groups.map((g) => w.distToVault.get(g.room) ?? 99);
   const nearest = distances.length ? Math.min(...distances) : 99;
@@ -215,7 +215,7 @@ function DangerGlow({ snapshot, slice, uid }: { snapshot: Snapshot; slice: Rect;
 }
 
 /** End of the night: a big plaque over the Vault. */
-function OutcomeBanner({ snapshot }: { snapshot: Snapshot }) {
+export function OutcomeBanner({ snapshot }: { snapshot: Snapshot }) {
   const outcome = snapshot.outcome;
   if (!outcome) return null;
   const won = outcome.result === 'won';

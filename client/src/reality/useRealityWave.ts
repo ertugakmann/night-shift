@@ -57,5 +57,13 @@ export function useRealityWave(id: ScreenId): { shown: boolean; sweep: Sweep | n
     });
   }, []);
 
+  // The sweep ends on a timer, not on the animation's completion event: that event does not fire when
+  // the screen sits inside another animated container (the /preview crossfade).
+  useEffect(() => {
+    if (!sweep) return;
+    const timer = setTimeout(sweepDone, SWEEP_MS + 50);
+    return () => clearTimeout(timer);
+  }, [sweep, sweepDone]);
+
   return { shown, sweep, sweepDone };
 }

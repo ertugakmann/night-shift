@@ -10,7 +10,7 @@ const EASE = [0.45, 0, 0.2, 1] as const;
  * across the screen and the new view is revealed behind it: left to right going on, right to left going off.
  */
 export function RealitySwitch({ id, museum, reality }: { id: ScreenId; museum: ReactNode; reality: ReactNode }) {
-  const { shown, sweep, sweepDone } = useRealityWave(id);
+  const { shown, sweep } = useRealityWave(id);
   if (!sweep) return <>{shown ? reality : museum}</>;
 
   const forward = sweep.to; // lights on: left → right
@@ -24,7 +24,6 @@ export function RealitySwitch({ id, museum, reality }: { id: ScreenId; museum: R
         initial={{ clipPath: forward ? 'inset(0% 100% 0% 0%)' : 'inset(0% 0% 0% 100%)' }}
         animate={{ clipPath: 'inset(0% 0% 0% 0%)' }}
         transition={transition}
-        onAnimationComplete={sweepDone}
       >
         {sweep.to ? reality : museum}
       </motion.div>

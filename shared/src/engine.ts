@@ -270,7 +270,7 @@ function radioCheck(s: GameState, w: World, from: number, to: number): void {
     const at = line.atSec * 1000;
     if (from < at && at <= to) {
       const guard = s.guards.find((g) => g.id === line.guard);
-      if (guard) say(s, guard, line.text, null);
+      if (guard) say(s, guard, line.text, null, 'Status check: no alerts on my segment.');
     }
   }
 }
@@ -541,14 +541,24 @@ function revealLitRooms(s: GameState, w: World): void {
     const guard = s.guards.find((x) => x.id === guardId)!;
     if (guard.task && !guard.task.found) {
       guard.task.found = true;
-      say(s, guard, foundLine(guard.id, s.stats.spotted, theRoom(w.room.get(g.room)!.name)), g.room);
+      say(s, guard, foundLine(guard.id, s.stats.spotted, theRoom(w.room.get(g.room)!.name)), g.room, `EDR detection: ransomware active in ${w.room.get(g.room)!.real}.`);
     }
   }
 }
 
-function say(s: GameState, guard: Guard, text: string, room: RoomId | null): void {
-  log(s, { kind: 'radio', speaker: guard.name, text, room });
+/** A guard on the radio. `real` is the same message in SOC terms, for the reality view. */
+function say(s: GameState, guard: Guard, text: string, room: RoomId | null, real: string | null = null): void {
+  log(s, { kind: 'radio', speaker: guard.name, text, room, real });
 }
+
+/** SOC wording for what each action does, used in the reality view. */
+export const ACTION_REAL: Record<ActionKind, string> = {
+  patrol: 'EDR scan',
+  lock: 'Isolate',
+  evict: 'Eradicate',
+  repair: 'Restore from backup',
+  candlelight: 'Downtime procedures',
+};
 
 function complete(s: GameState, w: World, guard: Guard, task: Task): void {
   const room = w.room.get(task.room)!;
@@ -562,7 +572,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
     case 'patrol':
       if (rs.litBy === guard.id) rs.litBy = null;
       s.stats.patrols++;
-      if (!task.found) say(s, guard, emptyLine(guard.id, s.stats.patrols, name), task.room);
+      if (!task.found) say(s, guard, emptyLine(guard.id, s.stats.patrols, name), task.room, `EDR scan clean: ${room.real}.`);
       break;
 
     case 'lock':
@@ -571,22 +581,22 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
         s.stats.locks++;
         fx(s, 'locked', task.room);
       }
-      say(s, guard, lockedLine(guard.id, n, name), task.room);
+      say(s, guard, lockedLine(guard.id, n, name), task.room, `${room.real} isolated from the network.`);
       break;
 
     case 'evict':
       if (!rs.locked) {
-        say(s, guard, `The doors are open, I can't corner anyone in ${name}.`, task.room);
+        say(s, guard, `The doors are open, I can't corner anyone in ${name}.`, task.room, `Cannot eradicate: ${room.real} is not isolated.`);
         break;
       }
       if (inside.length === 0) {
-        say(s, guard, evictEmptyLine(guard.id, n, name), task.room);
+        say(s, guard, evictEmptyLine(guard.id, n, name), task.room, `Nothing to eradicate in ${room.real}.`);
         break;
       }
       s.groups = s.groups.filter((g) => g.room !== task.room);
       s.stats.evicted += inside.length;
       fx(s, 'evicted', task.room);
-      say(s, guard, evictedLine(guard.id, n, name), task.room);
+      say(s, guard, evictedLine(guard.id, n, name), task.room, `Ransomware eradicated from ${room.real}.`);
       if (s.groups.length === 0) {
         end(s, 'won', 'Every intruder has been shown the door.', 'All malware eradicated. Incident contained.');
       }
@@ -594,11 +604,11 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
 
     case 'repair':
       if (inside.length > 0) {
-        say(s, guard, `Someone's still in ${name}! Clear them out first.`, task.room);
+        say(s, guard, `Someone's still in ${name}! Clear them out first.`, task.room, `Cannot restore: ransomware still active in ${room.real}.`);
         break;
       }
       if (rs.dark && s.backupsLost) {
-        say(s, guard, `The Archive is wrecked, chief. Can't fix ${name}.`, task.room);
+        say(s, guard, `The Archive is wrecked, chief. Can't fix ${name}.`, task.room, `Cannot restore ${room.real}: backups destroyed.`);
         break;
       }
       rs.dark = false;
@@ -606,12 +616,12 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       rs.occupiedMs = 0;
       s.stats.repairs++;
       fx(s, 'repaired', task.room);
-      say(s, guard, repairedLine(guard.id, n, name), task.room);
+      say(s, guard, repairedLine(guard.id, n, name), task.room, `${room.real} restored from backup and back online.`);
       break;
 
     case 'candlelight':
       s.candlelight[room.wing] = true;
-      say(s, guard, candlesLine(guard.id, n, `the ${WING_NAMES[room.wing].name}`), task.room);
+      say(s, guard, candlesLine(guard.id, n, `the ${WING_NAMES[room.wing].name}`), task.room, `Downtime procedures active: ${WING_NAMES[room.wing].real} on paper.`);
       break;
   }
 }
@@ -804,8 +814,15 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
   }
 
   const target = intent.action === 'candlelight' ? `the ${WING_NAMES[room.wing].name}` : name;
-  log(s, { kind: 'radio', speaker: 'You', text: dispatchLine(g.name, intent.action, target, s.stats.dispatches - 1), room: room.id });
-  say(s, g, replyLine(g.id, s.stats.dispatches - 1), room.id);
+  const realTarget = intent.action === 'candlelight' ? WING_NAMES[room.wing].real : room.real;
+  log(s, {
+    kind: 'radio',
+    speaker: 'You',
+    text: dispatchLine(g.name, intent.action, target, s.stats.dispatches - 1),
+    real: `${g.name}: ${ACTION_REAL[intent.action]}, ${realTarget}.`,
+    room: room.id,
+  });
+  say(s, g, replyLine(g.id, s.stats.dispatches - 1), room.id, 'Acknowledged.');
   return { state: s };
 }
 

@@ -49,7 +49,7 @@ export function PreviewPage() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
           >
-            <ScreenPanel id={current} />
+            <ScreenPanel id={current} strip="full" />
           </motion.div>
         </AnimatePresence>
       </div>
