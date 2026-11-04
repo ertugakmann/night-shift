@@ -5,7 +5,7 @@
   "night": {
     "start": "00:00",
     "end": "06:00",
-    "realSecondsPerGameHour": 50
+    "realSecondsPerGameHour": 25
   },
 
   "intro": {
@@ -19,26 +19,26 @@
 
   "intruders": {
     "entryRoom": "mail-room",
-    "breakInAt": "00:10",
-    "spreadTickSec": 15,
-    "masterKeysSpreadTickSec": 10,
+    "breakInAt": "00:11",
+    "spreadTickSec": 8.4,
+    "masterKeysSpreadTickSec": 5.6,
     "moveChance": 0.65,
     "splitChance": 0.5,
     "maxGroups": 3,
     "towardVaultFactor": 3,
     "revisitFactor": 0.15,
-    "minStaySec": 15,
-    "vandaliseAfterSec": 30,
-    "vaultLoseAfterSec": 20
+    "minStaySec": 8.4,
+    "vandaliseAfterSec": 16.8,
+    "vaultLoseAfterSec": 11.2
   },
 
   "actions": {
-    "walkSecPerRoom": 2,
-    "patrolSec": 8,
-    "lockSec": 2,
-    "evictSec": 15,
-    "repairSec": 20,
-    "candlelightSec": 3,
+    "walkSecPerRoom": 1.12,
+    "patrolSec": 4.48,
+    "lockSec": 1.12,
+    "evictSec": 8.4,
+    "repairSec": 11.2,
+    "candlelightSec": 1.68,
     "candlelightModifier": 0.5
   },
 
@@ -350,18 +350,18 @@
   "clues": {
     "cctvChancePerTick": 0.5,
     "falseCctv": [
-      { "at": "01:05", "room": "pharmacy" },
-      { "at": "03:40", "room": "ward4" }
+      { "at": "01:13", "room": "pharmacy" },
+      { "at": "04:06", "room": "ward4" }
     ],
     "decoyChatter": [
-      { "at": "00:40", "speaker": "Tom", "text": "Vending machine ate my coins again." },
-      { "at": "02:15", "speaker": "Nurse Ada, Ward 4", "text": "Printer on Ward 4 is out of paper. Not urgent." },
-      { "at": "04:30", "speaker": "Malik, lab technician", "text": "Anyone seen my mug? Blue one." }
+      { "at": "00:45", "speaker": "Tom", "text": "Vending machine ate my coins again." },
+      { "at": "02:31", "speaker": "Nurse Ada, Ward 4", "text": "Printer on Ward 4 is out of paper. Not urgent." },
+      { "at": "05:02", "speaker": "Malik, lab technician", "text": "Anyone seen my mug? Blue one." }
     ]
   },
 
   "rex": {
     "barkThreshold": 60,
-    "mistake": { "from": "02:00", "room": "pharmacy", "confidence": 80, "holdSec": 45 }
+    "mistake": { "from": "02:14", "room": "pharmacy", "confidence": 80, "holdSec": 25.2 }
   }
 }

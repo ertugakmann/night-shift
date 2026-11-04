@@ -74,11 +74,15 @@ describe('an idle night (nobody touches anything)', () => {
   const night = idleNight();
   const lostAt = night.outcome?.atMs ?? Infinity;
 
-  it('is lost at the Vault between 03:00 and 04:00', () => {
+  it('lasts about two and a half real minutes from 00:00 to dawn', () => {
+    expect(w.ms.night).toBe(150_000);
+  });
+
+  it('is lost at the Vault at 60–70% of the night', () => {
     expect(night.outcome?.result).toBe('lost');
-    expect(lostAt).toBeGreaterThanOrEqual(at('03:00'));
-    expect(lostAt).toBeLessThan(at('04:00'));
-    expect(msToClock(lostAt, HOUR)).toBe('03:34');
+    expect(lostAt / w.ms.night).toBeGreaterThanOrEqual(0.6);
+    expect(lostAt / w.ms.night).toBeLessThanOrEqual(0.7);
+    expect(msToClock(lostAt, HOUR)).toBe('03:59');
   });
 
   it('leaves dark exhibits along the way', () => {
@@ -206,7 +210,8 @@ describe('special rooms', () => {
     s = runUntil(s, (x) => x.masterKeys);
     const first = s.nextSpreadMs;
     s = runUntil(s, (x) => x.nextSpreadMs > first);
-    expect(s.nextSpreadMs - first).toBe(10_000);
+    expect(s.nextSpreadMs - first).toBe(w.ms.masterKeysTick);
+    expect(w.ms.masterKeysTick).toBeLessThan(w.ms.spreadTick);
   });
 
   it('Archive: once wrecked, repair is disabled', () => {
