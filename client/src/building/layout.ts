@@ -1,7 +1,6 @@
 // Where everything sits in the one continuous building. Presentation only: the game rules live in
 // shared/scenario/demo.json. The building is 4 slices of 1600×900 laid side by side; each building
 // screen shows its own slice, so anything crossing a border leaves one screen and enters the next.
-import type { ScreenId } from '@night-shift/shared';
 
 export const SLICE_W = 1600;
 export const SLICE_H = 900;
@@ -9,9 +8,6 @@ export const SLICE_H = 900;
 export type BuildingScreenId = 1 | 3 | 4 | 5;
 export const SLICE_INDEX: Record<BuildingScreenId, number> = { 1: 0, 3: 1, 4: 2, 5: 3 };
 
-export function isBuildingScreen(id: ScreenId): id is BuildingScreenId {
-  return id !== 2;
-}
 
 export interface Pt {
   x: number;

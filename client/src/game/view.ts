@@ -1,4 +1,4 @@
-import { msToClock, theRoom, world, type ActionKind, type Guard, type Snapshot, type World } from '@night-shift/shared';
+import { msToClock, world, type ActionKind, type Snapshot, type World } from '@night-shift/shared';
 
 export function worldOf(snapshot: Snapshot): World {
   return world(snapshot.scenarioId);
@@ -20,13 +20,3 @@ export const ACTION_LABEL: Record<ActionKind, string> = {
   candlelight: 'Candlelight',
 };
 
-/** "Patrol the Lab Gallery · walking 4 s" */
-export function guardStatus(snapshot: Snapshot, guard: Guard): string {
-  const w = worldOf(snapshot);
-  const here = theRoom(w.room.get(guard.room)!.name);
-  const task = guard.task;
-  if (!task) return `Free, in ${here}`;
-  const target = theRoom(w.room.get(task.room)!.name);
-  const left = Math.ceil((task.walkMs + task.workMs - task.elapsedMs) / 1000);
-  return `${ACTION_LABEL[task.action]} ${target} · ${task.arrived ? 'working' : 'walking'} ${left}s`;
-}

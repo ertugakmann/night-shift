@@ -1,6 +1,6 @@
 import { Navigate, useLocation, useParams } from 'react-router';
 import { parseScreenId } from '@night-shift/shared';
-import { STYLED, ScreenPanel } from '../components/ScreenPanel';
+import { ScreenPanel } from '../components/ScreenPanel';
 
 /** One wall screen, full size. */
 export function ScreenPage() {
@@ -8,7 +8,7 @@ export function ScreenPage() {
   const { search } = useLocation();
   if (id === null) return <Navigate to={`/${search}`} replace />;
   return (
-    <main className={STYLED.has(id) ? "h-full w-full" : "h-full w-full p-2"}>
+    <main className="h-full w-full">
       <ScreenPanel id={id} />
     </main>
   );
