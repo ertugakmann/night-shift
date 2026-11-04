@@ -14,9 +14,11 @@ function act(s: GameState, action: ActionKind, room: string, guard?: string): Ga
   return r.state;
 }
 
-/** Evict, and win the catch by clicking every intruder. */
+/** Evict (the gang marked as spotted by a patrol), and win the catch by clicking every intruder. */
 function evictAndCatch(s: GameState, room: string, guard: string): GameState {
-  s = act(s, 'evict', room, guard);
+  const seen: GameState = JSON.parse(JSON.stringify(s));
+  for (const g of seen.groups) if (g.room === room) g.spotted = true;
+  s = act(seen, 'evict', room, guard);
   s = runUntil(s, (x) => (x.catch?.room === room && x.catch.result === null) || !x.guards.some((g) => g.task?.action === 'evict'));
   if (!s.catch || s.catch.result !== null) return s;
   for (const f of s.catch.figures.filter((f) => f.kind === 'intruder')) s = applyIntent(s, { type: 'catch', figure: f.id }).state;

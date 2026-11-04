@@ -2,6 +2,7 @@
 // (berets) hides among innocent night visitors. Click every intruder before time runs out; a wrong click
 // costs seconds. In the reality view the same scene is a live-response process list: end the malicious
 // processes, leave the clinical ones alone. The server owns the game, so every screen watches it live.
+import { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { theRoom, type Catch, type CatchFigure, type Snapshot } from '@night-shift/shared';
 import { ROOMS } from '../building/layout';
@@ -29,6 +30,27 @@ function freeSpots(c: Catch): { x: number; y: number }[] {
 /** Scene position of a figure's feet. */
 function at(f: CatchFigure): { x: number; y: number } {
   return { x: 140 + ((f.x - 0.11) / 0.78) * 1320, y: 330 + ((f.y - 0.2) / 0.62) * 500 };
+}
+
+/** The flashlight: radius of the lit circle, in scene units. */
+const LIGHT_R = 185;
+type Pt = { x: number; y: number };
+
+function figureScale(f: CatchFigure): number {
+  return 1.55 + (f.y - 0.2) * 0.5; // a little bigger at the front
+}
+
+/** Where a figure's body is (for hits and the light), not its feet. */
+function figureCenter(f: CatchFigure): Pt {
+  const p = at(f);
+  return { x: p.x, y: p.y - 0.6 * 70 * figureScale(f) };
+}
+
+/** Reality view: the process rows, top to bottom. */
+function listRows(c: Catch): { f: CatchFigure; y: number; h: number }[] {
+  const rows = [...c.figures].sort((a, b) => processOf(a, c).pid - processOf(b, c).pid);
+  const h = Math.min(66, 560 / rows.length);
+  return rows.map((f, i) => ({ f, y: 250 + i * h, h }));
 }
 
 function secondsLeft(c: Catch, snapshot: Snapshot): number {
@@ -125,7 +147,7 @@ const INNOCENTS = [Cleaner, LostNurse, Porter, Visitor];
 
 // ---------- museum scene ----------
 
-function MuseumScene({ c, snapshot, canAct }: { c: Catch; snapshot: Snapshot; canAct: boolean }) {
+function MuseumScene({ c, snapshot, light }: { c: Catch; snapshot: Snapshot; light: Pt }) {
   const layout = ROOMS[c.room];
   const exhibits = Object.values(layout.exhibits).filter((e) => e.kind !== 'lamps');
   const live = c.result === null;
@@ -175,7 +197,7 @@ function MuseumScene({ c, snapshot, canAct }: { c: Catch; snapshot: Snapshot; ca
       </g>
       {/* everyone and the exhibits in the free spots, back to front, so people half-hide behind things */}
       {[
-        ...c.figures.map((f) => ({ y: f.y, key: `f${f.id}`, node: <SceneFigure key={`f${f.id}`} f={f} c={c} snapshot={snapshot} canAct={canAct && live} /> })),
+        ...c.figures.map((f) => ({ y: f.y, key: `f${f.id}`, node: <SceneFigure key={`f${f.id}`} f={f} snapshot={snapshot} /> })),
         ...freeSpots(c).map((p, i) => {
           const ex = exhibits[(i + c.id) % Math.max(1, exhibits.length)];
           const pos = at({ ...c.figures[0], x: p.x, y: p.y });
@@ -194,15 +216,28 @@ function MuseumScene({ c, snapshot, canAct }: { c: Catch; snapshot: Snapshot; ca
         .sort((a, b) => a.y - b.y)
         .map((item) => item.node)}
       <rect width={W} height={H} fill="url(#catch-lantern)" pointerEvents="none" />
+      {/* the lights are out: only the flashlight shows who is who */}
+      <defs>
+        <radialGradient id="catch-hole">
+          <stop offset="0.62" stopColor="#000" />
+          <stop offset="1" stopColor="#fff" />
+        </radialGradient>
+        <mask id="catch-dark" maskUnits="userSpaceOnUse" x={0} y={0} width={W} height={H}>
+          <rect width={W} height={H} fill="#fff" />
+          <circle cx={light.x} cy={light.y} r={LIGHT_R} fill="url(#catch-hole)" />
+        </mask>
+      </defs>
+      <rect width={W} height={H} fill="#07051a" opacity={live ? 0.985 : 0.6} mask="url(#catch-dark)" pointerEvents="none" style={{ transition: 'opacity 500ms ease' }} />
+      <circle cx={light.x} cy={light.y} r={LIGHT_R} fill="none" stroke="#ffd27a" strokeWidth={3} opacity={0.35} pointerEvents="none" />
     </g>
   );
 }
 
-function SceneFigure({ f, c, snapshot, canAct }: { f: CatchFigure; c: Catch; snapshot: Snapshot; canAct: boolean }) {
+function SceneFigure({ f, snapshot }: { f: CatchFigure; snapshot: Snapshot }) {
   const p = at(f);
   const Innocent = INNOCENTS[f.look % INNOCENTS.length];
   const oops = f.oopsAtMs !== null && snapshot.timeMs - f.oopsAtMs < 1200;
-  const scale = 1.55 + (f.y - 0.2) * 0.5; // a little bigger at the front
+  const scale = figureScale(f);
   return (
     <g transform={`translate(${p.x},${p.y})`}>
       <AnimatePresence>
@@ -211,20 +246,6 @@ function SceneFigure({ f, c, snapshot, canAct }: { f: CatchFigure; c: Catch; sna
             <g transform={`scale(${scale})`} className={f.kind === 'intruder' ? 'sneak' : 'breathe'} style={{ animationDelay: `${-f.id * 0.37}s` }}>
               {f.kind === 'intruder' ? <IntruderArt spotted={false} /> : <Innocent />}
             </g>
-            {/* generous tap target: mouse, touchpad and fingers */}
-            {canAct && (
-              <circle
-                cy={-70 * scale * 0.6}
-                r={78}
-                fill="transparent"
-                style={{ cursor: 'pointer' }}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  sendIntent({ type: 'catch', figure: f.id });
-                }}
-              />
-            )}
           </motion.g>
         )}
       </AnimatePresence>
@@ -268,14 +289,15 @@ function processOf(f: CatchFigure, c: Catch): { name: string; publisher: string;
   return { name, publisher, pid, cpu: 1 + ((f.id * 7) % 9) };
 }
 
-function ProcessList({ c, snapshot, canAct }: { c: Catch; snapshot: Snapshot; canAct: boolean }) {
+function ProcessList({ c, snapshot, light }: { c: Catch; snapshot: Snapshot; light: Pt }) {
   const w = worldOf(snapshot);
   const room = w.room.get(c.room)!;
   const live = c.result === null;
-  const rows = [...c.figures].sort((a, b) => processOf(a, c).pid - processOf(b, c).pid);
+  const rows = listRows(c);
   const x0 = 120;
   const top = 250;
-  const rowH = Math.min(66, 560 / rows.length);
+  const rowH = rows[0]?.h ?? 60;
+  const band = rowH * 1.7;
   return (
     <g className="soc-text">
       <rect width={W} height={H} fill="#0a1120" />
@@ -286,14 +308,39 @@ function ProcessList({ c, snapshot, canAct }: { c: Catch; snapshot: Snapshot; ca
       <text x={W - 120} y={200} textAnchor="end" fontSize={18} fill="#7f8ea8">
         End the malicious processes. Leave clinical ones running.
       </text>
+      <defs>
+        <filter id="catch-blur" x="-5%" y="-20%" width="110%" height="140%">
+          <feGaussianBlur stdDeviation={live ? 7 : 0} />
+        </filter>
+        <clipPath id="catch-band">
+          <rect x={0} y={light.y - band / 2} width={W} height={band} />
+        </clipPath>
+      </defs>
       {['PROCESS', 'PID', 'PUBLISHER', 'CPU', ''].map((h, i) => (
         <text key={h || i} x={[x0 + 20, x0 + 520, x0 + 680, x0 + 1040, x0 + 1200][i]} y={top - 12} fontSize={15} fontWeight={700} fill="#7f8ea8" letterSpacing={1.5}>
           {h}
         </text>
       ))}
-      {rows.map((f, i) => {
+      {/* the whole list blurred, and a sharp copy only where the cursor is */}
+      <g filter="url(#catch-blur)" opacity={live ? 0.75 : 1}>
+        <Rows c={c} snapshot={snapshot} rows={rows} x0={x0} rowH={rowH} />
+      </g>
+      {live && (
+        <g clipPath="url(#catch-band)">
+          <rect x={x0 - 10} y={light.y - band / 2} width={W - 2 * x0 + 20} height={band} rx={10} fill="#0d1729" />
+          <Rows c={c} snapshot={snapshot} rows={rows} x0={x0} rowH={rowH} />
+          <rect x={x0 - 10} y={light.y - band / 2} width={W - 2 * x0 + 20} height={band} rx={10} fill="none" stroke="#3ee0d8" strokeWidth={2} opacity={0.5} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+function Rows({ c, snapshot, rows, x0, rowH }: { c: Catch; snapshot: Snapshot; rows: { f: CatchFigure; y: number }[]; x0: number; rowH: number }) {
+  return (
+    <g>
+      {rows.map(({ f, y }, i) => {
         const p = processOf(f, c);
-        const y = top + i * rowH;
         const oops = f.oopsAtMs !== null && snapshot.timeMs - f.oopsAtMs < 1200;
         return (
           <g key={f.id} opacity={f.caught ? 0.45 : 1}>
@@ -319,36 +366,12 @@ function ProcessList({ c, snapshot, canAct }: { c: Catch; snapshot: Snapshot; ca
                 DENIED · clinical
               </text>
             ) : (
-              <g
-                style={{ cursor: canAct && live ? 'pointer' : 'default' }}
-                onPointerDown={(e) => {
-                  if (!canAct || !live) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  sendIntent({ type: 'catch', figure: f.id });
-                }}
-              >
+              <g>
                 <rect x={x0 + 1190} y={y + 6} width={150} height={rowH - 20} rx={8} fill="#13233d" stroke="#3a5680" strokeWidth={2} />
                 <text x={x0 + 1265} y={y + rowH / 2 + 2} textAnchor="middle" fontSize={17} fontWeight={700} fill="#cfe0f5">
                   End task
                 </text>
               </g>
-            )}
-            {/* the whole row is a target too, for fingers */}
-            {canAct && live && !f.caught && (
-              <rect
-                x={x0}
-                y={y}
-                width={1170}
-                height={rowH - 8}
-                fill="transparent"
-                style={{ cursor: 'pointer' }}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  sendIntent({ type: 'catch', figure: f.id });
-                }}
-              />
             )}
           </g>
         );
@@ -377,7 +400,7 @@ function Header({ c, snapshot, reality, canAct }: { c: Catch; snapshot: Snapshot
         {reality ? 'Terminate the ransomware' : 'Catch the intruders!'}
       </text>
       <text x={40} y={96} fontSize={20} fill={reality ? '#8494ad' : '#b9adf0'}>
-        {reality ? `Analyst ${guard?.name ?? ''} · live response` : `${theRoom(roomName)} · ${guard?.name ?? 'the guard'}'s lantern is up · tap everyone in a beret`}
+        {reality ? `Analyst ${guard?.name ?? ''} · live response · hover to inspect a process` : `${theRoom(roomName)} · lights out! Shine ${guard?.name ?? 'the guard'}'s flashlight and tap everyone in a beret`}
         {!canAct && ' · watching'}
       </text>
       {/* caught so far */}
@@ -435,15 +458,73 @@ function Result({ c, snapshot, reality }: { c: Catch; snapshot: Snapshot; realit
   );
 }
 
-/** The whole mini game, filling its box (1600×900 units). */
+/** How often the flashlight's position goes to the server (for everyone watching). */
+const AIM_EVERY_MS = 90;
+
+/**
+ * The whole mini game, filling its box (1600×900 units). The room is dark: the flashlight follows the
+ * mouse or finger, and a tap only catches someone the light was already on (so tapping blindly in the
+ * dark finds nobody). Everyone watching sees the player's light.
+ */
 export function CatchGame({ reality }: { reality: boolean }) {
   const { snapshot, role } = useGame();
+  const svg = useRef<SVGSVGElement>(null);
+  const [local, setLocal] = useState<Pt | null>(null);
+  const lastSent = useRef(0);
   const c = snapshot?.catch;
   if (!snapshot || !c) return null;
   const canAct = role !== 'watcher';
+  const live = c.result === null;
+  const light: Pt = (canAct && local) || c.aim || { x: 800, y: reality ? 420 : 560 };
+
+  const toScene = (e: React.PointerEvent): Pt => {
+    const m = svg.current?.getScreenCTM();
+    if (!m) return { x: 0, y: 0 };
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    return { x: p.x, y: p.y };
+  };
+  const aim = (p: Pt, force = false) => {
+    setLocal(p);
+    const now = performance.now();
+    if (force || now - lastSent.current > AIM_EVERY_MS) {
+      lastSent.current = now;
+      sendIntent({ type: 'aim', x: Math.round(p.x), y: Math.round(p.y) });
+    }
+  };
+  const lit = (p: Pt) => (reality ? Math.abs(p.y - light.y) <= (listRows(c)[0]?.h ?? 60) * 0.85 : Math.hypot(p.x - light.x, p.y - light.y) < LIGHT_R * 0.85);
+
+  function down(e: React.PointerEvent) {
+    if (!canAct || !live) return;
+    e.preventDefault();
+    const p = toScene(e);
+    let target: CatchFigure | undefined;
+    if (reality) {
+      const row = listRows(c!).find((r) => p.y >= r.y && p.y < r.y + r.h && p.x > 110 && p.x < W - 110);
+      if (row && !row.f.caught && lit({ x: p.x, y: row.y + row.h / 2 })) target = row.f;
+    } else {
+      target = c!.figures
+        .filter((f) => !f.caught)
+        .map((f) => ({ f, d: Math.hypot(figureCenter(f).x - p.x, figureCenter(f).y - p.y) }))
+        .filter(({ f, d }) => d < 85 && lit(figureCenter(f)))
+        .sort((a, b) => b.f.y - a.f.y || a.d - b.d)[0]?.f;
+    }
+    if (target) sendIntent({ type: 'catch', figure: target.id });
+    aim(p, true); // a finger moves the light to where it taps
+  }
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="block h-full w-full select-none" style={{ touchAction: 'none' }} role="application" aria-label="Catch the intruders">
-      {reality ? <ProcessList c={c} snapshot={snapshot} canAct={canAct} /> : <MuseumScene c={c} snapshot={snapshot} canAct={canAct} />}
+    <svg
+      ref={svg}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="xMidYMid meet"
+      className="block h-full w-full select-none"
+      style={{ touchAction: 'none', cursor: canAct && live ? 'crosshair' : 'default' }}
+      onPointerDown={down}
+      onPointerMove={(e) => canAct && live && aim(toScene(e))}
+      role="application"
+      aria-label="Catch the intruders"
+    >
+      {reality ? <ProcessList c={c} snapshot={snapshot} light={light} /> : <MuseumScene c={c} snapshot={snapshot} light={light} />}
       <Header c={c} snapshot={snapshot} reality={reality} canAct={canAct} />
       <Result c={c} snapshot={snapshot} reality={reality} />
     </svg>

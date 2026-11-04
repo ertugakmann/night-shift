@@ -42,6 +42,8 @@ export interface Room {
   /** How strongly the gang is drawn to this room. */
   lure: number;
   special?: 'masterKeys' | 'backups' | 'vault';
+  /** Critical departments: what their staff say on the radio when the room closes (locked or dark). */
+  complaint?: { speaker: string; text: string };
   cctv: { game: string; reality: string };
   exhibits: Exhibit[];
 }
@@ -92,6 +94,8 @@ export interface Scenario {
     keysSec: number;
     candlelightSec: number;
     candlelightModifier: number;
+    /** How much candlelight slows the patient impact counters in its wing (they rise much faster without). */
+    candlelightImpactModifier: number;
     /** How many rooms can be locked at the same time (the padlocks on the desk). */
     maxLocks: number;
   };

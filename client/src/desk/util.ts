@@ -70,6 +70,10 @@ export function truncate(text: string, width: number): string {
 // ---------- Actions ----------
 
 /** Why an action can't be used on a room right now (null if it can). Mirrors the engine's checks. */
+/** Evict needs the gang spotted by a patrol first (the reality view says it in SOC words). */
+export const SPOT_FIRST = 'Spot them first.';
+export const SPOT_FIRST_REAL = 'Detect before you eradicate.';
+
 export function actionBlocked(s: Snapshot, room: RoomId, action: ActionKind): string | null {
   const w = worldOf(s);
   const rs = s.rooms[room];
@@ -86,8 +90,9 @@ export function actionBlocked(s: Snapshot, room: RoomId, action: ActionKind): st
     case 'unlock':
       return rs.locked ? null : 'Not locked.';
     case 'evict':
-      // Works anywhere; locked first is safer (a failed catch cannot slip away).
-      return s.guards.some((g) => g.task?.action === 'evict' || g.task?.action === 'repair') ? 'One mini game at a time.' : null;
+      // Only where a patrol has spotted them; locked first is safer (a failed catch cannot slip away).
+      if (s.guards.some((g) => g.task?.action === 'evict' || g.task?.action === 'repair')) return 'One mini game at a time.';
+      return s.groups.some((g) => g.room === room && g.spotted) ? null : SPOT_FIRST;
     case 'repair':
       if (!rs.locked) return rs.dark ? 'Lock and clear the room first.' : 'Nothing to repair.';
       if (s.guards.some((g) => g.task?.action === 'evict' || g.task?.action === 'repair')) return 'One mini game at a time.';

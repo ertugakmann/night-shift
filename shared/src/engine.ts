@@ -44,6 +44,8 @@ export interface RoomState {
   occupiedMs: number;
   /** Guard whose flashlight is on in here. */
   litBy: string | null;
+  /** The staff already complained about this closure (reset when the room opens again). */
+  complained: boolean;
 }
 
 export interface Group {
@@ -148,6 +150,8 @@ export interface Catch {
   endsMs: number;
   figures: CatchFigure[];
   wrong: number;
+  /** Where the player's flashlight points (scene units, 1600×900), so every screen sees the same light. */
+  aim: { x: number; y: number } | null;
   /** caught: all thrown out. held: time ran out, but the room is locked and they are still inside. escaped: they fled to `to`. */
   result: 'caught' | 'held' | 'escaped' | null;
   to: RoomId | null;
@@ -304,7 +308,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     rng: sc.seed >>> 0,
     reality: false,
     debug: false,
-    rooms: perRoom(() => ({ locked: false, dark: false, occupiedMs: 0, litBy: null })),
+    rooms: perRoom(() => ({ locked: false, dark: false, occupiedMs: 0, litBy: null, complained: false })),
     groups: [],
     nextGroupId: 1,
     guards: sc.guards.map((g) => ({ id: g.id, name: g.name, room: g.startRoom, task: null })),
@@ -457,6 +461,7 @@ function tick(s: GameState, w: World): void {
   }
 
   updateGuards(s, w);
+  complaints(s, w);
   updateCatch(s, w);
   updateWires(s, w);
   updateKeys(s, w);
@@ -747,6 +752,7 @@ function startCatch(s: GameState, w: World, guard: Guard, roomId: RoomId, groups
     endsMs: s.timeMs + w.ms.catch,
     figures,
     wrong: 0,
+    aim: null,
     result: null,
     to: null,
     resultAtMs: null,
@@ -827,6 +833,21 @@ function resolveCatch(s: GameState, w: World, won: boolean): void {
     say(s, guard, `They slipped past me into ${theRoom(where.name)}!`, c.room, `Eradication failed: ransomware moved to ${where.real}.`);
   } else {
     say(s, guard, `They're hiding behind the exhibits in ${name}. Again, chief?`, c.room, `Eradication incomplete: malicious processes still running on ${room.real}. Retry.`);
+  }
+}
+
+/** Critical departments complain on the radio the moment they close (locked or dark), once per closure. */
+function complaints(s: GameState, w: World): void {
+  for (const room of w.sc.rooms) {
+    if (!room.complaint) continue;
+    const rs = s.rooms[room.id];
+    const closed = rs.locked || rs.dark;
+    if (closed && !rs.complained) {
+      rs.complained = true;
+      log(s, { kind: 'staff', speaker: room.complaint.speaker, text: room.complaint.text, room: room.id });
+    } else if (!closed) {
+      rs.complained = false;
+    }
   }
 }
 
@@ -1132,7 +1153,8 @@ function updateCare(s: GameState, w: World): void {
     const factor = s.candlelight[room.wing] ? sc.actions.candlelightModifier : 1;
     for (const ex of room.exhibits) {
       loss += ex.criticality * factor;
-      if (ex.impact) s.impact[ex.impact] += (sc.impactPerGameHour[ex.impact] * factor * STEP_MS) / w.ms.gameHour;
+      const impactFactor = s.candlelight[room.wing] ? sc.actions.candlelightImpactModifier : 1;
+      if (ex.impact) s.impact[ex.impact] += (sc.impactPerGameHour[ex.impact] * impactFactor * STEP_MS) / w.ms.gameHour;
     }
   }
   s.care = Math.max(0, Math.min(100, 100 - loss));
@@ -1168,18 +1190,20 @@ function summarise(s: GameState, result: Outcome['result']): NightSummary {
 
 // ---------- Intents ----------
 
-export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch', 'wire', 'code'] as const;
+export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch', 'wire', 'code', 'aim'] as const;
 export type IntentType = (typeof INTENT_TYPES)[number];
 
 export type Intent =
-  | { type: Exclude<IntentType, 'action' | 'catch' | 'wire' | 'code'> }
+  | { type: Exclude<IntentType, 'action' | 'catch' | 'wire' | 'code' | 'aim'> }
   | { type: 'action'; action: ActionKind; room: RoomId; guard?: string }
   /** A click on someone in the "Catch the intruders" scene. */
   | { type: 'catch'; figure: number }
   /** A cable dragged from left position `from` to right position `to` in "Reconnect the exhibit". */
   | { type: 'wire'; from: number; to: number }
   /** One character typed in "Change the locks". */
-  | { type: 'code'; char: string };
+  | { type: 'code'; char: string }
+  /** Where the flashlight points in "Catch the intruders" (scene units). */
+  | { type: 'aim'; x: number; y: number };
 
 /** Only the presenter page can start (or skip the intro), reset or hand over control. */
 export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode'];
@@ -1191,6 +1215,7 @@ export function isIntent(value: unknown): value is Intent {
   if (v.type === 'catch') return typeof v.figure === 'number' && Number.isInteger(v.figure);
   if (v.type === 'wire') return Number.isInteger(v.from) && Number.isInteger(v.to);
   if (v.type === 'code') return typeof v.char === 'string' && v.char.length === 1;
+  if (v.type === 'aim') return Number.isFinite(v.x) && Number.isFinite(v.y);
   if (v.type !== 'action') return true;
   return (
     ACTIONS.includes(v.action as ActionKind) &&
@@ -1210,6 +1235,13 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
       return joinWire(state, intent.from, intent.to);
     case 'code':
       return typeCode(state, intent.char);
+    case 'aim': {
+      const c = state.catch;
+      if (state.phase !== 'running' || !c || c.result !== null) return { state };
+      const s = clone(state);
+      s.catch!.aim = { x: Math.max(0, Math.min(1600, intent.x)), y: Math.max(0, Math.min(900, intent.y)) };
+      return { state: s };
+    }
     case 'start':
       if (state.phase === 'running') return { state, error: 'Already running.' };
       if (state.phase === 'intro') return { state, error: 'The shift is starting. Press Enter to skip.' };
@@ -1289,9 +1321,11 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
       break;
     }
     case 'evict': {
-      // Works in any room. Locked first is the safe way: if the catch fails, they cannot slip away.
+      // Only where a patrol has spotted the gang (and they are still there). Locked first is the safe
+      // way: if the catch fails, they cannot slip away.
       const other = busyWith('evict', () => true) ?? busyWith('repair', () => true);
       if (other) return fail(`${other.name} is already on a job. One mini game at a time!`);
+      if (!state.groups.some((g) => g.room === room.id && g.spotted)) return fail(`Spot them first: send a patrol to ${name}.`);
       break;
     }
     case 'repair': {

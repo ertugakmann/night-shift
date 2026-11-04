@@ -48,6 +48,13 @@ function placeGang(s: GameState, room: string): GameState {
 
 const idleNight = () => runUntil(started(), () => false);
 
+/** Test setup: a patrol has spotted the gang in `room` (Evict needs that). */
+function spotted(s: GameState, room: string): GameState {
+  const copy: GameState = JSON.parse(JSON.stringify(s));
+  for (const g of copy.groups) if (g.room === room) g.spotted = true;
+  return copy;
+}
+
 /** Repair, and win the wires: wait for the guard to arrive, then join every cable to its colour. */
 function repairAndWire(s: GameState, room: string, guard?: string): GameState {
   s = act(s, 'repair', room, guard);
@@ -62,7 +69,7 @@ function repairAndWire(s: GameState, room: string, guard?: string): GameState {
 
 /** Evict, and win the catch: wait for the guard to arrive, then click every intruder. */
 function evictAndCatch(s: GameState, room: string, guard?: string): GameState {
-  s = act(s, 'evict', room, guard);
+  s = act(spotted(s, room), 'evict', room, guard);
   s = runUntil(s, (x) => (x.catch?.room === room && x.catch.result === null) || !x.guards.some((g) => g.task?.action === 'evict'));
   if (!s.catch || s.catch.result !== null) return s;
   for (const f of s.catch.figures.filter((f) => f.kind === 'intruder')) s = applyIntent(s, { type: 'catch', figure: f.id }).state;
@@ -278,7 +285,7 @@ describe('find, trap, evict, repair', () => {
   });
 
   it('evict works in an open room too, but only one catch at a time', () => {
-    let s = act(afterBreakIn(), 'evict', 'mail-room', 'tom');
+    let s = act(spotted(afterBreakIn(), 'mail-room'), 'evict', 'mail-room', 'tom');
     const second = applyIntent(s, { type: 'action', action: 'evict', room: 'entrance-hall', guard: 'sam' });
     expect(second.error).toMatch(/One mini game at a time/);
     s = runUntil(s, (x) => x.catch !== null);
@@ -322,15 +329,16 @@ describe('Catch the intruders (Evict)', () => {
       s = act(s, 'lock', 'mail-room', 'sam');
       s = runUntil(s, (x) => x.rooms['mail-room'].locked && !x.guards.some((g) => g.task));
     }
-    s = act(s, 'evict', 'mail-room', 'sam');
+    s = act(spotted(s, 'mail-room'), 'evict', 'mail-room', 'sam');
     return runUntil(s, (x) => x.catch !== null);
   }
 
-  it('starts when the guard arrives: intruders hidden among innocent visitors, 7 seconds on the clock', () => {
+  it('starts when the guard arrives: intruders hidden among innocent visitors, 8.5 seconds on the clock', () => {
     const s = catching();
     const c = s.catch!;
     expect(c.room).toBe('mail-room');
-    expect(c.endsMs - c.startedMs).toBe(7000);
+    expect(c.endsMs - c.startedMs).toBe(8500);
+    expect(c.aim).toBeNull();
     expect(c.figures.filter((f) => f.kind === 'intruder').length).toBe(3);
     expect(c.figures.filter((f) => f.kind === 'innocent').length).toBe(4);
     for (const f of c.figures) {
@@ -385,7 +393,7 @@ describe('Catch the intruders (Evict)', () => {
     let s = placeGang(runUntil(started(), (x) => x.brokenIn), 'mail-room');
     s.rooms['entrance-hall'].locked = true;
     s.guards.find((g) => g.id === 'tom')!.room = 'key-room';
-    s = act(s, 'evict', 'mail-room', 'sam');
+    s = act(spotted(s, 'mail-room'), 'evict', 'mail-room', 'sam');
     s = runUntil(s, (x) => x.catch !== null);
     s = runUntil(s, (x) => x.catch?.result !== null);
     expect(s.catch!.result).toBe('escaped');
@@ -397,11 +405,30 @@ describe('Catch the intruders (Evict)', () => {
     let s = placeGang(runUntil(started(), (x) => x.brokenIn), 'mail-room');
     s.rooms['entrance-hall'].locked = true;
     s.rooms['west-corridor'].locked = true;
-    s = act(s, 'evict', 'mail-room', 'sam');
+    s = act(spotted(s, 'mail-room'), 'evict', 'mail-room', 'sam');
     s = runUntil(s, (x) => x.catch !== null);
     s = runUntil(s, (x) => x.catch?.result !== null);
     expect(s.catch!.result).toBe('held');
     expect(s.groups.map((g) => g.room)).toEqual(['mail-room']);
+  });
+
+  it('needs the gang spotted first: no Evict in a room nobody has patrolled', () => {
+    const s = runUntil(started(), (x) => x.groups.length > 1);
+    const blind = applyIntent(s, { type: 'action', action: 'evict', room: 'mail-room', guard: 'sam' });
+    expect(blind.error).toMatch(/Spot them first/);
+    // a patrol reveals them, then Evict is fine
+    let p = act(s, 'patrol', 'mail-room', 'sam');
+    p = runUntil(p, (x) => x.groups.some((g) => g.room === 'mail-room' && g.spotted));
+    expect(applyIntent(p, { type: 'action', action: 'evict', room: 'mail-room', guard: 'tom' }).error).toBeUndefined();
+  });
+
+  it('the flashlight: every screen sees where the player points it', () => {
+    let s = catching();
+    s = applyIntent(s, { type: 'aim', x: 420, y: 515 }).state;
+    expect(s.catch!.aim).toEqual({ x: 420, y: 515 });
+    s = applyIntent(s, { type: 'aim', x: -50, y: 2000 }).state;
+    expect(s.catch!.aim).toEqual({ x: 0, y: 900 });
+    expect(isIntent({ type: 'aim', x: 1, y: Number.NaN })).toBe(false);
   });
 
   it('a click without a catch is refused', () => {
@@ -539,6 +566,42 @@ describe('Change the locks (the Key Room falls)', () => {
     const night = idleNight();
     expect(night.stats.keysStolen).toBe(true);
     expect(night.stats.keysChanged).toBe(false);
+  });
+});
+
+describe('critical departments and candlelight', () => {
+  it('staff complain on the radio when a critical room is locked, once per closure', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    s = runFor(s, 300);
+    const lines = s.log.filter((l) => l.kind === 'staff' && l.room === 'lab');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].text).toMatch(/blood tests/);
+    s = act(s, 'unlock', 'lab', 'sam');
+    s = runUntil(s, (x) => !x.rooms.lab.locked);
+    s = act(s, 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    s = runFor(s, 300);
+    expect(s.log.filter((l) => l.kind === 'staff' && l.room === 'lab')).toHaveLength(2);
+  });
+
+  it('a non-critical room closes quietly', () => {
+    let s = act(started(), 'lock', 'archive', 'sam');
+    s = runUntil(s, (x) => x.rooms.archive.locked);
+    s = runFor(s, 300);
+    expect(s.log.some((l) => l.kind === 'staff' && l.room === 'archive')).toBe(false);
+  });
+
+  it('without candlelight the patient impact climbs four times as fast', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    const dark = runFor(s, 10_000);
+    const darkRate = dark.impact.tests - s.impact.tests;
+    let c = act(s, 'candlelight', 'pharmacy', 'priya');
+    c = runUntil(c, (x) => x.candlelight.west);
+    const lit = runFor(c, 10_000);
+    const litRate = lit.impact.tests - c.impact.tests;
+    expect(darkRate / litRate).toBeCloseTo(4, 1);
   });
 });
 

@@ -3,7 +3,8 @@ import { ACTION_LABEL, worldOf } from '../game/view';
 import { selectRoom, sendIntent, showNotice } from '../net/game';
 import { ROOMS } from '../building/layout';
 import { Paw } from './MiniMap';
-import { actionBlocked, mapX, mapY, nearestFreeGuard } from './util';
+import { useState } from 'react';
+import { SPOT_FIRST, SPOT_FIRST_REAL, actionBlocked, mapX, mapY, nearestFreeGuard } from './util';
 
 const W = 470;
 const H = 236;
@@ -78,9 +79,14 @@ export function ActionPopup({
   floating?: boolean;
   reality?: boolean;
 }) {
+  const [hover, setHover] = useState<ActionKind | null>(null);
   const w = worldOf(snapshot);
   const room = w.room.get(roomId);
   if (!room) return null;
+  const reason = (a: ActionKind) => {
+    const r = actionBlocked(snapshot, roomId, a);
+    return r === SPOT_FIRST && reality ? SPOT_FIRST_REAL : r;
+  };
   const rect = ROOMS[roomId].rect;
   const anchorX = mapX(rect.x + rect.w / 2);
   const anchorY = mapY(rect.y + rect.h);
@@ -95,7 +101,7 @@ export function ActionPopup({
 
   function act(action: ActionKind) {
     if (!canAct) return showNotice('Watching only. Enter the control code to take part.');
-    const blocked = actionBlocked(snapshot, roomId, action);
+    const blocked = reason(action);
     if (blocked) return showNotice(blocked);
     if (!nearest) return showNotice('All three guards are busy.');
     sendIntent({ type: 'action', action, room: roomId });
@@ -144,7 +150,7 @@ export function ActionPopup({
               ? 'Lock'
               : ACTION_LABEL[action];
         return (
-          <g key={action} onClick={() => act(action)} style={{ cursor: 'pointer' }} opacity={blocked ? 0.38 : 1}>
+          <g key={action} onClick={() => act(action)} onPointerEnter={() => setHover(action)} onPointerLeave={() => setHover((h) => (h === action ? null : h))} style={{ cursor: 'pointer' }} opacity={blocked ? 0.38 : 1}>
             <rect x={bx} y={by} width={82} height={98} rx={18} fill={blocked ? '#e8dcc8' : '#2c2468'} />
             <circle cx={bx + 41} cy={by + 38} r={27} fill={blocked ? '#d6c8b0' : '#3a2f7a'} />
             <g transform={`translate(${bx + 41},${by + 38})`}>
@@ -156,6 +162,28 @@ export function ActionPopup({
           </g>
         );
       })}
+
+      {/* why a button is greyed out, on hover (a tap shows the same as a notice) */}
+      {(() => {
+        if (!hover) return null;
+        const why = reason(hover);
+        if (!why || !canAct) return null;
+        const slots = ACTIONS.filter((a) => a !== 'unlock').map((a) => (a === 'lock' && snapshot.rooms[roomId].locked ? 'unlock' : a));
+        const i = slots.indexOf(hover);
+        if (i < 0) return null;
+        const tw = Math.max(150, why.length * 10 + 32);
+        const cx = Math.min(x + W - tw / 2, Math.max(x + tw / 2, x + 18 + i * 88 + 41));
+        const ty = y + H + 10;
+        return (
+          <g pointerEvents="none" className={reality ? 'soc-text' : 'game-text'}>
+            <path d={`M${x + 18 + i * 88 + 31} ${ty} L${x + 18 + i * 88 + 41} ${ty - 10} L${x + 18 + i * 88 + 51} ${ty} Z`} fill={reality ? '#3ee0d8' : INK} />
+            <rect x={cx - tw / 2} y={ty} width={tw} height={40} rx={20} fill={reality ? '#3ee0d8' : INK} />
+            <text x={cx} y={ty + 27} textAnchor="middle" fontSize={19} fontWeight={700} fill={reality ? '#04212a' : '#fff1cf'}>
+              {why}
+            </text>
+          </g>
+        );
+      })()}
     </g>
   );
 }

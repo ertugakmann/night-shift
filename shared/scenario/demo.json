@@ -45,13 +45,14 @@
     "walkSecPerRoom": 1.12,
     "patrolSec": 4.48,
     "lockSec": 1.12,
-    "catchSec": 7,
+    "catchSec": 8.5,
     "catchPenaltySec": 1.5,
     "catchInnocents": 4,
     "wiresSec": 8,
     "keysSec": 6,
     "candlelightSec": 1.68,
     "candlelightModifier": 0.5,
+    "candlelightImpactModifier": 0.25,
     "maxLocks": 3
   },
 
@@ -142,6 +143,7 @@
     },
     {
       "id": "lab",
+      "complaint": { "speaker": "Malik, lab technician", "text": "Chief, we can't run blood tests without the lab system!" },
       "screen": 3,
       "wing": "west",
       "name": "Lab Gallery",
@@ -169,6 +171,7 @@
     },
     {
       "id": "pharmacy",
+      "complaint": { "speaker": "Grace, pharmacist", "text": "Chief, the dispensing cabinets are frozen. Patients are waiting for their medicines!" },
       "screen": 3,
       "wing": "west",
       "name": "Pharmacy Gallery",
@@ -216,6 +219,7 @@
     },
     {
       "id": "emergency",
+      "complaint": { "speaker": "Dr. Okafor, Emergency", "text": "Chief, we can't triage without the ED system! Ambulances are queueing." },
       "screen": 4,
       "wing": "east",
       "name": "Emergency Hall",
@@ -243,6 +247,7 @@
     },
     {
       "id": "ward4",
+      "complaint": { "speaker": "Nurse Ada, Ward 4", "text": "Chief, the infusion pumps are locked out. We're counting drops by hand!" },
       "screen": 4,
       "wing": "east",
       "name": "Ward 4 Hall",
@@ -355,10 +360,10 @@
   ],
 
   "impactPerGameHour": {
-    "tests": 12,
-    "medicines": 8,
-    "surgeries": 2,
-    "ambulances": 3
+    "tests": 24,
+    "medicines": 16,
+    "surgeries": 4,
+    "ambulances": 6
   },
 
   "clues": {
