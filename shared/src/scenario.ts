@@ -82,7 +82,10 @@ export interface Scenario {
     walkSecPerRoom: number;
     patrolSec: number;
     lockSec: number;
-    evictSec: number;
+    /** Evict is the "Catch the intruders" mini game: the time limit, the cost of a wrong click, and how many innocent visitors mingle with the gang. */
+    catchSec: number;
+    catchPenaltySec: number;
+    catchInnocents: number;
     repairSec: number;
     candlelightSec: number;
     candlelightModifier: number;
@@ -138,6 +141,8 @@ export interface World {
     masterKeysTick: number;
     minStay: number;
     firstSplit: number;
+    catch: number;
+    catchPenalty: number;
     followWindow: number;
     vandalise: number;
     vaultLose: number;
@@ -201,6 +206,8 @@ function buildWorld(sc: Scenario): World {
       masterKeysTick: sc.intruders.masterKeysSpreadTickSec * 1000,
       minStay: sc.intruders.minStaySec * 1000,
       firstSplit: sc.intruders.firstSplitSec * 1000,
+      catch: sc.actions.catchSec * 1000,
+      catchPenalty: sc.actions.catchPenaltySec * 1000,
       followWindow: sc.rex.followWindowSec * 1000,
       vandalise: sc.intruders.vandaliseAfterSec * 1000,
       vaultLose: sc.intruders.vaultLoseAfterSec * 1000,

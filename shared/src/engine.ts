@@ -120,6 +120,41 @@ export interface Outcome {
   summary: NightSummary;
 }
 
+/** Someone in the "Catch the intruders" scene. x, y in 0–1 across the scene. */
+export interface CatchFigure {
+  id: number;
+  kind: 'intruder' | 'innocent';
+  /** Which character (or process name) to draw. */
+  look: number;
+  x: number;
+  y: number;
+  caught: boolean;
+  /** When a wrong click hit this innocent (for the "Hey!" animation). */
+  oopsAtMs: number | null;
+}
+
+/**
+ * Evict as a mini game: when the guard reaches the room, the gang hides among innocent visitors.
+ * Click every intruder before the time runs out. Shared by every screen, played by whoever has control.
+ */
+export interface Catch {
+  id: number;
+  room: RoomId;
+  guard: string;
+  startedMs: number;
+  /** Time runs out here; every wrong click brings it closer. */
+  endsMs: number;
+  figures: CatchFigure[];
+  wrong: number;
+  /** caught: all thrown out. held: time ran out, but the room is locked and they are still inside. escaped: they fled to `to`. */
+  result: 'caught' | 'held' | 'escaped' | null;
+  to: RoomId | null;
+  resultAtMs: number | null;
+}
+
+/** How long the result of a catch stays on screen. */
+export const CATCH_RESULT_MS = 1800;
+
 export interface DoneAction {
   guard: string;
   action: ActionKind;
@@ -199,6 +234,9 @@ export interface GameState {
   outcome: Outcome | null;
   /** Every finished guard action, for the morning report. `hit`: it did what it was for (found, evicted, restored...). */
   done: DoneAction[];
+  /** The "Catch the intruders" mini game in progress (or just finished, while its result shows). */
+  catch: Catch | null;
+  nextCatchId: number;
 }
 
 // ---------- Setup ----------
@@ -254,6 +292,8 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     nextFxId: 1,
     outcome: null,
     done: [],
+    catch: null,
+    nextCatchId: 1,
   };
 }
 
@@ -362,6 +402,7 @@ function tick(s: GameState, w: World): void {
   }
 
   updateGuards(s, w);
+  updateCatch(s, w);
   updateRooms(s, w);
   if (s.phase !== 'running') return;
 
@@ -415,6 +456,7 @@ function spread(s: GameState, w: World): void {
     return;
   }
   for (const g of [...s.groups]) {
+    if (s.catch && s.catch.result === null && g.room === s.catch.room) continue; // busy hiding from the guard
     if (g.spotted) {
       const dest = pickDestination(s, w, g, true);
       if (dest) moveGroup(s, g, dest);
@@ -596,6 +638,138 @@ function updateContainment(s: GameState): void {
   else if (s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
 }
 
+// ---------- Catch the intruders (Evict) ----------
+
+function arriveToEvict(s: GameState, w: World, guard: Guard, task: Task): void {
+  const room = w.room.get(task.room)!;
+  const inside = s.groups.filter((g) => g.room === task.room);
+  if (inside.length === 0) {
+    guard.task = null;
+    s.done.push({ guard: guard.id, action: 'evict', room: task.room, atMs: s.timeMs, hit: false });
+    say(s, guard, evictEmptyLine(guard.id, s.nextLogId, theRoom(room.name)), task.room, `Nothing to eradicate in ${room.real}.`);
+    return;
+  }
+  startCatch(s, w, guard, task.room, inside.length);
+}
+
+function startCatch(s: GameState, w: World, guard: Guard, roomId: RoomId, groups: number): void {
+  const room = w.room.get(roomId)!;
+  const intruders = Math.min(5, 2 + groups);
+  const total = Math.min(9, intruders + w.sc.actions.catchInnocents);
+  // Shuffle who stands where on a 3×3 grid, with a little jitter, so nothing gives the gang away.
+  const kinds: CatchFigure['kind'][] = Array.from({ length: total }, (_, i) => (i < intruders ? 'intruder' : 'innocent'));
+  const cells = Array.from({ length: 9 }, (_, i) => i);
+  const shuffle = <T>(a: T[]) => {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rand(s) * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+  };
+  shuffle(kinds);
+  shuffle(cells);
+  let intruderLook = 0;
+  let innocentLook = 0;
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  const figures: CatchFigure[] = kinds.map((kind, i) => ({
+    id: i + 1,
+    kind,
+    look: kind === 'intruder' ? intruderLook++ : innocentLook++,
+    x: round(0.17 + (cells[i] % 3) * 0.33 + (rand(s) - 0.5) * 0.12),
+    y: round(0.24 + Math.floor(cells[i] / 3) * 0.27 + (rand(s) - 0.5) * 0.08),
+    caught: false,
+    oopsAtMs: null,
+  }));
+  s.catch = {
+    id: s.nextCatchId++,
+    room: roomId,
+    guard: guard.id,
+    startedMs: s.timeMs,
+    endsMs: s.timeMs + w.ms.catch,
+    figures,
+    wrong: 0,
+    result: null,
+    to: null,
+    resultAtMs: null,
+  };
+  s.rooms[roomId].litBy = guard.id; // the guard's lantern lights the scene
+  say(s, guard, `Lanterns up in ${theRoom(room.name)}! Where are they hiding?`, roomId, `Hunting malicious processes on ${room.real}.`);
+}
+
+function clickCatch(state: GameState, figureId: number): ApplyResult {
+  const c = state.catch;
+  if (state.phase === 'paused') return { state, error: 'Paused. Press Space to continue.' };
+  if (state.phase !== 'running' || !c || c.result !== null) return { state, error: 'No catch in progress.' };
+  const f = c.figures.find((x) => x.id === figureId);
+  if (!f || f.caught) return { state };
+  const s = clone(state);
+  const w = world(s.scenarioId);
+  const cc = s.catch!;
+  const ff = cc.figures.find((x) => x.id === figureId)!;
+  if (ff.kind === 'intruder') {
+    ff.caught = true;
+    if (cc.figures.every((x) => x.kind !== 'intruder' || x.caught)) resolveCatch(s, w, true);
+  } else {
+    // An innocent visitor: "Hey!" and precious seconds lost.
+    ff.oopsAtMs = s.timeMs;
+    cc.wrong++;
+    cc.endsMs = Math.max(s.timeMs, cc.endsMs - w.ms.catchPenalty);
+  }
+  return { state: s };
+}
+
+function updateCatch(s: GameState, w: World): void {
+  const c = s.catch;
+  if (!c) return;
+  if (c.result === null && s.timeMs >= c.endsMs) resolveCatch(s, w, false);
+  else if (c.result !== null && s.timeMs >= (c.resultAtMs ?? 0) + CATCH_RESULT_MS) s.catch = null;
+}
+
+function resolveCatch(s: GameState, w: World, won: boolean): void {
+  const c = s.catch!;
+  const guard = s.guards.find((g) => g.id === c.guard)!;
+  const room = w.room.get(c.room)!;
+  const name = theRoom(room.name);
+  const rs = s.rooms[c.room];
+  const inside = s.groups.filter((g) => g.room === c.room);
+  c.resultAtMs = s.timeMs;
+  guard.task = null;
+  if (rs.litBy === guard.id) rs.litBy = null;
+  s.done.push({ guard: guard.id, action: 'evict', room: c.room, atMs: s.timeMs, hit: won });
+
+  if (won) {
+    c.result = 'caught';
+    s.groups = s.groups.filter((g) => g.room !== c.room);
+    s.stats.evicted += inside.length;
+    fx(s, 'evicted', c.room);
+    say(s, guard, evictedLine(guard.id, s.nextLogId, name), c.room, `Ransomware eradicated from ${room.real}.`);
+    if (s.groups.length === 0) end(s, 'won', 'Every intruder has been shown the door.', 'All malware eradicated. Incident contained.');
+    return;
+  }
+  if (rs.locked) {
+    // The lock holds: they are still in there, hiding. Try again.
+    c.result = 'held';
+    say(s, guard, `They're hiding behind the exhibits in ${name}. Again, chief?`, c.room, `Eradication incomplete: malicious processes still running on ${room.real}. Retry.`);
+    return;
+  }
+  // The doors were open: they slip away into a neighbouring room (never into a locked one).
+  let to: RoomId | null = null;
+  for (const g of inside) {
+    const dest = pickDestination(s, w, g, true);
+    if (dest) {
+      moveGroup(s, g, dest);
+      to ??= dest;
+    }
+  }
+  c.result = to ? 'escaped' : 'held';
+  c.to = to;
+  if (to) {
+    const where = w.room.get(to)!;
+    say(s, guard, `They slipped past me into ${theRoom(where.name)}!`, c.room, `Eradication failed: ransomware moved to ${where.real}.`);
+  } else {
+    say(s, guard, `They're hiding behind the exhibits in ${name}. Again, chief?`, c.room, `Eradication incomplete: malicious processes still running on ${room.real}. Retry.`);
+  }
+}
+
 // ---------- Guards ----------
 
 function updateGuards(s: GameState, w: World): void {
@@ -608,7 +782,12 @@ function updateGuards(s: GameState, w: World): void {
       task.arrived = true;
       guard.room = task.room;
       if (task.action === 'patrol') s.rooms[task.room].litBy = guard.id;
+      if (task.action === 'evict') {
+        arriveToEvict(s, w, guard, task);
+        continue;
+      }
     }
+    if (task.action === 'evict') continue; // the catch frees the guard
     if (task.arrived && task.elapsedMs >= task.walkMs + task.workMs) {
       guard.task = null;
       complete(s, w, guard, task);
@@ -682,22 +861,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
       break;
 
     case 'evict':
-      if (!rs.locked) {
-        say(s, guard, `The doors are open, I can't corner anyone in ${name}.`, task.room, `Cannot eradicate: ${room.real} is not isolated.`);
-        break;
-      }
-      if (inside.length === 0) {
-        say(s, guard, evictEmptyLine(guard.id, n, name), task.room, `Nothing to eradicate in ${room.real}.`);
-        break;
-      }
-      s.groups = s.groups.filter((g) => g.room !== task.room);
-      s.stats.evicted += inside.length;
-      fx(s, 'evicted', task.room);
-      say(s, guard, evictedLine(guard.id, n, name), task.room, `Ransomware eradicated from ${room.real}.`);
-      if (s.groups.length === 0) {
-        end(s, 'won', 'Every intruder has been shown the door.', 'All malware eradicated. Incident contained.');
-      }
-      break;
+      break; // handled by the catch (see resolveCatch)
 
     case 'repair':
       if (inside.length > 0) {
@@ -751,6 +915,7 @@ function end(s: GameState, result: Outcome['result'], reason: string, real: stri
   if (s.phase === 'ended') return;
   s.phase = 'ended';
   s.rex.pending = []; // barks still inside their window were never decided
+  s.catch = null;
   if (s.groups.length === 0 && s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
   s.outcome = { result, reason, real, atMs: s.timeMs, summary: summarise(s, result) };
   for (const rs of Object.values(s.rooms)) rs.litBy = null;
@@ -771,12 +936,14 @@ function summarise(s: GameState, result: Outcome['result']): NightSummary {
 
 // ---------- Intents ----------
 
-export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action'] as const;
+export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch'] as const;
 export type IntentType = (typeof INTENT_TYPES)[number];
 
 export type Intent =
-  | { type: Exclude<IntentType, 'action'> }
-  | { type: 'action'; action: ActionKind; room: RoomId; guard?: string };
+  | { type: Exclude<IntentType, 'action' | 'catch'> }
+  | { type: 'action'; action: ActionKind; room: RoomId; guard?: string }
+  /** A click on someone in the "Catch the intruders" scene. */
+  | { type: 'catch'; figure: number };
 
 /** Only the presenter page can start (or skip the intro), reset or hand over control. */
 export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode'];
@@ -785,6 +952,7 @@ export function isIntent(value: unknown): value is Intent {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   if (!INTENT_TYPES.includes(v.type as IntentType)) return false;
+  if (v.type === 'catch') return typeof v.figure === 'number' && Number.isInteger(v.figure);
   if (v.type !== 'action') return true;
   return (
     ACTIONS.includes(v.action as ActionKind) &&
@@ -798,6 +966,8 @@ export type ApplyResult = { state: GameState; error?: string };
 /** Applies an intent. `toggleCode` belongs to the server's control layer and is a no-op here. */
 export function applyIntent(state: GameState, intent: Intent): ApplyResult {
   switch (intent.type) {
+    case 'catch':
+      return clickCatch(state, intent.figure);
     case 'start':
       if (state.phase === 'running') return { state, error: 'Already running.' };
       if (state.phase === 'intro') return { state, error: 'The shift is starting. Press Enter to skip.' };
@@ -837,7 +1007,7 @@ const WORK_SEC: Record<ActionKind, (w: World) => number> = {
   patrol: (w) => w.sc.actions.patrolSec,
   lock: (w) => w.sc.actions.lockSec,
   unlock: (w) => w.sc.actions.lockSec,
-  evict: (w) => w.sc.actions.evictSec,
+  evict: () => 0, // the catch decides when it ends
   repair: (w) => w.sc.actions.repairSec,
   candlelight: (w) => w.sc.actions.candlelightSec,
 };
@@ -877,9 +1047,9 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
       break;
     }
     case 'evict': {
-      if (!rs.locked) return fail(`Lock ${name} first, so they can't slip away.`);
-      const other = busyWith('evict', (t) => t.room === room.id);
-      if (other) return fail(`${other.name} is already clearing ${name}.`);
+      // Works in any room. Locked first is the safe way: if the catch fails, they cannot slip away.
+      const other = busyWith('evict', () => true);
+      if (other) return fail(`${other.name} is already chasing intruders. One catch at a time!`);
       break;
     }
     case 'repair': {

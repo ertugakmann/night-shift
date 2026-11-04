@@ -22,6 +22,7 @@ import {
 import { INTRUDER_SCALE, Room } from './Room';
 import { VaultExtras } from './VaultExtras';
 import { BuildingEnd, useDawnDelay } from '../end/EndMoment';
+import { CatchBadge } from '../catch/CatchViews';
 
 /** A building screen: its slice of the one continuous museum floor plan. */
 export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
@@ -65,6 +66,7 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
       <Effects snapshot={snapshot} rooms={visibleRooms} />
       {snapshot.debug && <GangGhosts snapshot={snapshot} />}
       <Guards snapshot={snapshot} uid={uid} />
+      <CatchBadge snapshot={snapshot} rooms={visibleRooms} />
       <Dust slice={slice} />
       {screen === 5 && <VaultExtras snapshot={snapshot} slice={slice} uid={uid} />}
       <BuildingEnd screen={screen} slice={slice} snapshot={snapshot} />

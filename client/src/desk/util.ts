@@ -86,7 +86,8 @@ export function actionBlocked(s: Snapshot, room: RoomId, action: ActionKind): st
     case 'unlock':
       return rs.locked ? null : 'Not locked.';
     case 'evict':
-      return rs.locked ? null : 'Lock the room first, so they cannot slip away.';
+      // Works anywhere; locked first is safer (a failed catch cannot slip away).
+      return s.guards.some((g) => g.task?.action === 'evict') || (s.catch && s.catch.result === null) ? 'One catch at a time.' : null;
     case 'repair':
       if (!rs.locked) return rs.dark ? 'Lock and clear the room first.' : 'Nothing to repair.';
       if (rs.dark && s.backupsLost) return 'The Archive is wrecked. Repairs are disabled.';

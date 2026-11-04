@@ -11,6 +11,7 @@ import { worldOf } from '../game/view';
 import { selectRoom, useGame } from '../net/game';
 import { DangerGlow } from '../building/VaultExtras';
 import { BuildingEnd } from '../end/EndMoment';
+import { CatchBadge } from '../catch/CatchViews';
 import { RealityStrip, type StripMode } from './RealityStrip';
 import { RealityVaultPanel } from './RealityVaultPanel';
 
@@ -331,6 +332,7 @@ export function RealityBuilding({ screen, strip = 'split' }: { screen: BuildingS
 
       <RealityStrip x0={slice.x} mode={strip} screen={screen} />
 
+      <CatchBadge snapshot={snapshot} rooms={new Set(rooms.map((r) => r.id))} reality />
       {/* analysts, on top of everything */}
       {snapshot.guards.map((g) => {
         const p = guardPose(g);

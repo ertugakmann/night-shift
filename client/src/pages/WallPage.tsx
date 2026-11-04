@@ -10,6 +10,7 @@ import { WallIntro } from '../wall/WallIntro';
 import { RealityStrip } from '../reality/RealityStrip';
 import { SWEEP_MS, WAVE_STEP_MS } from '../reality/useRealityWave';
 import { WallEnd } from '../report/WallEnd';
+import { WallCatch } from '../catch/CatchViews';
 
 const MAX_ZOOM = 6;
 const GLIDE = { duration: 0.55, ease: [0.4, 0, 0.2, 1] } as const; // within the 400–700 ms brief
@@ -242,6 +243,7 @@ export function WallPage() {
         </AnimatePresence>
 
         {/* End of the night: the result card over the office, then the morning report */}
+        <WallCatch reality={snapshot?.reality ?? false} />
         <WallEnd snapshot={snapshot} />
 
         <WallIntro snapshot={snapshot} />

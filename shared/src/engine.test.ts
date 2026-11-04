@@ -48,6 +48,16 @@ function placeGang(s: GameState, room: string): GameState {
 
 const idleNight = () => runUntil(started(), () => false);
 
+/** Evict, and win the catch: wait for the guard to arrive, then click every intruder. */
+function evictAndCatch(s: GameState, room: string, guard?: string): GameState {
+  s = act(s, 'evict', room, guard);
+  s = runUntil(s, (x) => (x.catch?.room === room && x.catch.result === null) || !x.guards.some((g) => g.task?.action === 'evict'));
+  if (!s.catch || s.catch.result !== null) return s;
+  for (const f of s.catch.figures.filter((f) => f.kind === 'intruder')) s = applyIntent(s, { type: 'catch', figure: f.id }).state;
+  return s;
+}
+
+
 describe('determinism', () => {
   it('replays an idle night identically', () => {
     expect(JSON.stringify(idleNight())).toBe(JSON.stringify(idleNight()));
@@ -229,8 +239,8 @@ describe('find, trap, evict, repair', () => {
     s = act(s, 'lock', 'mail-room', 'sam');
     s = runUntil(s, (x) => x.rooms['mail-room'].locked);
     expect(s.care).toBe(98);
-    s = act(s, 'evict', 'mail-room', 'sam');
-    s = runUntil(s, (x) => x.stats.evicted === 1);
+    s = evictAndCatch(s, 'mail-room', 'sam');
+    expect(s.stats.evicted).toBe(1);
     expect(s.phase).toBe('running');
     expect(s.groups.length).toBeGreaterThan(0); // the other group is still out there (and may have split again)
     expect(s.groups.some((g) => g.room === 'mail-room')).toBe(false);
@@ -243,9 +253,9 @@ describe('find, trap, evict, repair', () => {
     s = runUntil(s, (x) => x.rooms['mail-room'].locked && x.rooms['entrance-hall'].locked);
     expect(s.groups.every((g) => s.rooms[g.room].locked)).toBe(true);
 
-    s = act(s, 'evict', 'mail-room', 'sam');
-    s = act(s, 'evict', 'entrance-hall', 'tom');
-    s = runUntil(s, (x) => x.groups.length === 0);
+    s = evictAndCatch(s, 'mail-room', 'sam');
+    s = evictAndCatch(s, 'entrance-hall', 'tom');
+    expect(s.groups).toHaveLength(0);
     expect(s.phase).toBe('ended');
     expect(s.outcome?.result).toBe('won');
     expect(s.stats.evicted).toBe(2);
@@ -255,9 +265,12 @@ describe('find, trap, evict, repair', () => {
     expect(w.neighbours.get('mail-room')).toEqual(expect.arrayContaining(['entrance-hall', 'west-corridor']));
   });
 
-  it('evict needs a locked room', () => {
-    const result = applyIntent(afterBreakIn(), { type: 'action', action: 'evict', room: 'mail-room' });
-    expect(result.error).toMatch(/Lock/);
+  it('evict works in an open room too, but only one catch at a time', () => {
+    let s = act(afterBreakIn(), 'evict', 'mail-room', 'tom');
+    const second = applyIntent(s, { type: 'action', action: 'evict', room: 'entrance-hall', guard: 'sam' });
+    expect(second.error).toMatch(/One catch at a time/);
+    s = runUntil(s, (x) => x.catch !== null);
+    expect(s.catch!.room).toBe('mail-room');
   });
 
   it('every lock has a cost, candlelight halves it, repair restores it', () => {
@@ -285,6 +298,103 @@ describe('find, trap, evict, repair', () => {
     const near = act(started(), 'patrol', 'lab', 'sam').guards.find((g) => g.id === 'sam')!.task!;
     const far = act(started(), 'patrol', 'vault', 'sam').guards.find((g) => g.id === 'sam')!.task!;
     expect(far.walkMs).toBeGreaterThan(near.walkMs);
+  });
+});
+
+describe('Catch the intruders (Evict)', () => {
+  /** The gang split, the Mail Room locked with one group inside, and a guard sent to evict. */
+  function catching(locked = true): GameState {
+    let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
+    if (locked) {
+      s = act(s, 'lock', 'mail-room', 'sam');
+      s = runUntil(s, (x) => x.rooms['mail-room'].locked && !x.guards.some((g) => g.task));
+    }
+    s = act(s, 'evict', 'mail-room', 'sam');
+    return runUntil(s, (x) => x.catch !== null);
+  }
+
+  it('starts when the guard arrives: intruders hidden among innocent visitors, 7 seconds on the clock', () => {
+    const s = catching();
+    const c = s.catch!;
+    expect(c.room).toBe('mail-room');
+    expect(c.endsMs - c.startedMs).toBe(7000);
+    expect(c.figures.filter((f) => f.kind === 'intruder').length).toBe(3);
+    expect(c.figures.filter((f) => f.kind === 'innocent').length).toBe(4);
+    for (const f of c.figures) {
+      expect(f.x).toBeGreaterThan(0);
+      expect(f.x).toBeLessThan(1);
+      expect(f.y).toBeGreaterThan(0);
+      expect(f.y).toBeLessThan(1);
+    }
+    expect(s.guards.find((g) => g.id === 'sam')!.task?.action).toBe('evict');
+  });
+
+  it('the night keeps running while the catch is on', () => {
+    const s = catching();
+    const later = runFor(s, 3000);
+    expect(later.timeMs).toBe(s.timeMs + 3000);
+    expect(later.catch?.result).toBeNull();
+  });
+
+  it('a wrong click on an innocent costs 1.5 seconds', () => {
+    let s = catching();
+    const innocent = s.catch!.figures.find((f) => f.kind === 'innocent')!;
+    const before = s.catch!.endsMs;
+    s = applyIntent(s, { type: 'action', action: 'patrol', room: 'lab', guard: 'tom' }).state; // unrelated, fine
+    s = applyIntent(s, { type: 'catch', figure: innocent.id }).state;
+    expect(s.catch!.endsMs).toBe(before - 1500);
+    expect(s.catch!.wrong).toBe(1);
+    expect(s.catch!.figures.find((f) => f.id === innocent.id)!.oopsAtMs).toBe(s.timeMs);
+  });
+
+  it('catching every intruder throws the gang out at once', () => {
+    let s = catching();
+    for (const f of s.catch!.figures.filter((f) => f.kind === 'intruder')) s = applyIntent(s, { type: 'catch', figure: f.id }).state;
+    expect(s.catch!.result).toBe('caught');
+    expect(s.groups.some((g) => g.room === 'mail-room')).toBe(false);
+    expect(s.stats.evicted).toBe(1);
+    expect(s.guards.find((g) => g.id === 'sam')!.task).toBeNull();
+  });
+
+  it('time runs out in a locked room: they stay, and Evict has to be tried again', () => {
+    let s = catching();
+    s = runUntil(s, (x) => x.catch?.result !== null);
+    expect(s.catch!.result).toBe('held');
+    expect(s.groups.some((g) => g.room === 'mail-room')).toBe(true);
+    s = runFor(s, 2000);
+    expect(s.catch).toBeNull();
+    s = evictAndCatch(s, 'mail-room', 'sam');
+    expect(s.groups.some((g) => g.room === 'mail-room')).toBe(false);
+  });
+
+  it('time runs out in an open room: they slip into a neighbouring room, never a locked one', () => {
+    // One group in the open Mail Room; its way to the Entrance Hall is locked, the mail tube is open.
+    let s = placeGang(runUntil(started(), (x) => x.brokenIn), 'mail-room');
+    s.rooms['entrance-hall'].locked = true;
+    s.guards.find((g) => g.id === 'tom')!.room = 'key-room';
+    s = act(s, 'evict', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.catch !== null);
+    s = runUntil(s, (x) => x.catch?.result !== null);
+    expect(s.catch!.result).toBe('escaped');
+    expect(s.catch!.to).toBe('west-corridor');
+    expect(s.groups.map((g) => g.room)).toEqual(['west-corridor']);
+  });
+
+  it('time runs out in an open room with every way out blocked: they stay put', () => {
+    let s = placeGang(runUntil(started(), (x) => x.brokenIn), 'mail-room');
+    s.rooms['entrance-hall'].locked = true;
+    s.rooms['west-corridor'].locked = true;
+    s = act(s, 'evict', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.catch !== null);
+    s = runUntil(s, (x) => x.catch?.result !== null);
+    expect(s.catch!.result).toBe('held');
+    expect(s.groups.map((g) => g.room)).toEqual(['mail-room']);
+  });
+
+  it('a click without a catch is refused', () => {
+    expect(applyIntent(started(), { type: 'catch', figure: 1 }).error).toMatch(/No catch/);
+    expect(isIntent({ type: 'catch', figure: 2 })).toBe(true);
+    expect(isIntent({ type: 'catch', figure: 'x' })).toBe(false);
   });
 });
 
@@ -454,8 +564,8 @@ describe('end of night summary', () => {
     s = runUntil(s, (x) => x.stats.firstSpottedMs !== null && x.stats.containedMs !== null);
     const { brokenInMs, firstSpottedMs, containedMs } = s.stats;
     s = runUntil(s, (x) => !x.guards.some((g) => g.task));
-    s = act(s, 'evict', 'mail-room', 'sam');
-    s = act(s, 'evict', 'entrance-hall', 'tom');
+    s = evictAndCatch(s, 'mail-room', 'sam');
+    s = evictAndCatch(s, 'entrance-hall', 'tom');
     s = runUntil(s, (x) => x.phase === 'ended');
     const sum = s.outcome!.summary;
     expect(s.outcome!.result).toBe('won');
