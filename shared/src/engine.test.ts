@@ -8,6 +8,7 @@ import {
   msToClock,
   world,
   padlocks,
+  ACTION_REAL,
   finaleActive,
   type ActionKind,
   type GameState,
@@ -343,7 +344,7 @@ describe('find, trap, evict, repair', () => {
   });
 });
 
-describe('Catch the intruders (Evict)', () => {
+describe('Catch the intruders (the Catch action, evict in the code)', () => {
   /** The gang split, the Mail Room locked with one group inside, and a guard sent to evict. */
   function catching(locked = true): GameState {
     let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
@@ -399,7 +400,7 @@ describe('Catch the intruders (Evict)', () => {
     expect(s.guards.find((g) => g.id === 'sam')!.task).toBeNull();
   });
 
-  it('time runs out in a locked room: they stay, and Evict has to be tried again', () => {
+  it('time runs out in a locked room: they stay, and Catch has to be tried again', () => {
     let s = catching();
     s = runUntil(s, (x) => x.catch?.result !== null);
     expect(s.catch!.result).toBe('held');
@@ -434,7 +435,7 @@ describe('Catch the intruders (Evict)', () => {
     expect(s.groups.map((g) => g.room)).toEqual(['mail-room']);
   });
 
-  it('needs the gang spotted first: no Evict in a room nobody has patrolled', () => {
+  it('needs the gang spotted first: no Catch in a room nobody has patrolled', () => {
     const s = runUntil(started(), (x) => x.groups.length > 1);
     const blind = applyIntent(s, { type: 'action', action: 'evict', room: 'mail-room', guard: 'sam' });
     expect(blind.error).toMatch(/Spot them first/);
@@ -1292,5 +1293,27 @@ describe('what the morning report learns from (orders, empty locks)', () => {
     s = runUntil(s, (x) => x.rooms.lab.locked && x.rooms.radiology.locked);
     expect(s.done.find((d) => d.room === 'lab')?.empty).toBe(false);
     expect(s.done.find((d) => d.room === 'radiology')?.empty).toBe(true);
+  });
+});
+
+describe('the Catch action (Eradicate in the reality view)', () => {
+  it('the radio says catch: the order, and the guard once they are caught', () => {
+    let s = runUntil(started(), (x) => x.groups.length > 1);
+    s = act(s, 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked && !x.guards.some((g) => g.task));
+    const before = s.log.length;
+    s = evictAndCatch(s, 'mail-room', 'sam');
+    const lines = s.log.slice(before);
+    const order = lines.find((l) => l.speaker === 'You')!;
+    expect(order.text).toMatch(/^Sam, (catch them in|go catch the gang in|catch those berets in) the Mail Room\.$/);
+    expect(order.real).toBe('Sam: Eradicate, Email.');
+    const caught = lines.find((l) => l.speaker === 'Sam' && /cleared|clear\./.test(l.text))!;
+    expect(caught.text).toMatch(/Caught/);
+    expect(caught.real).toMatch(/^Ransomware eradicated from Email\.$/);
+    expect(lines.some((l) => /\bevict/i.test(l.text))).toBe(false);
+  });
+
+  it('in SOC words it is still Eradicate', () => {
+    expect(ACTION_REAL.evict).toBe('Eradicate');
   });
 });

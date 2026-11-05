@@ -181,7 +181,7 @@ export function nightFacts(state: GameState): NightFacts {
 
 // ---------- Lessons ----------
 
-const DID: Partial<Record<ActionKind, string>> = { patrol: 'checked', lock: 'locked', evict: 'cleared out' };
+const DID: Partial<Record<ActionKind, string>> = { patrol: 'checked', lock: 'locked', evict: 'went to catch the gang in' };
 
 /**
  * Advice about the player's own decisions, read from the event log: how fast Rex's right barks were
@@ -318,7 +318,7 @@ const VERB: Record<ActionKind, [hit: string, miss: string]> = {
   patrol: ['caught intruders in', 'checked'],
   lock: ['locked', 'locked'],
   unlock: ['reopened', 'reopened'],
-  evict: ['showed the gang out of', 'tried to clear'],
+  evict: ['caught the gang in', 'tried to catch the gang in'],
   repair: ['fixed up', 'tried to fix'],
   candlelight: ['lit the candles in', 'lit the candles in'],
 };

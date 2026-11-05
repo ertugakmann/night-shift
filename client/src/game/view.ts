@@ -22,7 +22,7 @@ export const ACTION_LABEL: Record<ActionKind, string> = {
   patrol: 'Patrol',
   lock: 'Lock doors',
   unlock: 'Unlock',
-  evict: 'Evict',
+  evict: 'Catch', // reality: Eradicate (ACTION_REAL)
   repair: 'Repair',
   candlelight: 'Candlelight',
 };

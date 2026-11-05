@@ -60,9 +60,10 @@ describe('morning report template', () => {
     const r = templateReport(won);
     expect(won.outcome!.result).toBe('won');
     const guards = r.museum.paragraphs[2];
-    expect(guards).toMatch(/Sam .*the Mail Room/);
+    expect(guards).toMatch(/Sam caught the gang in the Mail Room/); // the Catch action, in the museum's words
+    expect(guards).not.toMatch(/evict|showed the gang out/i);
     expect(guards).toMatch(/Tom .*the Entrance Hall/);
-    expect(r.soc.actionsTaken.join(' ')).toMatch(/Eradicate, Email/);
+    expect(r.soc.actionsTaken.join(' ')).toMatch(/Eradicate, Email/); // reality: still Eradicate
     expect(r.soc.affectedSystems).toEqual(['No systems encrypted.']);
   });
 

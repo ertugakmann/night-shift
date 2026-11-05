@@ -441,7 +441,7 @@ function Result({ c, snapshot, reality }: { c: Catch; snapshot: Snapshot; realit
       : c.result === 'held'
         ? reality
           ? ['Processes still running', 'Still isolated. Run it again.']
-          : ['They are still hiding!', 'The doors are locked. Try Evict again.']
+          : ['They are still hiding!', 'The doors are locked. Try Catch again.']
         : reality
           ? ['Ransomware moved', `It spread to ${where?.real ?? 'a neighbour'}.`]
           : ['They slipped away!', `Off into ${where ? where.name : 'the next room'}.`];
