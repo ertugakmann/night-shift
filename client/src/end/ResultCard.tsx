@@ -319,7 +319,8 @@ export function ResultCard({ snapshot, outcome, reality }: { snapshot: Snapshot;
 
       {/* the project banner, under the scores */}
       <line x1={56} x2={CARD_W - 56} y1={BODY_H - 4} y2={BODY_H - 4} stroke={t.sub} strokeOpacity={0.25} strokeWidth={2} />
-      <BannerSvg x={(CARD_W - 600) / 2} y={BODY_H + 8} width={600} height={BANNER_ROW - 28} />
+      {/* small on purpose (440×49 card units, about 530 px on a 1080p screen): well under its own 1300×145, so it stays sharp */}
+      <BannerSvg x={(CARD_W - 440) / 2} y={BODY_H + 12} width={440} height={49} />
     </g>
   );
 }

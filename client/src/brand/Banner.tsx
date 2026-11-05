@@ -5,11 +5,17 @@
 import type { CSSProperties } from 'react';
 
 export const BANNER_SRC = '/brand/mosaicsoc-banner.png';
+/**
+ * Never shown bigger than this (CSS px): the banner we have is a 1300×145 copy, and blown up it goes soft.
+ * Remove the cap (set both to Infinity) once the original artwork arrives.
+ */
+export const BANNER_MAX = { width: 1300, height: 145 };
+
 export const BANNER_ALT = 'MoSAIcSOC: Modular Operational Security with AI-powered Intelligence and Collaboration for Security Operations Centers. Co-funded by the European Union. ECCC, European Cybersecurity Competence Centre.';
 
 /** For HTML: fits inside its box, never stretched or cut. */
 export function BannerImg({ className = '', style }: { className?: string; style?: CSSProperties }) {
-  return <img src={BANNER_SRC} alt={BANNER_ALT} draggable={false} className={`block select-none object-contain ${className}`} style={style} />;
+  return <img src={BANNER_SRC} alt={BANNER_ALT} draggable={false} className={`block select-none object-contain ${className}`} style={{ maxWidth: `min(100%, ${BANNER_MAX.width}px)`, maxHeight: `${BANNER_MAX.height}px`, ...style }} />;
 }
 
 /** For SVG scenes: fits inside the given box, never stretched or cut. */
@@ -24,8 +30,9 @@ export function BannerSvg({ x, y, width, height }: { x: number; y: number; width
 /** Screen 5: a thin strip along the bottom, always there, in both views. */
 export function BannerStrip() {
   return (
-    <div className="flex shrink-0 items-center justify-center bg-[#0c0922]" style={{ height: '6%' }}>
-      <BannerImg className="h-[78%] w-auto max-w-[96%]" />
+    <div className="flex shrink-0 items-center justify-center bg-[#0c0922]" style={{ height: '4.5%' }}>
+      {/* small on purpose: kept well under its own size so it stays sharp */}
+      <BannerImg className="h-[72%] w-auto" />
     </div>
   );
 }
