@@ -189,18 +189,39 @@ describe('Rex', () => {
     expect(s.stats.rexFollowed).toBe(0);
   });
 
-  it('one bark is one decision: locks and repeated orders do not count', () => {
+  it('a lock (or evict) on the room he barked at follows him too; one bark is one decision', () => {
     let s = runUntil(started(), (x) => x.rex.mistake !== null);
     const room = s.rex.mistake!.room;
     s = act(s, 'lock', room, 'sam');
-    expect(s.stats.rexFollowed).toBe(0);
-    s = act(s, 'patrol', room, 'priya');
-    const again = applyIntent(s, { type: 'action', action: 'patrol', room, guard: 'tom' });
-    expect(again.error).toMatch(/already/);
-    expect(again.state.stats.rexFollowed).toBe(1);
     expect(s.stats.rexFollowed).toBe(1);
+    expect(s.stats.rexFollowedWrong).toBe(1); // the planned mistake: nobody there
+    s = act(s, 'patrol', room, 'priya');
+    expect(s.stats.rexFollowed).toBe(1); // the same bark only counts once
     s = runFor(s, w.ms.followWindow + 200);
     expect(s.stats.rexIgnored + s.stats.rexFollowed).toBeLessThanOrEqual(s.stats.barks);
+  });
+
+  it('the window is 10 seconds: a lock 9 s after the bark still follows him', () => {
+    expect(w.ms.followWindow).toBe(10_000);
+    let s = runUntil(started(), (x) => x.rex.mistake !== null);
+    const room = s.rex.mistake!.room;
+    s = runFor(s, 9000);
+    s = act(s, 'lock', room, 'tom');
+    expect(s.stats.rexFollowed).toBe(1);
+  });
+
+  it('candlelight is not an answer to a bark: after 10 s it counts as ignored', () => {
+    let s = runUntil(started(), (x) => x.rex.mistake !== null);
+    const room = s.rex.mistake!.room;
+    const wrongIgnored = (x: GameState) => x.stats.rexIgnored - x.stats.rexIgnoredRight;
+    const before = wrongIgnored(s);
+    s = act(s, 'lock', 'lab', 'priya'); // close something in the wing so candles are allowed
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    const lit = applyIntent(s, { type: 'action', action: 'candlelight', room, guard: 'sam' });
+    s = lit.error ? s : lit.state;
+    s = runFor(s, w.ms.followWindow + 200);
+    expect(s.stats.rexFollowed).toBe(0);
+    expect(wrongIgnored(s)).toBe(before + 1);
   });
 });
 
@@ -569,6 +590,28 @@ describe('Change the locks (the Key Room falls)', () => {
   });
 });
 
+describe('patient impact stays realistic', () => {
+  it('a lost night: a few dozen tests at most, and the major incident diverts ambulances', () => {
+    const n = idleNight();
+    expect(n.outcome!.result).toBe('lost');
+    expect(Math.floor(n.impact.tests)).toBeGreaterThan(3);
+    expect(n.impact.tests).toBeLessThanOrEqual(40);
+    expect(n.impact.medicines).toBeLessThanOrEqual(30);
+    expect(n.impact.surgeries).toBeLessThanOrEqual(6);
+    expect(Math.floor(n.impact.ambulances)).toBeGreaterThanOrEqual(2);
+    expect(n.impact.ambulances).toBeLessThanOrEqual(6);
+  });
+
+  it('the lab closed for three hours delays about thirty tests', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    const after = runFor(s, 3 * w.ms.gameHour);
+    const tests = after.impact.tests - s.impact.tests;
+    expect(tests).toBeGreaterThan(20);
+    expect(tests).toBeLessThanOrEqual(36);
+  });
+});
+
 describe('critical departments and candlelight', () => {
   it('staff complain on the radio when a critical room is locked, once per closure', () => {
     let s = act(started(), 'lock', 'lab', 'sam');
@@ -763,22 +806,48 @@ describe('end of night summary', () => {
     expect(sum.careContinuity).toBeLessThan(70);
   });
 
-  it('a quick catch: MTTD from break-in to spotted, MTTR from spotted to trapped', () => {
-    let s = act(runUntil(started(), (x) => x.brokenIn), 'patrol', 'mail-room', 'priya');
-    s = runUntil(s, (x) => x.groups.length > 1);
+  it('MTTD and MTTR are measured per group: from appearing to spotted, from spotted to stopped', () => {
+    let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
+    const mail = s.groups.find((g) => g.room === 'mail-room')!.id;
+    s = act(s, 'patrol', 'mail-room', 'priya');
+    s = runUntil(s, (x) => x.groups.some((g) => g.id === mail && g.spotted));
     s = act(s, 'lock', 'mail-room', 'sam');
-    s = act(s, 'lock', 'entrance-hall', 'tom');
-    s = runUntil(s, (x) => x.stats.firstSpottedMs !== null && x.stats.containedMs !== null);
-    const { brokenInMs, firstSpottedMs, containedMs } = s.stats;
-    s = runUntil(s, (x) => !x.guards.some((g) => g.task));
-    s = evictAndCatch(s, 'mail-room', 'sam');
-    s = evictAndCatch(s, 'entrance-hall', 'tom');
-    s = runUntil(s, (x) => x.phase === 'ended');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked);
+    const rec = s.groupLog.find((r) => r.id === mail)!;
+    expect(rec.spottedMs).not.toBeNull();
+    expect(rec.stoppedMs).not.toBeNull();
+    s = runUntil(s, () => false); // the other group roams on until the night ends
     const sum = s.outcome!.summary;
-    expect(s.outcome!.result).toBe('won');
-    expect(sum.mttdMs).toBe(firstSpottedMs! - brokenInMs!);
-    expect(sum.mttrMs).toBe(Math.max(0, containedMs! - firstSpottedMs!));
-    expect(sum.careContinuity).toBeGreaterThan(90);
+    expect(sum.groups).toBeGreaterThanOrEqual(2);
+    expect(sum.spotted).toBe(1);
+    expect(sum.stopped).toBe(1);
+    expect(sum.mttdMs).toBe(rec.spottedMs! - rec.appearedMs);
+    expect(sum.mttrMs).toBe(rec.stoppedMs! - rec.spottedMs!);
+  });
+
+  it('MTTD is the average over the groups that were spotted', () => {
+    let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
+    s = act(s, 'patrol', 'mail-room', 'priya');
+    s = act(s, 'patrol', 'entrance-hall', 'tom');
+    s = runUntil(s, (x) => x.groupLog.filter((r) => r.spottedMs !== null).length === 2);
+    s = runUntil(s, () => false);
+    const sum = s.outcome!.summary;
+    const seen = s.groupLog.filter((r) => r.spottedMs !== null).map((r) => r.spottedMs! - r.appearedMs);
+    expect(sum.spotted).toBe(seen.length);
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    expect(sum.mttdMs).toBe(Math.round(seen.reduce((x, y) => x + y, 0) / seen.length));
+  });
+
+  it('a group shut in before anyone saw it is stopped at once (no response time)', () => {
+    let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
+    s = act(s, 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked);
+    s = runUntil(s, () => false);
+    const sum = s.outcome!.summary;
+    expect(sum.spotted).toBe(0);
+    expect(sum.mttdMs).toBeNull();
+    expect(sum.stopped).toBe(1);
+    expect(sum.mttrMs).toBe(0);
   });
 
   it('containment is undone when a group roams free again', () => {

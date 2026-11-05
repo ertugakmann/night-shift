@@ -360,11 +360,13 @@
   ],
 
   "impactPerGameHour": {
-    "tests": 24,
-    "medicines": 16,
-    "surgeries": 4,
-    "ambulances": 6
+    "tests": 5,
+    "medicines": 6,
+    "surgeries": 1,
+    "ambulances": 0.5
   },
+
+  "majorIncidentAmbulances": 2,
 
   "clues": {
     "cctvChancePerTick": 0.5,
@@ -381,7 +383,7 @@
 
   "rex": {
     "barkThreshold": 50,
-    "followWindowSec": 6,
+    "followWindowSec": 10,
     "mistake": { "from": "02:14", "room": "pharmacy", "confidence": 80, "holdSec": 25.2 }
   }
 }

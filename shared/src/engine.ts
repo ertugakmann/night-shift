@@ -110,10 +110,14 @@ const FX_KEEP = 12;
 export interface NightSummary {
   /** Care continuity: the care score averaged over the whole night, 0–100. After a lost night the hours left until dawn count as 0. */
   careContinuity: number;
-  /** Mean time to detect: break-in until the gang is first spotted. Null if never spotted. */
+  /** Mean time to detect: for each group that was spotted, from when it appeared to its first sighting; the average. Null if none was. */
   mttdMs: number | null;
-  /** Mean time to respond: first spotted until the gang is stopped (all trapped or evicted). Null if never stopped. */
+  /** Mean time to respond: for each group that was stopped (trapped in a locked room or thrown out), from its first sighting to that moment; the average. Null if none was. */
   mttrMs: number | null;
+  /** How many groups the gang had over the night, and how many of them were spotted and stopped. */
+  groups: number;
+  spotted: number;
+  stopped: number;
 }
 
 export interface Outcome {
@@ -200,6 +204,15 @@ export interface KeysGame {
   resultAtMs: number | null;
 }
 
+/** One group of the gang over the night, for MTTD and MTTR. Times in game-clock ms. */
+export interface GroupRecord {
+  id: number;
+  appearedMs: number;
+  spottedMs: number | null;
+  /** Trapped in a locked room, or thrown out. */
+  stoppedMs: number | null;
+}
+
 export interface DoneAction {
   guard: string;
   action: ActionKind;
@@ -244,7 +257,7 @@ export interface GameState {
     mistake: { room: RoomId; untilMs: number } | null;
     mistakeDone: boolean;
     /**
-     * Barks waiting for the player's decision: a patrol sent there before `untilMs` follows Rex,
+     * Barks waiting for the player's decision: a patrol, lock or evict there before `untilMs` follows Rex,
      * otherwise the bark counts as ignored. `truth`: the gang really was there when he barked.
      */
     pending: { room: RoomId; truth: boolean; untilMs: number }[];
@@ -282,6 +295,8 @@ export interface GameState {
   outcome: Outcome | null;
   /** Every finished guard action, for the morning report. `hit`: it did what it was for (found, evicted, restored...). */
   done: DoneAction[];
+  /** Every group of the gang, when it appeared, was first spotted and was stopped. */
+  groupLog: GroupRecord[];
   /** The "Catch the intruders" mini game in progress (or just finished, while its result shows). */
   catch: Catch | null;
   /** "Reconnect the exhibit" (repair) in progress or just finished. */
@@ -348,6 +363,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     nextFxId: 1,
     outcome: null,
     done: [],
+    groupLog: [],
     catch: null,
     wires: null,
     keys: null,
@@ -490,7 +506,19 @@ function tick(s: GameState, w: World): void {
 // ---------- Intruders ----------
 
 function addGroup(s: GameState, room: RoomId, visited: RoomId[]): void {
-  s.groups.push({ id: s.nextGroupId++, room, enteredMs: s.timeMs, spotted: false, visited });
+  const id = s.nextGroupId++;
+  s.groups.push({ id, room, enteredMs: s.timeMs, spotted: false, visited });
+  s.groupLog.push({ id, appearedMs: s.timeMs, spottedMs: null, stoppedMs: null });
+}
+
+/** The record of a group (made on the spot for groups placed by hand, as in tests). */
+function recordOf(s: GameState, g: Group): GroupRecord {
+  let r = s.groupLog.find((x) => x.id === g.id);
+  if (!r) {
+    r = { id: g.id, appearedMs: g.enteredMs, spottedMs: null, stoppedMs: null };
+    s.groupLog.push(r);
+  }
+  return r;
 }
 
 function occupied(s: GameState, room: RoomId): boolean {
@@ -582,6 +610,7 @@ function updateRooms(s: GameState, w: World): void {
     else rs.occupiedMs = 0;
 
     if (room.special === 'vault' && rs.occupiedMs >= w.ms.vaultLose) {
+      s.impact.ambulances = Math.max(s.impact.ambulances, Math.floor(s.impact.ambulances) + w.sc.majorIncidentAmbulances);
       end(s, 'lost', 'The gang cracked the Vault.', 'Major incident declared: ambulances diverted.');
       return;
     }
@@ -696,6 +725,7 @@ function expireBarks(s: GameState): void {
 
 /** The gang is stopped when every group is trapped behind locked doors. Escaping (master keys) undoes it. */
 function updateContainment(s: GameState): void {
+  for (const g of s.groups) if (s.rooms[g.room].locked) recordOf(s, g).stoppedMs ??= s.timeMs;
   if (!s.brokenIn || s.groups.length === 0) return;
   const trapped = s.groups.every((g) => s.rooms[g.room].locked);
   if (!trapped) s.stats.containedMs = null;
@@ -804,6 +834,7 @@ function resolveCatch(s: GameState, w: World, won: boolean): void {
 
   if (won) {
     c.result = 'caught';
+    for (const g of inside) recordOf(s, g).stoppedMs ??= s.timeMs;
     s.groups = s.groups.filter((g) => g.room !== c.room);
     s.stats.evicted += inside.length;
     fx(s, 'evicted', c.room);
@@ -1067,6 +1098,7 @@ function revealLitRooms(s: GameState, w: World): void {
     g.spotted = true;
     s.stats.spotted++;
     if (s.stats.firstSpottedMs === null) s.stats.firstSpottedMs = s.timeMs;
+    recordOf(s, g).spottedMs ??= s.timeMs;
     fx(s, 'spotted', g.room);
     const guard = s.guards.find((x) => x.id === guardId)!;
     if (guard.task && !guard.task.found) {
@@ -1180,11 +1212,19 @@ function summarise(s: GameState, result: Outcome['result']): NightSummary {
   const night = world(s.scenarioId).ms.night;
   // An early win keeps the current care until dawn; a major incident means none until dawn.
   const rest = Math.max(0, night - s.timeMs) * (result === 'won' ? s.care : 0);
-  const { brokenInMs, firstSpottedMs, containedMs } = s.stats;
+  for (const g of s.groups) if (s.rooms[g.room].locked) recordOf(s, g).stoppedMs ??= s.timeMs;
+  const log = s.groupLog;
+  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+  const spotted = log.filter((r) => r.spottedMs !== null);
+  const stopped = log.filter((r) => r.stoppedMs !== null);
   return {
     careContinuity: Math.round((s.stats.careMs + rest) / night),
-    mttdMs: brokenInMs !== null && firstSpottedMs !== null ? firstSpottedMs - brokenInMs : null,
-    mttrMs: firstSpottedMs !== null && containedMs !== null ? Math.max(0, containedMs - firstSpottedMs) : null,
+    mttdMs: avg(spotted.map((r) => r.spottedMs! - r.appearedMs)),
+    // A group stopped before anyone saw it needed no response time at all.
+    mttrMs: avg(stopped.map((r) => Math.max(0, r.stoppedMs! - (r.spottedMs ?? r.stoppedMs!)))),
+    groups: log.length,
+    spotted: spotted.length,
+    stopped: stopped.length,
   };
 }
 
@@ -1374,8 +1414,8 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
   };
   s.stats.dispatches++;
 
-  // Trust analysis: a patrol sent to a room Rex barked at, within the window, follows him (once per bark).
-  if (intent.action === 'patrol') {
+  // Trust analysis: a patrol, lock or evict for a room Rex barked at, within the window, follows him (once per bark).
+  if (intent.action === 'patrol' || intent.action === 'lock' || intent.action === 'evict') {
     const bark = s.rex.pending.find((p) => p.room === room.id);
     if (bark) {
       s.rex.pending = s.rex.pending.filter((p) => p !== bark);

@@ -47,6 +47,10 @@ export interface NightFacts {
   timeToRespond: string | null;
   /** The gang was already trapped when it was first seen (MTTR 0). */
   respondedAtOnce: boolean;
+  /** How many groups the gang split into, and how many were spotted and stopped (MTTD and MTTR are averages over those). */
+  groups: number;
+  groupsSpotted: number;
+  groupsStopped: number;
   patientImpact: Record<ImpactType, number>;
   /** Galleries whose exhibits went dark (game name, hospital department, systems). */
   vandalised: { gallery: string; department: string; systems: string[] }[];
@@ -79,7 +83,7 @@ function span(state: GameState, ms: number | null): string | null {
   const m = minutes % 60;
   const night = h > 0 ? (m > 0 ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
   const real = ms < 60000 ? `${Math.round(ms / 1000)} s` : `${(ms / 60000).toFixed(1)} min`;
-  return `${night} on the night clock (${real} real time)`;
+  return `${night} on the night clock, ${real} real time`;
 }
 
 /** Everything the report needs, from the full state (the server keeps the whole event log). */
@@ -110,6 +114,9 @@ export function nightFacts(state: GameState): NightFacts {
     timeToDetect: span(state, outcome?.summary.mttdMs ?? null),
     timeToRespond: span(state, outcome?.summary.mttrMs ?? null),
     respondedAtOnce: outcome?.summary.mttrMs === 0,
+    groups: outcome?.summary.groups ?? 0,
+    groupsSpotted: outcome?.summary.spotted ?? 0,
+    groupsStopped: outcome?.summary.stopped ?? 0,
     patientImpact: Object.fromEntries(IMPACT_TYPES.map((t) => [t, Math.floor(state.impact[t])])) as Record<ImpactType, number>,
     vandalised: w.sc.rooms
       .filter((r) => state.rooms[r.id].dark)
@@ -158,7 +165,8 @@ function list(items: string[]): string {
 /** At most `max` items, then "and N more <noun>". */
 function some(items: string[], max: number, noun: string): string {
   if (items.length <= max) return list(items);
-  return `${items.slice(0, max).join(', ')} and ${items.length - max} more ${noun}`;
+  const more = items.length - max;
+  return `${items.slice(0, max).join(', ')} and ${more} more ${more === 1 ? noun.replace(/s$/, '') : noun}`;
 }
 
 const VERB: Record<ActionKind, [hit: string, miss: string]> = {
@@ -245,12 +253,12 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
   return {
     incidentSummary: [
       'Ransomware intrusion via a phishing email.',
-      f.timeToDetect ? `Detected after ${f.timeToDetect}.` : 'Never detected by a scan during the shift.',
+      f.timeToDetect ? `MTTD ${f.timeToDetect} (${f.groupsSpotted} of ${f.groups} groups detected).` : 'Never detected by a scan during the shift.',
       f.timeToRespond === null
         ? 'Not contained during the shift.'
         : f.respondedAtOnce
-          ? 'Already isolated when detected.'
-          : `Contained ${f.timeToRespond} after detection.`,
+          ? `Isolated before it could move (${f.groupsStopped} of ${f.groups} groups contained).`
+          : `MTTR ${f.timeToRespond} (${f.groupsStopped} of ${f.groups} groups contained).`,
       outcome,
     ],
     affectedSystems: encrypted.length > 0 ? [`Encrypted: ${some(encrypted, 4, 'systems')}.`] : ['No systems encrypted.'],

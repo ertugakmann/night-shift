@@ -102,7 +102,10 @@ export interface Scenario {
   guards: { id: string; name: string; startRoom: RoomId }[];
   rooms: Room[];
   doors: [RoomId, RoomId][];
+  /** Patient impact per closed exhibit per game hour (without candlelight). */
   impactPerGameHour: Record<ImpactType, number>;
+  /** A lost night: a major incident, and at least this many ambulances diverted. */
+  majorIncidentAmbulances: number;
   clues: {
     cctvChancePerTick: number;
     falseCctv: { at: Clock; room: RoomId }[];
@@ -111,7 +114,7 @@ export interface Scenario {
   rex: {
     /** Rex barks when his confidence is above this (percent). */
     barkThreshold: number;
-    /** After a bark, a patrol sent to that room within this many seconds counts as following Rex. */
+    /** After a bark, a patrol, lock or evict for that room within this many seconds counts as following Rex. */
     followWindowSec: number;
     mistake: { from: Clock; room: RoomId; confidence: number; holdSec: number };
   };

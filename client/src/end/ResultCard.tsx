@@ -110,8 +110,23 @@ function CareBlock({ value, t, reality }: { value: number; t: Theme; reality: bo
   );
 }
 
-function TimeTile({ x, label, tag, ms, missing, snapshot, t }: { x: number; label: string; tag: string; ms: number | null; missing: string; snapshot: Snapshot; t: Theme }) {
+/** MTTD or MTTR: the average over the groups it applies to, and how many of the gang's groups that was. */
+function TimeTile({ x, label, tag, ms, missing, count, instant, snapshot, t }: { x: number; label: string; tag: string; ms: number | null; missing: string; count: string; instant: string; snapshot: Snapshot; t: Theme }) {
   const d = durations(snapshot, ms);
+  if (ms === 0) {
+    // stopped before anyone needed to respond: no time to show
+    return (
+      <g>
+        <Tile x={x} y={150} w={320} h={168} t={t} title={label} tag={tag} />
+        <text x={x + 24} y={150 + 98} fontSize={42} fontWeight={800} fill={t.text}>
+          {instant}
+        </text>
+        <text x={x + 24} y={150 + 136} fontSize={19} fill={t.sub}>
+          {count}
+        </text>
+      </g>
+    );
+  }
   return (
     <g>
       <Tile x={x} y={150} w={320} h={168} t={t} title={label} tag={tag} />
@@ -119,7 +134,7 @@ function TimeTile({ x, label, tag, ms, missing, snapshot, t }: { x: number; labe
         {d ? d.night : missing}
       </text>
       <text x={x + 24} y={150 + 136} fontSize={19} fill={t.sub}>
-        {d ? `night clock · ${d.real}` : 'no time to show'}
+        {d ? `${count} · ${d.real}` : count}
       </text>
     </g>
   );
@@ -219,8 +234,8 @@ export function ResultCard({ snapshot, outcome, reality }: { snapshot: Snapshot;
       <CareBlock value={s.careContinuity} t={t} reality={reality} />
 
       {/* detect and respond */}
-      <TimeTile x={right} label="MTTD" tag={reality ? 'mean time to detect' : 'time to spot them'} ms={s.mttdMs} missing="Never spotted" snapshot={snapshot} t={t} />
-      <TimeTile x={right + 340} label="MTTR" tag={reality ? 'mean time to respond' : 'time to stop them'} ms={s.mttrMs} missing="Never stopped" snapshot={snapshot} t={t} />
+      <TimeTile x={right} label="MTTD" tag={reality ? 'mean time to detect' : 'time to spot them'} ms={s.mttdMs} missing="Never spotted" instant={reality ? 'Immediate' : 'At once'} count={`${s.spotted} of ${s.groups} ${reality ? 'detected' : 'spotted'}`} snapshot={snapshot} t={t} />
+      <TimeTile x={right + 340} label="MTTR" tag={reality ? 'mean time to respond' : 'time to stop them'} ms={s.mttrMs} missing="Never stopped" instant={reality ? 'Immediate' : 'At once'} count={`${s.stopped} of ${s.groups} ${reality ? 'contained' : 'stopped'}`} snapshot={snapshot} t={t} />
 
       {/* trust in Rex */}
       <Tile x={right} y={336} w={rw} h={150} t={t} title={reality ? 'AI copilot trust' : 'Trust in Rex'} />
