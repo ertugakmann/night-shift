@@ -6,9 +6,13 @@ import { motion } from 'motion/react';
 import { ImpactIcon } from '../building/VaultExtras';
 import { sendIntent, useGame } from '../net/game';
 import { durations, headline, trustLines } from './text';
+import { BannerSvg } from '../brand/Banner';
 
 export const CARD_W = 1200;
-export const CARD_H = 760;
+/** The scores take the top BODY_H; the MoSAIcSOC banner sits in a row of its own under them. */
+const BODY_H = 760;
+const BANNER_ROW = 88;
+export const CARD_H = BODY_H + BANNER_ROW;
 
 interface Theme {
   card: string;
@@ -179,14 +183,14 @@ function PhishingLine({ snapshot, t, reality, x }: { snapshot: Snapshot; t: Them
   return (
     <g>
       {/* an envelope */}
-      <g transform={`translate(${x + 30},${CARD_H - 62})`}>
+      <g transform={`translate(${x + 30},${BODY_H - 62})`}>
         <rect x={-26} y={-18} width={52} height={36} rx={reality ? 3 : 6} fill="none" stroke={bad > 0 ? '#f2994a' : t.accent} strokeWidth={4} />
         <path d="M-26 -18 L0 4 L26 -18" fill="none" stroke={bad > 0 ? '#f2994a' : t.accent} strokeWidth={4} strokeLinejoin="round" />
       </g>
-      <text x={x + 74} y={CARD_H - 64} fontSize={24} fontWeight={800} fill={t.text}>
+      <text x={x + 74} y={BODY_H - 64} fontSize={24} fontWeight={800} fill={t.text}>
         {main}
       </text>
-      <text x={x + 74} y={CARD_H - 38} fontSize={18} fill={bad > 0 ? '#f2994a' : t.sub}>
+      <text x={x + 74} y={BODY_H - 38} fontSize={18} fill={bad > 0 ? '#f2994a' : t.sub}>
         {detail}
       </text>
     </g>
@@ -208,8 +212,8 @@ function AnotherNight({ t }: { t: Theme }) {
         if (e.key === 'Enter') sendIntent({ type: 'reset' });
       }}
     >
-      <rect x={CARD_W - 330} y={CARD_H - 92} width={290} height={64} rx={32} fill={t.accent} />
-      <text x={CARD_W - 185} y={CARD_H - 50} textAnchor="middle" fontSize={28} fontWeight={800} fill={t.card}>
+      <rect x={CARD_W - 330} y={BODY_H - 92} width={290} height={64} rx={32} fill={t.accent} />
+      <text x={CARD_W - 185} y={BODY_H - 50} textAnchor="middle" fontSize={28} fontWeight={800} fill={t.card}>
         Another night ↻
       </text>
     </g>
@@ -308,10 +312,14 @@ export function ResultCard({ snapshot, outcome, reality }: { snapshot: Snapshot;
       {role === 'presenter' ? (
         <AnotherNight t={t} />
       ) : (
-        <text x={CARD_W - 56} y={CARD_H - 50} textAnchor="end" fontSize={20} fill={t.sub}>
+        <text x={CARD_W - 56} y={BODY_H - 50} textAnchor="end" fontSize={20} fill={t.sub}>
           Next night: the presenter starts it
         </text>
       )}
+
+      {/* the project banner, under the scores */}
+      <line x1={56} x2={CARD_W - 56} y1={BODY_H - 4} y2={BODY_H - 4} stroke={t.sub} strokeOpacity={0.25} strokeWidth={2} />
+      <BannerSvg x={(CARD_W - 600) / 2} y={BODY_H + 8} width={600} height={BANNER_ROW - 28} />
     </g>
   );
 }

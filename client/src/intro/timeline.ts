@@ -3,12 +3,14 @@
 import { PLAN_ORDER, type ScreenId, type Snapshot } from '@night-shift/shared';
 
 export const BEAT = {
-  door: 900, // "creak"
-  footsteps: 1700, // "tap tap tap"
-  officeFadeIn: 3000, // the office starts to appear...
-  officeLit: 6000, // ...fully visible by now
-  lamp: 3500, // desk lamp clicks on
-  mug: 4500, // coffee mug set down
+  banner: 200, // the MoSAIcSOC banner on the black screen, like the studio logos before a film...
+  bannerEnd: 2900, // ...gone again
+  door: 3000, // "creak"
+  footsteps: 3700, // "tap tap tap"
+  officeFadeIn: 3600, // the office starts to appear...
+  officeLit: 6400, // ...fully visible by now
+  lamp: 4000, // desk lamp clicks on
+  mug: 5000, // coffee mug set down
   rexYawn: 5500, // Rex yawns and settles
   rexYawnEnd: 7200,
   mission: 16000, // the one sentence

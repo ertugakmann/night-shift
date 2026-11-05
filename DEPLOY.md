@@ -55,3 +55,7 @@ npm start
 ```
 Put `PRESENTER_KEY=...` in `.env` (see `.env.example`). Without it the local default key
 `nightshift-dev` is used, which anyone on the same network could guess: set your own for the demo. Other devices on the same network: `http://<laptop-ip>:3001/screen/3`.
+
+## The MoSAIcSOC banner
+
+One file: `client/public/brand/mosaicsoc-banner.png`. To use a sharper copy, replace it (keep the name), then `npm run build` (Render rebuilds on push). It is always shown as it is: never cropped, stretched or recoloured, whatever its size.

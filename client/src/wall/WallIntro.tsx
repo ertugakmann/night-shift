@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { Snapshot } from '@night-shift/shared';
 import { gameClock, worldOf } from '../game/view';
 import { BEAT, MISSION, inIntro } from '../intro/timeline';
+import { IntroBanner } from '../brand/Banner';
 
 /**
  * First-person shift start on /wall: black, the clock at 23:58, the door and footsteps; the office fades
@@ -19,7 +20,9 @@ export function WallIntro({ snapshot }: { snapshot: Snapshot | null }) {
     <div className="game-text pointer-events-none absolute inset-0 z-40">
       {blackout > 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-[#05040f]" style={{ opacity: blackout }}>
-          <div className="font-semibold tabular-nums text-[#fff1cf]/85" style={{ fontSize: 'clamp(40px, 9vmin, 120px)' }}>
+          <IntroBanner t={t} from={BEAT.banner} to={BEAT.bannerEnd} />
+          {/* the clock waits until the banner has gone */}
+          <div className={`font-semibold tabular-nums text-[#fff1cf]/85 ${t < BEAT.bannerEnd ? 'invisible' : ''}`} style={{ fontSize: 'clamp(40px, 9vmin, 120px)' }}>
             {gameClock(snapshot)}
           </div>
           <div className="h-12 text-[#a99ce6]/85" style={{ fontSize: 'clamp(20px, 3.5vmin, 44px)' }}>

@@ -3,6 +3,7 @@ import { gameClock } from '../game/view';
 import { useGame } from '../net/game';
 import { useScreenPosition } from '../components/position';
 import { BEAT, MISSION, POWER_ON_FLICKER_MS, inIntro, powerOnAtPosition } from './timeline';
+import { IntroBanner } from '../brand/Banner';
 
 /**
  * Shift start, per screen: black until this screen's turn, then a short flicker as it powers on.
@@ -21,7 +22,8 @@ export function IntroOverlay({ id, quiet = false }: { id: ScreenId; quiet?: bool
     // Before power-on. The desk (screen 2) shows the time and the sounds of the guard arriving.
     return (
       <div data-intro="off" className="game-text pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#05040f]">
-        {id === 2 && !quiet && (
+        {!quiet && <IntroBanner t={t} from={BEAT.banner} to={BEAT.bannerEnd} />}
+        {id === 2 && !quiet && t >= BEAT.bannerEnd && (
           <>
             <div className="font-semibold tabular-nums text-[#fff1cf]/80" style={{ fontSize: 'clamp(28px, 10cqmin, 120px)' }}>
               {gameClock(snapshot)}
