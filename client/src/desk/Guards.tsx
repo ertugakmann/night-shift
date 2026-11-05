@@ -3,6 +3,7 @@ import { ACTION_REAL, theRoom } from '@night-shift/shared';
 import { GuardArt } from '../building/Characters';
 import { ACTION_LABEL, worldOf } from '../game/view';
 import { truncate } from './util';
+import { celebrating } from '../game/moments';
 
 const X = 590;
 const Y = 352;
@@ -15,6 +16,7 @@ const RING: Record<string, string> = { sam: '#3ee0d8', priya: '#ff9ec7', tom: '#
 /** ID badges for the three guards: portrait, name, what they are doing, and a progress ring. */
 export function GuardCards({ snapshot, reality = false }: { snapshot: Snapshot; reality?: boolean }) {
   const w = worldOf(snapshot);
+  const cheer = celebrating(snapshot);
   return (
     <g className="game-text">
       {snapshot.guards.map((g, i) => {
@@ -57,7 +59,9 @@ export function GuardCards({ snapshot, reality = false }: { snapshot: Snapshot; 
             ) : (
               <g clipPath={`url(#${clipId})`}>
                 <g transform={`translate(${cx},${cy + 92}) scale(1.35)`}>
-                  <GuardArt id={g.id} raised={false} walking={false} facing={1} />
+                  <g className={cheer ? 'cheer-small' : undefined}>
+                    <GuardArt id={g.id} raised={cheer} walking={false} facing={1} />
+                  </g>
                 </g>
               </g>
             )}
@@ -83,7 +87,7 @@ export function GuardCards({ snapshot, reality = false }: { snapshot: Snapshot; 
               {truncate(status, 24)}
             </text>
             <text x={X + 168} y={y + 128} fontSize={19} fontWeight={600} fill={task ? '#c96a1a' : '#1f9c94'}>
-              {task ? `${task.arrived ? 'Working' : 'Walking'} · ${left}s` : 'Ready'}
+              {cheer && !task ? (reality ? 'Threat eradicated' : 'Hooray!') : task ? `${task.arrived ? 'Working' : 'Walking'} · ${left}s` : 'Ready'}
             </text>
           </g>
         );

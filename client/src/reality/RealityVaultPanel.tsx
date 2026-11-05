@@ -5,6 +5,7 @@ import { IMPACT_LABELS, IMPACT_TYPES, type Snapshot } from '@night-shift/shared'
 import { ImpactIcon } from '../building/VaultExtras';
 import { CLOCK_TOWER } from '../building/layout';
 import { gameClock, worldOf } from '../game/view';
+import { useRiseKey } from '../game/moments';
 
 const C = { panel: '#0d1729', line: '#2f4a73', text: '#e6edf7', sub: '#7f8ea8', ok: '#3ee0d8' };
 
@@ -14,6 +15,7 @@ export function RealityVaultPanel({ snapshot }: { snapshot: Snapshot }) {
   const width = CLOCK_TOWER.w;
   const progress = Math.min(1, snapshot.timeMs / w.ms.night);
   const care = Math.round(snapshot.care);
+  const rise = useRiseKey(care);
   const careColor = care >= 75 ? '#3ee0d8' : care >= 50 ? '#f2994a' : '#ff6b6b';
   const cx = x + width / 2;
   const gy = 412;
@@ -49,7 +51,7 @@ export function RealityVaultPanel({ snapshot }: { snapshot: Snapshot }) {
       </text>
       <path d={arc(0, 100)} fill="none" stroke="#16243d" strokeWidth={22} />
       <path d={arc(0, Math.max(0.5, care))} fill="none" stroke={careColor} strokeWidth={22} style={{ transition: 'all 600ms ease' }} />
-      <text x={cx} y={gy - 14} textAnchor="middle" fontSize={64} fontWeight={800} fill={careColor}>
+      <text key={rise} className={rise ? 'care-glow' : undefined} x={cx} y={gy - 14} textAnchor="middle" fontSize={64} fontWeight={800} fill={careColor}>
         {care}%
       </text>
 

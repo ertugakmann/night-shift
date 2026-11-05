@@ -23,6 +23,7 @@ import { INTRUDER_SCALE, Room } from './Room';
 import { VaultExtras } from './VaultExtras';
 import { BuildingEnd, useDawnDelay } from '../end/EndMoment';
 import { CatchBadge } from '../catch/CatchViews';
+import { celebrating } from '../game/moments';
 
 /** A building screen: its slice of the one continuous museum floor plan. */
 export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
@@ -330,7 +331,8 @@ function GuardSprite({ snapshot, id, uid }: { snapshot: Snapshot; id: string; ui
   const last = useRef({ x: pose.x, facing: 1 as 1 | -1 });
   if (Math.abs(pose.x - last.current.x) > 0.5) last.current.facing = pose.x < last.current.x ? -1 : 1;
   last.current.x = pose.x;
-  const cheer = snapshot.outcome?.result === 'won';
+  // A won night, or the gang just thrown out: everyone jumps for joy.
+  const cheer = snapshot.outcome?.result === 'won' || celebrating(snapshot);
   return (
     <motion.g initial={false} animate={{ x: pose.x, y: pose.y }} transition={{ duration: 0.12, ease: 'linear' }}>
       <circle r={150} cy={-40} fill={`url(#${uid}-glow)`} className="flicker" />

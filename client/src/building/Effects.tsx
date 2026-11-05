@@ -4,7 +4,7 @@ import { exhibitBox } from './Exhibit';
 import { ROOMS } from './layout';
 
 /** How long an effect plays, in game time. Effects older than this are not replayed after a refresh. */
-const FX_MS = 1600;
+const FX_MS = 2000;
 
 const STAR = 'M0 -14 L4 -4 L14 -4 L6 3 L9 13 L0 7 L-9 13 L-6 3 L-14 -4 L-4 -4 Z';
 
@@ -31,6 +31,36 @@ function StarBurst({ x, y }: { x: number; y: number }) {
           transition={{ duration: 1.2, ease: 'easeOut' }}
         />
       ))}
+    </g>
+  );
+}
+
+const CONFETTI = ['#ffd27a', '#3ee0d8', '#ff9ec7', '#a8e07a', '#9c86f5', '#fff1cf'];
+
+/** A small shower of confetti over a room the gang was just thrown out of. Fixed pattern, no randomness. */
+export function Confetti({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x},${y - 120})`}>
+      {Array.from({ length: 22 }, (_, i) => {
+        const a = (i / 22) * Math.PI * 2;
+        const spread = 130 + (i % 5) * 40;
+        const dx = Math.cos(a) * spread;
+        const up = -90 - (i % 4) * 45;
+        return (
+          <motion.rect
+            key={i}
+            x={-11}
+            y={-6}
+            width={22}
+            height={i % 3 === 0 ? 22 : 11}
+            rx={i % 3 === 0 ? 11 : 3}
+            fill={CONFETTI[i % CONFETTI.length]}
+            initial={{ x: 0, y: 0, rotate: 0, opacity: 1 }}
+            animate={{ x: [0, dx * 0.7, dx], y: [0, up, up + 320], rotate: (i % 2 ? 1 : -1) * 540, opacity: [1, 1, 0] }}
+            transition={{ duration: 1.8, ease: 'easeOut', times: [0, 0.3, 1] }}
+          />
+        );
+      })}
     </g>
   );
 }
@@ -106,8 +136,16 @@ function Effect({ fx, reality }: { fx: Fx; reality: boolean }) {
   if (fx.kind === 'spotted') return <Callout {...top} text={reality ? 'DETECTED' : 'Found them!'} color="#f2994a" reality={reality} />;
   if (fx.kind === 'locked') return <Callout {...top} text={reality ? 'ISOLATED' : 'Locked!'} color="#9c86f5" reality={reality} />;
   if (fx.kind === 'late') return <Callout {...top} text={reality ? 'MOVED ON' : 'Too late!'} color="#f2994a" reality={reality} />;
-  if (reality) return null;
-  if (fx.kind === 'evicted') return <StarBurst x={room.spots[0].x} y={room.spots[0].y} />;
+  if (fx.kind === 'phew') return <Callout {...top} text={reality ? 'CLOSE CALL' : 'Phew!'} color="#3ee0d8" reality={reality} />;
+  if (reality) return fx.kind === 'evicted' ? <Callout {...top} text="ERADICATED" color="#3ee0d8" reality /> : null;
+  if (fx.kind === 'evicted') {
+    return (
+      <g>
+        <StarBurst x={room.spots[0].x} y={room.spots[0].y} />
+        <Confetti x={room.rect.x + room.rect.w / 2} y={room.spots[0].y} />
+      </g>
+    );
+  }
   if (fx.kind === 'repaired') {
     return (
       <g>

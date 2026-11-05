@@ -10,6 +10,7 @@ import { Column, ExhibitArt, Frame, exhibitBox } from '../building/Exhibit';
 import { IntruderArt } from '../building/Characters';
 import { worldOf } from '../game/view';
 import { sendIntent, useGame } from '../net/game';
+import { Confetti } from '../building/Effects';
 
 const W = 1600;
 const H = 900;
@@ -454,6 +455,12 @@ function Result({ c, snapshot, reality }: { c: Catch; snapshot: Snapshot; realit
       <text x={800} y={508} textAnchor="middle" fontSize={28} fill={reality ? '#e6edf7' : '#fff1cf'}>
         {text[1]}
       </text>
+      {good && !reality && (
+        <>
+          <Confetti x={560} y={560} />
+          <Confetti x={1040} y={560} />
+        </>
+      )}
     </motion.g>
   );
 }

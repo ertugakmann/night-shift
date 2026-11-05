@@ -52,9 +52,16 @@ function RexArt({ alert }: { alert: boolean }) {
         <path d="M-10 32 Q0 40 10 32" fill="none" stroke="#2a1d3a" strokeWidth={3} strokeLinecap="round" />
         <circle cx={-34} cy={14} r={8} fill="#ff8fa3" opacity={0.5} />
         <circle cx={34} cy={14} r={8} fill="#ff8fa3" opacity={0.5} />
-        {/* collar with a tag */}
+        {/* collar with his name tag: a little brass "AI" disc (he is the AI copilot, after all) */}
         <rect x={-40} y={46} width={80} height={12} rx={6} fill="#9c86f5" />
-        <circle cx={0} cy={64} r={9} fill="#f2c65e" />
+        {/* hung off-centre, so the corner badge of the page never covers it */}
+        <g className="tag-swing" style={{ transformOrigin: '-26px 54px', transformBox: 'view-box' }}>
+          <line x1={-26} y1={54} x2={-26} y2={60} stroke="#c9913c" strokeWidth={3} />
+          <circle cx={-26} cy={74} r={17} fill="#f2c65e" stroke="#c9913c" strokeWidth={3} />
+          <text x={-26} y={80} textAnchor="middle" fontSize={17} fontWeight={800} fill="#6a4410" letterSpacing={0.5}>
+            AI
+          </text>
+        </g>
       </g>
     </g>
   );

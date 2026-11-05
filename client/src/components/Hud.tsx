@@ -30,7 +30,7 @@ export function Hud() {
         {role === 'presenter' && (
           <div className="flex items-center gap-2">
             <span className="hidden rounded-md bg-night-950/80 px-2 py-1 text-ink/60 lg:inline">
-              S start · Space pause · R reset · L lights · D debug · C code
+              S start · Space pause · R reset · L lights · D debug · C code · M sound
             </span>
             {snapshot && (
               <span className="rounded-md bg-night-950/80 px-2 py-1 text-ink/60">

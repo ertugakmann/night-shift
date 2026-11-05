@@ -4,6 +4,7 @@ import { IMPACT_LABELS, IMPACT_TYPES, type ImpactType, type Snapshot } from '@ni
 import { gameClock, worldOf } from '../game/view';
 import { DangerMeter, dangerLevel } from '../game/danger';
 import { CLOCK_TOWER, SLICE_H, SLICE_W, type Rect } from './layout';
+import { useRiseKey } from '../game/moments';
 
 const GOLD = '#f2c65e';
 const GOLD_DARK = '#c9913c';
@@ -84,6 +85,7 @@ function MuseumClock({ snapshot }: { snapshot: Snapshot }) {
 /** Care score as a brass gauge: how much of the museum (the hospital's care) is still running. */
 function CareGauge({ snapshot }: { snapshot: Snapshot }) {
   const care = Math.round(snapshot.care);
+  const rise = useRiseKey(care);
   const cx = CLOCK_TOWER.x + CLOCK_TOWER.w / 2;
   const cy = 560;
   const r = 110;
@@ -108,13 +110,16 @@ function CareGauge({ snapshot }: { snapshot: Snapshot }) {
       </g>
       <circle cx={cx} cy={cy} r={14} fill={GOLD} stroke={GOLD_DARK} strokeWidth={4} />
       <g transform={`translate(${cx},${cy + 62})`} className="game-text">
-        <rect x={-110} y={-42} width={220} height={60} rx={14} fill={INK} stroke={GOLD} strokeWidth={4} />
-        <text x={-92} y={-2} fontSize={22} fontWeight={600} fill="#e8e0ff" opacity={0.85}>
-          CARE
-        </text>
-        <text x={92} y={6} textAnchor="end" fontSize={48} fontWeight={700} fill={color}>
-          {care}
-        </text>
+        {/* the score shines when it climbs (a repair, a room reopened) */}
+        <g key={rise} className={rise ? 'care-glow' : undefined}>
+          <rect x={-110} y={-42} width={220} height={60} rx={14} fill={INK} stroke={GOLD} strokeWidth={4} />
+          <text x={-92} y={-2} fontSize={22} fontWeight={600} fill="#e8e0ff" opacity={0.85}>
+            CARE
+          </text>
+          <text x={92} y={6} textAnchor="end" fontSize={48} fontWeight={700} fill={color}>
+            {care}
+          </text>
+        </g>
       </g>
     </g>
   );

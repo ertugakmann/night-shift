@@ -145,6 +145,12 @@ socket.on('wall', ({ order }) => set({ roomOrder: order }));
 // already (a refresh after the end) is not live; one that arrives later is.
 socket.on('report', (report) => set({ report, reportLive: report !== null && view.snapshot !== null }));
 
+/** Be told about every change, outside React (the sound cues). Returns the unsubscribe. */
+export function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 /** The latest state, for handlers outside React (the keyboard). */
 export function currentView(): GameView {
   return view;
