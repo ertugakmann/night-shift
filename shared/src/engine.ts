@@ -729,7 +729,7 @@ function updateRex(s: GameState, w: World): void {
       const why = evidence(s, w, room.id);
       const confidence = next[room.id];
       const text = `WOOF! ${confidence}% sure about ${theRoom(room.name)}: ${why.game}.`;
-      const real = `AI copilot: ${room.real}, ${confidence}% confidence. Evidence: ${why.real}.`;
+      const real = `AI copilot: ${confidence}% confidence. Evidence: ${why.real}.`;
       s.rex.why = { room: room.id, atMs: s.timeMs, confidence, text, real };
       log(s, { kind: 'rex', speaker: 'Rex', room: room.id, text, real, truth });
     }
@@ -750,15 +750,16 @@ function evidence(s: GameState, w: World, roomId: RoomId): { game: string; real:
   const real: string[] = [];
   if (report) {
     game.push(`${report.speaker} reported "${report.text.replace(/[.!]$/, '')}"`);
-    real.push(`staff report (${room.real})`);
+    real.push('staff report');
   }
   if (camera) {
     const ago = Math.round((s.timeMs - camera.atMs) / 1000);
     game.push(`the camera glitched there ${ago <= 1 ? 'just now' : `${ago} seconds ago`}`);
-    real.push(`EDR alert (${room.real})`);
+    real.push('EDR alert');
   }
-  if (game.length === 0) return { game: "his nose says they're close", real: `anomalous network traffic near ${room.real}` };
-  return { game: game.join(', and '), real: real.join(', ') };
+  if (game.length === 0) return { game: "his nose says they're close", real: `anomalous network traffic in ${room.real}` };
+  // "staff report + EDR alert in Network segment (east)": the place once, no brackets inside brackets
+  return { game: game.join(', and '), real: `${real.join(' + ')} in ${room.real}` };
 }
 
 /** Trust analysis: a bark nobody patrolled within the window counts as ignored. */

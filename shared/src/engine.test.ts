@@ -664,7 +664,8 @@ describe('Rex explains himself', () => {
     const night = idleNight();
     const quoted = night.log.filter((l) => l.kind === 'rex' && / reported "/.test(l.text));
     expect(quoted.length).toBeGreaterThan(0);
-    expect(quoted[0].real).toMatch(/staff report \(/);
+    // "Evidence: staff report + EDR alert in Network segment (east)." — the place once, no nested brackets
+    expect(quoted[0].real).toMatch(/Evidence: staff report( \+ EDR alert)? in [^()]+( \([^()]+\))?\.$/);
   });
 
   it('when he is wrong, he leans on a camera that glitched for nothing', () => {
