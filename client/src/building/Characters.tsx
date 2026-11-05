@@ -12,7 +12,7 @@ const LIFT = { type: 'spring', stiffness: 170, damping: 15 } as const;
 
 const LOOKS: Record<string, GuardLook> = {
   sam: { skin: '#f3cfa6', band: '#3ee0d8', hair: '#5b3a24' },
-  priya: { skin: '#c98d62', band: '#ff9ec7', hair: '#2a1a2e' },
+  mia: { skin: '#c98d62', band: '#ff9ec7', hair: '#2a1a2e' },
   tom: { skin: '#eab78e', band: '#a8e07a', hair: '#c46a3a' },
 };
 
@@ -34,8 +34,8 @@ export const GuardArt = memo(function GuardArt({
       <ellipse cx={0} cy={2} rx={26} ry={8} fill="#000" opacity={0.35} />
       <g className={walking ? 'bob' : 'breathe'}>
         <g transform={`scale(${facing},1)`}>
-          {/* Priya's ponytail sits behind the head */}
-          {id === 'priya' && <path d="M-22 -66 Q-46 -50 -34 -26 Q-24 -44 -14 -56 Z" fill={look.hair} />}
+          {/* Mia's ponytail sits behind the head */}
+          {id === 'mia' && <path d="M-22 -66 Q-46 -50 -34 -26 Q-24 -44 -14 -56 Z" fill={look.hair} />}
           {/* body */}
           <rect x={-17} y={-36} width={34} height={36} rx={12} fill="#2f3f86" />
           <rect x={-17} y={-14} width={34} height={6} fill="#1f2a5e" />

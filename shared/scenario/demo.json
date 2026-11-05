@@ -13,7 +13,7 @@
     "durationSec": 20,
     "radioCheck": [
       { "atSec": 12, "guard": "sam", "text": "West wing, all quiet." },
-      { "atSec": 13.4, "guard": "priya", "text": "East wing clear, chief." },
+      { "atSec": 13.4, "guard": "mia", "text": "East wing clear, chief." },
       { "atSec": 14.8, "guard": "tom", "text": "Lobby. Coffee machine's broken again." }
     ]
   },
@@ -59,7 +59,7 @@
 
   "guards": [
     { "id": "sam", "name": "Sam", "startRoom": "west-corridor" },
-    { "id": "priya", "name": "Priya", "startRoom": "east-corridor" },
+    { "id": "mia", "name": "Mia", "startRoom": "east-corridor" },
     { "id": "tom", "name": "Tom", "startRoom": "entrance-hall" }
   ],
 

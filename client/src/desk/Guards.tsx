@@ -11,7 +11,7 @@ const W = 420;
 const H = 166;
 const GAP = 12;
 
-const RING: Record<string, string> = { sam: '#3ee0d8', priya: '#ff9ec7', tom: '#a8e07a' };
+const RING: Record<string, string> = { sam: '#3ee0d8', mia: '#ff9ec7', tom: '#a8e07a' };
 
 /** ID badges for the three guards: portrait, name, what they are doing, and a progress ring. */
 export function GuardCards({ snapshot, reality = false }: { snapshot: Snapshot; reality?: boolean }) {

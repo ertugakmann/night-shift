@@ -327,7 +327,7 @@ function guardLine(g: NightFacts['guards'][number]): string {
   if (g.actions.length === 0) {
     const idle: Record<string, string> = {
       Sam: 'Sam held the fort and guarded the biscuit tin.',
-      Priya: 'Priya kept watch, which is harder than it sounds.',
+      Mia: 'Mia kept watch, which is harder than it sounds.',
       Tom: 'Tom had a quiet night (the coffee machine is still broken).',
     };
     return idle[g.name] ?? `${g.name} had a quiet night.`;

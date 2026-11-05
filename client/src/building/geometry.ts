@@ -4,7 +4,7 @@ import { ROOMS, doorSide, findDoor, type Pt } from './layout';
 /** Small offsets so guards sharing a room don't stand on each other. */
 const GUARD_OFFSET: Record<string, Pt> = {
   sam: { x: -95, y: 4 },
-  priya: { x: 0, y: -8 },
+  mia: { x: 0, y: -8 },
   tom: { x: 95, y: 6 },
 };
 

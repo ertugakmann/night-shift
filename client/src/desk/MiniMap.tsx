@@ -8,7 +8,7 @@ import { worldOf } from '../game/view';
 import { selectRoom } from '../net/game';
 import { MAP_SCALE, MAP_X, MAP_Y, mapX, mapY, truncate } from './util';
 
-const GUARD_COLOR: Record<string, string> = { sam: '#3ee0d8', priya: '#ff9ec7', tom: '#a8e07a' };
+const GUARD_COLOR: Record<string, string> = { sam: '#3ee0d8', mia: '#ff9ec7', tom: '#a8e07a' };
 
 function Paw({ x, y, scale = 1 }: { x: number; y: number; scale?: number }) {
   return (

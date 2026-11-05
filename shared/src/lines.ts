@@ -1,5 +1,5 @@
 // Guard radio lines. Picked by a counter, not the RNG, so dialogue never changes how the gang moves.
-// Sam is calm and dry, Priya is keen, Tom is cheerful and always thinking about snacks.
+// Sam is calm and dry, Mia is keen, Tom is cheerful and always thinking about snacks.
 import type { ActionKind } from './engine';
 
 type GuardLines = {
@@ -24,7 +24,7 @@ const LINES: Record<string, GuardLines> = {
     repaired: ['{Room} is back on and open.', 'Fixed. {Room} is running again.'],
     candles: ['Candles lit in {wing}. Staff are on paper.', '{Wing} is on candlelight. Slower, but it works.'],
   },
-  priya: {
+  mia: {
     reply: ['On it!', 'Already moving, chief.', 'Leave it to me.', 'Running! Well, power-walking.', "Say no more, I'm going."],
     found: ['There! Intruders in {room}!', 'Found them, {room}!', 'Gotcha! They’re in {room}!'],
     empty: ['{room} is clear.', 'Nobody in {room}. Just a very judgemental statue.', 'Checked every corner of {room}. Empty.'],

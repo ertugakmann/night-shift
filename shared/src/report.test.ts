@@ -28,7 +28,7 @@ function evictAndCatch(s: GameState, room: string, guard: string): GameState {
 /** A won night: both groups trapped and evicted early on. */
 function wonNight(): GameState {
   let s = runUntil(started(), (x) => x.brokenIn);
-  s = act(s, 'patrol', 'mail-room', 'priya');
+  s = act(s, 'patrol', 'mail-room', 'mia');
   s = runUntil(s, (x) => x.groups.length > 1);
   s = act(s, 'lock', 'mail-room', 'sam');
   s = act(s, 'lock', 'entrance-hall', 'tom');
@@ -160,7 +160,7 @@ describe('lessons: advice about the player’s own decisions', () => {
 
   it('a lock on an empty room: patrol first, then lock', () => {
     let s = runUntil(started(), (x) => x.timeMs >= 20_000);
-    s = act(s, 'lock', 'radiology', 'priya');
+    s = act(s, 'lock', 'radiology', 'mia');
     s = runUntil(s, () => false);
     const lesson = nightFacts(s).lessons.find((l) => l.game.startsWith('You locked the Radiology'));
     expect(lesson?.game).toMatch(/with nobody inside, so its exhibits closed for nothing\. Patrol first, then lock\.$/);

@@ -196,7 +196,7 @@ describe('Rex', () => {
     s = act(s, 'lock', room, 'sam');
     expect(s.stats.rexFollowed).toBe(1);
     expect(s.stats.rexFollowedWrong).toBe(1); // the planned mistake: nobody there
-    s = act(s, 'patrol', room, 'priya');
+    s = act(s, 'patrol', room, 'mia');
     expect(s.stats.rexFollowed).toBe(1); // the same bark only counts once
     s = runFor(s, w.ms.followWindow + 200);
     expect(s.stats.rexIgnored + s.stats.rexFollowed).toBeLessThanOrEqual(s.stats.barks);
@@ -216,7 +216,7 @@ describe('Rex', () => {
     const room = s.rex.mistake!.room;
     const wrongIgnored = (x: GameState) => x.stats.rexIgnored - x.stats.rexIgnoredRight;
     const before = wrongIgnored(s);
-    s = act(s, 'lock', 'lab', 'priya'); // close something in the wing so candles are allowed
+    s = act(s, 'lock', 'lab', 'mia'); // close something in the wing so candles are allowed
     s = runUntil(s, (x) => x.rooms.lab.locked);
     const lit = applyIntent(s, { type: 'action', action: 'candlelight', room, guard: 'sam' });
     s = lit.error ? s : lit.state;
@@ -516,18 +516,18 @@ describe('Reconnect the exhibit (Repair)', () => {
 
   it('one mini game at a time: a guard who arrives while another one runs waits for it', () => {
     let s = act(started(), 'lock', 'lab', 'sam');
-    s = act(s, 'lock', 'pharmacy', 'priya');
+    s = act(s, 'lock', 'pharmacy', 'mia');
     s = runUntil(s, (x) => x.rooms.lab.locked && x.rooms.pharmacy.locked && !x.guards.some((g) => g.task));
     s = act(s, 'repair', 'lab', 'sam');
-    expect(applyIntent(s, { type: 'action', action: 'repair', room: 'pharmacy', guard: 'priya' }).error).toMatch(/One mini game at a time/);
+    expect(applyIntent(s, { type: 'action', action: 'repair', room: 'pharmacy', guard: 'mia' }).error).toMatch(/One mini game at a time/);
     // the Key Room game can still start on its own, so a guard can arrive to a busy desk: they wait
     s = runUntil(s, (x) => x.wires !== null);
     const paused: GameState = JSON.parse(JSON.stringify(s));
-    paused.guards.find((g) => g.id === 'priya')!.task = { action: 'repair', room: 'pharmacy', path: ['pharmacy'], walkMs: 0, workMs: 0, elapsedMs: 0, arrived: false, found: false };
-    paused.guards.find((g) => g.id === 'priya')!.room = 'pharmacy';
+    paused.guards.find((g) => g.id === 'mia')!.task = { action: 'repair', room: 'pharmacy', path: ['pharmacy'], walkMs: 0, workMs: 0, elapsedMs: 0, arrived: false, found: false };
+    paused.guards.find((g) => g.id === 'mia')!.room = 'pharmacy';
     let w2 = runFor(paused, 1000);
     expect(w2.wires!.room).toBe('lab');
-    expect(w2.guards.find((g) => g.id === 'priya')!.task?.started).toBeFalsy();
+    expect(w2.guards.find((g) => g.id === 'mia')!.task?.started).toBeFalsy();
     w2 = runUntil(w2, (x) => x.wires?.room === 'pharmacy');
     expect(w2.wires!.room).toBe('pharmacy');
   });
@@ -641,7 +641,7 @@ describe('critical departments and candlelight', () => {
     s = runUntil(s, (x) => x.rooms.lab.locked);
     const dark = runFor(s, 10_000);
     const darkRate = dark.impact.tests - s.impact.tests;
-    let c = act(s, 'candlelight', 'pharmacy', 'priya');
+    let c = act(s, 'candlelight', 'pharmacy', 'mia');
     c = runUntil(c, (x) => x.candlelight.west);
     const lit = runFor(c, 10_000);
     const litRate = lit.impact.tests - c.impact.tests;
@@ -686,7 +686,7 @@ describe('Rex explains himself', () => {
 describe('idle guards stroll around their wing', () => {
   const night = (() => {
     let s = started();
-    const seen: Record<string, Set<string>> = { sam: new Set(), priya: new Set(), tom: new Set() };
+    const seen: Record<string, Set<string>> = { sam: new Set(), mia: new Set(), tom: new Set() };
     let biscuit = false;
     let lit = false;
     while (s.phase === 'running') {
@@ -700,10 +700,10 @@ describe('idle guards stroll around their wing', () => {
 
   it('they move between rooms, but only in their own wing', () => {
     expect(night.seen.sam.size).toBeGreaterThan(1);
-    expect(night.seen.priya.size).toBeGreaterThan(1);
+    expect(night.seen.mia.size).toBeGreaterThan(1);
     expect(night.seen.tom.size).toBeGreaterThan(1);
     for (const r of night.seen.sam) expect(w.room.get(r)!.wing).toBe('west');
-    for (const r of night.seen.priya) expect(w.room.get(r)!.wing).toBe('east');
+    for (const r of night.seen.mia) expect(w.room.get(r)!.wing).toBe('east');
     for (const r of night.seen.tom) expect(w.room.get(r)!.wing).toBe('lobby');
   });
 
@@ -735,16 +735,16 @@ describe('feedback on the floor', () => {
   });
 
   it('a lock that lands after the gang has left: "Too late, they\'ve already moved on."', () => {
-    // a spotted group in the open West Corridor flees at the next tick; Priya is far away
+    // a spotted group in the open West Corridor flees at the next tick; Mia is far away
     let s = placeGang(runUntil(started(), (x) => x.brokenIn), 'west-corridor');
     s.groups[0].spotted = true;
     s.nextSpreadMs = s.timeMs + 1000; // they flee within a second, before the lock can land
-    s.guards.find((g) => g.id === 'priya')!.room = 'radiology';
+    s.guards.find((g) => g.id === 'mia')!.room = 'radiology';
     s.guards.find((g) => g.id === 'sam')!.room = 'pharmacy';
-    s = act(s, 'lock', 'west-corridor', 'priya');
+    s = act(s, 'lock', 'west-corridor', 'mia');
     s = runUntil(s, (x) => x.rooms['west-corridor'].locked);
     expect(s.groups.some((g) => g.room === 'west-corridor')).toBe(false);
-    const line = s.log.filter((l) => l.speaker === 'Priya').at(-1)!;
+    const line = s.log.filter((l) => l.speaker === 'Mia').at(-1)!;
     expect(line.text).toBe("Too late, they've already moved on.");
     expect(line.real).toMatch(/Isolation too late/);
     expect(s.fx.some((e) => e.kind === 'late')).toBe(true);
@@ -919,7 +919,7 @@ describe('padlocks and the lock rule', () => {
 
   it('three padlocks: a fourth lock is refused, a lock on its way counts', () => {
     let s = act(started(), 'lock', 'lab', 'sam');
-    s = act(s, 'lock', 'pharmacy', 'priya');
+    s = act(s, 'lock', 'pharmacy', 'mia');
     expect(padlocks(s)).toEqual({ max: 3, used: 2, free: 1 });
     s = act(s, 'lock', 'radiology', 'tom');
     expect(padlocks(s).free).toBe(0);
@@ -1005,13 +1005,13 @@ describe('shift-start intro', () => {
     expect(s.phase).toBe('running');
     expect(s.introMs).toBe(w.ms.intro);
     expect(s.timeMs).toBe(0);
-    expect(radioCheck(s)).toEqual(['Sam', 'Priya', 'Tom']);
+    expect(radioCheck(s)).toEqual(['Sam', 'Mia', 'Tom']);
   });
 
   it('can be skipped, and the radio check still happens', () => {
     const s = started();
     expect(s.phase).toBe('running');
-    expect(radioCheck(s)).toEqual(['Sam', 'Priya', 'Tom']);
+    expect(radioCheck(s)).toEqual(['Sam', 'Mia', 'Tom']);
   });
 
   it('does not change the night: watching the intro or skipping it gives the same game', () => {
@@ -1075,7 +1075,7 @@ describe('end of night summary', () => {
   it('MTTD and MTTR are measured per group: from appearing to spotted, from spotted to stopped', () => {
     let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
     const mail = s.groups.find((g) => g.room === 'mail-room')!.id;
-    s = act(s, 'patrol', 'mail-room', 'priya');
+    s = act(s, 'patrol', 'mail-room', 'mia');
     s = runUntil(s, (x) => x.groups.some((g) => g.id === mail && g.spotted));
     s = act(s, 'lock', 'mail-room', 'sam');
     s = runUntil(s, (x) => x.rooms['mail-room'].locked);
@@ -1093,7 +1093,7 @@ describe('end of night summary', () => {
 
   it('MTTD is the average over the groups that were spotted', () => {
     let s = runUntil(runUntil(started(), (x) => x.brokenIn), (x) => x.groups.length > 1);
-    s = act(s, 'patrol', 'mail-room', 'priya');
+    s = act(s, 'patrol', 'mail-room', 'mia');
     s = act(s, 'patrol', 'entrance-hall', 'tom');
     s = runUntil(s, (x) => x.groupLog.filter((r) => r.spottedMs !== null).length === 2);
     s = runUntil(s, () => false);
@@ -1202,7 +1202,7 @@ describe('"Phew! That was close!" (stopped one room from the Vault)', () => {
   it('locking a group in next to the Vault: Phew, and a moment of slow motion', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     s = placeGang(s, 'archive');
-    s = act(s, 'lock', 'archive', 'priya');
+    s = act(s, 'lock', 'archive', 'mia');
     s = runUntil(s, (x) => x.rooms.archive.locked);
     expect(s.fx.some((f) => f.kind === 'phew' && f.room === 'archive')).toBe(true);
     expect(s.log.at(-1)?.text === 'Phew! That was close!' || s.log.some((l) => l.text === 'Phew! That was close!')).toBe(true);
@@ -1224,13 +1224,13 @@ describe('"Phew! That was close!" (stopped one room from the Vault)', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     s = placeGang(s, 'emergency');
     s.groups.push({ id: 98, room: 'mail-room', enteredMs: s.timeMs, spotted: false, visited: ['mail-room'] });
-    s = act(s, 'lock', 'emergency', 'priya');
+    s = act(s, 'lock', 'emergency', 'mia');
     s = runUntil(s, (x) => x.rooms.emergency.locked);
     const phews = s.fx.filter((f) => f.kind === 'phew').length;
     expect(phews).toBe(1);
     // Already stopped by the lock: the catch that follows is no second "Phew!".
     s = runUntil(s, (x) => x.slowMs === 0);
-    s = evictAndCatch(s, 'emergency', 'priya');
+    s = evictAndCatch(s, 'emergency', 'mia');
     expect(s.catch?.result).toBe('caught');
     expect(s.fx.filter((f) => f.kind === 'phew').length).toBe(1);
   });
@@ -1239,7 +1239,7 @@ describe('"Phew! That was close!" (stopped one room from the Vault)', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     s = placeGang(s, 'archive');
     s.groups.push({ id: 98, room: 'mail-room', enteredMs: s.timeMs, spotted: false, visited: ['mail-room'] });
-    s = evictAndCatch(holdStill(s), 'archive', 'priya');
+    s = evictAndCatch(holdStill(s), 'archive', 'mia');
     expect(s.catch?.result).toBe('caught');
     expect(s.fx.some((f) => f.kind === 'phew' && f.room === 'archive')).toBe(true);
   });
@@ -1247,7 +1247,7 @@ describe('"Phew! That was close!" (stopped one room from the Vault)', () => {
   it('no Phew when that catch ends the night (the end card says it all), nor far from the Vault', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     s = placeGang(s, 'archive');
-    s = evictAndCatch(holdStill(s), 'archive', 'priya');
+    s = evictAndCatch(holdStill(s), 'archive', 'mia');
     expect(s.outcome?.result).toBe('won');
     expect(s.fx.some((f) => f.kind === 'phew')).toBe(false);
 
@@ -1262,7 +1262,7 @@ describe('"Phew! That was close!" (stopped one room from the Vault)', () => {
   it('a reset ends the slow motion', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     s = placeGang(s, 'archive');
-    s = act(s, 'lock', 'archive', 'priya');
+    s = act(s, 'lock', 'archive', 'mia');
     s = runUntil(s, (x) => x.rooms.archive.locked);
     expect(s.slowMs).toBeGreaterThan(0);
     s = applyIntent(s, { type: 'reset' }).state;
@@ -1277,7 +1277,7 @@ describe('what the morning report learns from (orders, empty locks)', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('00:30'));
     const t = s.timeMs;
     s = act(s, 'patrol', 'lab', 'sam');
-    s = act(s, 'lock', 'pharmacy', 'priya');
+    s = act(s, 'lock', 'pharmacy', 'mia');
     expect(s.orders).toEqual([
       { action: 'patrol', room: 'lab', atMs: t },
       { action: 'lock', room: 'pharmacy', atMs: t },
@@ -1288,7 +1288,7 @@ describe('what the morning report learns from (orders, empty locks)', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     s = placeGang(s, 'lab');
     s = act(s, 'lock', 'lab', 'sam');
-    s = act(s, 'lock', 'radiology', 'priya');
+    s = act(s, 'lock', 'radiology', 'mia');
     s = runUntil(s, (x) => x.rooms.lab.locked && x.rooms.radiology.locked);
     expect(s.done.find((d) => d.room === 'lab')?.empty).toBe(false);
     expect(s.done.find((d) => d.room === 'radiology')?.empty).toBe(true);
