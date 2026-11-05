@@ -31,6 +31,9 @@ import {
 export const STEP_MS = 100;
 /** Longest stretch simulated in one call (e.g. after the server was suspended). */
 const MAX_CATCH_UP_MS = 1000;
+/** "Phew! That was close!": how long the slow motion lasts (real ms) and how fast the night runs meanwhile. */
+export const SLOWMO_MS = 2500;
+export const SLOWMO_RATE = 0.3;
 
 export type Phase = 'idle' | 'intro' | 'running' | 'paused' | 'ended';
 export type ActionKind = 'patrol' | 'lock' | 'unlock' | 'evict' | 'repair' | 'candlelight';
@@ -118,7 +121,7 @@ export interface LogEntry {
 /** Short-lived visual cue for the screens (star burst, sparkle...). Never affects the game. */
 export interface Fx {
   id: number;
-  kind: 'spotted' | 'evicted' | 'repaired' | 'vandalised' | 'locked' | 'arrived' | 'late';
+  kind: 'spotted' | 'evicted' | 'repaired' | 'vandalised' | 'locked' | 'arrived' | 'late' | 'phew';
   room: RoomId;
   atMs: number;
 }
@@ -255,6 +258,15 @@ export interface DoneAction {
   room: RoomId;
   atMs: number;
   hit: boolean;
+  /** Lock only: nobody was inside, then or when it was sent (its exhibits closed for nothing). */
+  empty?: boolean;
+}
+
+/** Every order the player gave (when it was sent), for the morning report's lessons. */
+export interface Order {
+  action: ActionKind;
+  room: RoomId;
+  atMs: number;
 }
 
 export interface GameState {
@@ -354,6 +366,12 @@ export interface GameState {
   /** Letters that have arrived and wait their turn (scenario indexes). */
   lettersDue: number[];
   nextCatchId: number;
+  /** Every order given tonight, in order. */
+  orders: Order[];
+  /** The last-30-seconds dash for the Vault has been announced. */
+  finaleStarted: boolean;
+  /** Slow motion left after a close call (real ms; see SLOWMO_MS). */
+  slowMs: number;
 }
 
 // ---------- Setup ----------
@@ -422,6 +440,9 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     letter: null,
     lettersDue: [],
     nextCatchId: 1,
+    orders: [],
+    finaleStarted: false,
+    slowMs: 0,
   };
 }
 
@@ -454,7 +475,14 @@ export function advance(state: GameState, dtMs: number): GameState {
   if (state.phase === 'intro') return playIntro(state, Math.min(dtMs, MAX_CATCH_UP_MS));
   if (state.phase !== 'running') return state;
   const s = clone(state);
-  s.accMs += Math.min(dtMs, MAX_CATCH_UP_MS);
+  let dt = Math.min(dtMs, MAX_CATCH_UP_MS);
+  // A close call ("Phew!"): the night runs slower for a moment. The steps are the same, only later.
+  if (s.slowMs > 0) {
+    const slow = Math.min(dt, s.slowMs);
+    s.slowMs -= slow;
+    dt -= slow * (1 - SLOWMO_RATE);
+  }
+  s.accMs += dt;
   while (s.accMs >= STEP_MS && s.phase === 'running') {
     s.accMs -= STEP_MS;
     tick(s, world(s.scenarioId));
@@ -542,6 +570,10 @@ function tick(s: GameState, w: World): void {
   updateRooms(s, w);
   if (s.phase !== 'running') return;
 
+  if (s.brokenIn && !s.finaleStarted && inFinale(s, w) && s.groups.some((g) => !s.rooms[g.room].locked && g.room !== w.vault)) {
+    s.finaleStarted = true;
+    log(s, { kind: 'event', text: 'The gang makes a last dash for the Vault!', real: 'Final push: the ransomware is racing for the patient records.' });
+  }
   if (s.brokenIn && now >= s.nextSpreadMs) {
     spread(s, w);
     for (const room of sc.rooms) {
@@ -556,7 +588,7 @@ function tick(s: GameState, w: World): void {
 
   revealLitRooms(s, w);
   expireBarks(s);
-  updateContainment(s);
+  updateContainment(s, w);
   updateCare(s, w);
 
   if (now >= ms.night) {
@@ -614,6 +646,12 @@ function spread(s: GameState, w: World): void {
       continue;
     }
     if (g.room === w.vault) continue;
+    if (inFinale(s, w)) {
+      // The last seconds of the night: every free group heads straight for the Vault. Locks still hold.
+      const dest = dashDestination(s, w, g);
+      if (dest) moveGroup(s, g, dest);
+      continue;
+    }
     if (s.timeMs - g.enteredMs < w.ms.minStay) continue;
     const r = () => groupRand(s, g);
     if (r() >= intruders.moveChance) continue;
@@ -627,6 +665,44 @@ function spread(s: GameState, w: World): void {
     } else {
       moveGroup(s, g, dest);
     }
+  }
+}
+
+/** The last `finaleSec` seconds of the night. */
+function inFinale(s: GameState, w: World): boolean {
+  return s.timeMs >= w.ms.night - w.ms.finale;
+}
+
+/** The final dash: the open door that leads closest to the Vault (no randomness). */
+function dashDestination(s: GameState, w: World, g: Group): RoomId | null {
+  if (s.rooms[g.room].locked) return null;
+  const here = w.distToVault.get(g.room)!;
+  const options = w.neighbours
+    .get(g.room)!
+    .filter((n) => !s.rooms[n].locked && w.distToVault.get(n)! < here)
+    .sort((a, b) => w.room.get(b)!.lure - w.room.get(a)!.lure);
+  return options[0] ?? null;
+}
+
+/**
+ * For the screens: the gang is making its last dash (the last 30 s of the night, with a group still free).
+ * The screens blush red and the presenter's heartbeat speeds up.
+ */
+export function finaleActive(state: GameState): boolean {
+  const w = world(state.scenarioId);
+  if (state.phase !== 'running' && state.phase !== 'paused') return false;
+  return state.brokenIn && inFinale(state, w) && state.groups.some((g) => !state.rooms[g.room].locked);
+}
+
+/** A group is stopped (shut in, or thrown out). One room from the Vault, that was close: "Phew!" */
+function markStopped(s: GameState, w: World, g: Group, celebrate = true): void {
+  const record = recordOf(s, g);
+  if (record.stoppedMs !== null) return;
+  record.stoppedMs = s.timeMs;
+  if (celebrate && s.phase === 'running' && w.distToVault.get(g.room) === 1 && s.slowMs <= 0) {
+    s.slowMs = SLOWMO_MS;
+    fx(s, 'phew', g.room);
+    log(s, { kind: 'event', room: g.room, text: 'Phew! That was close!', real: 'Close call: contained one hop from the patient records.' });
   }
 }
 
@@ -727,6 +803,7 @@ function updateRex(s: GameState, w: World): void {
   const { rex: cfg } = w.sc;
   const busy = new Set(s.groups.map((g) => g.room));
   const previous = s.rex.estimates;
+  const barksBefore = s.stats.barks;
   const next: Record<RoomId, number> = {};
 
   for (const room of w.sc.rooms) {
@@ -774,6 +851,11 @@ function updateRex(s: GameState, w: World): void {
     }
   }
   s.rex.estimates = next;
+  // His very first bark of the night: someone tells the room who Rex is.
+  if (barksBefore === 0 && s.stats.barks > 0) {
+    const guard = s.guards.find((g) => g.id === 'sam') ?? s.guards[0];
+    if (guard) say(s, guard, "Rex is our AI sniffer dog. He's usually right… usually.", null, 'Note: the AI copilot is usually right… usually. Analysts make the call.');
+  }
 }
 
 /** How far back Rex looks for clues (game ms). */
@@ -812,8 +894,8 @@ function expireBarks(s: GameState): void {
 }
 
 /** The gang is stopped when every group is trapped behind locked doors. Escaping (master keys) undoes it. */
-function updateContainment(s: GameState): void {
-  for (const g of s.groups) if (s.rooms[g.room].locked) recordOf(s, g).stoppedMs ??= s.timeMs;
+function updateContainment(s: GameState, w: World): void {
+  for (const g of s.groups) if (s.rooms[g.room].locked) markStopped(s, w, g);
   if (!s.brokenIn || s.groups.length === 0) return;
   const trapped = s.groups.every((g) => s.rooms[g.room].locked);
   if (!trapped) s.stats.containedMs = null;
@@ -922,7 +1004,9 @@ function resolveCatch(s: GameState, w: World, won: boolean): void {
 
   if (won) {
     c.result = 'caught';
-    for (const g of inside) recordOf(s, g).stoppedMs ??= s.timeMs;
+    // The last group out ends the night: the end card says it all, no "Phew!" on top.
+    const last = s.groups.every((g) => g.room === c.room);
+    for (const g of inside) markStopped(s, w, g, !last);
     s.groups = s.groups.filter((g) => g.room !== c.room);
     s.stats.evicted += inside.length;
     fx(s, 'evicted', c.room);
@@ -1349,7 +1433,7 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
         : task.action === 'repair'
           ? inside.length === 0 && !(rs.dark && s.backupsLost)
           : true;
-  s.done.push({ guard: guard.id, action: task.action, room: task.room, atMs: s.timeMs, hit });
+  s.done.push({ guard: guard.id, action: task.action, room: task.room, atMs: s.timeMs, hit, ...(task.action === 'lock' ? { empty: inside.length === 0 && !task.hadGang } : {}) });
 
   switch (task.action) {
     case 'patrol':
@@ -1642,6 +1726,7 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
     hadGang: intent.action === 'lock' ? occupied(s, room.id) : undefined,
   };
   s.stats.dispatches++;
+  s.orders.push({ action: intent.action, room: room.id, atMs: s.timeMs });
 
   // Trust analysis: a patrol, lock or evict for a room Rex barked at, within the window, follows him (once per bark).
   if (intent.action === 'patrol' || intent.action === 'lock' || intent.action === 'evict') {

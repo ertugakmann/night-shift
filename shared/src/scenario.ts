@@ -69,7 +69,8 @@ type Clock = string;
 export interface Scenario {
   id: string;
   seed: number;
-  night: { start: Clock; end: Clock; realSecondsPerGameHour: number };
+  /** `finaleSec`: the last real seconds of the night, when the gang makes its dash for the Vault (about the clock, not the balance: not scaled). */
+  night: { start: Clock; end: Clock; realSecondsPerGameHour: number; finaleSec: number };
   /** Shift-start intro, played on every page at once before the clock starts. */
   intro: { durationSec: number; radioCheck: { atSec: number; guard: string; text: string }[] };
   intruders: {
@@ -167,6 +168,8 @@ export interface World {
   ms: {
     gameHour: number;
     night: number;
+    /** The last seconds of the night: the dash for the Vault. */
+    finale: number;
     intro: number;
     breakIn: number;
     spreadTick: number;
@@ -235,6 +238,7 @@ function buildWorld(sc: Scenario): World {
     ms: {
       gameHour: hour * 1000,
       night: at(sc.night.end) - at(sc.night.start),
+      finale: sc.night.finaleSec * 1000,
       intro: sc.intro.durationSec * 1000,
       breakIn: at(sc.intruders.breakInAt),
       spreadTick: sc.intruders.spreadTickSec * 1000,

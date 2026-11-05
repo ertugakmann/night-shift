@@ -8,6 +8,7 @@ import {
   msToClock,
   world,
   padlocks,
+  finaleActive,
   type ActionKind,
   type GameState,
 } from './index';
@@ -1123,5 +1124,173 @@ describe('end of night summary', () => {
     s = act(s, 'unlock', 'entrance-hall', 'tom');
     s = runUntil(s, (x) => !x.rooms['entrance-hall'].locked);
     expect(s.stats.containedMs).toBeNull();
+  });
+});
+
+describe('Rex introduces himself (the AI, up front)', () => {
+  it('after his very first bark, Sam tells everyone what Rex is: once a night', () => {
+    const night = idleNight();
+    const firstBark = night.log.find((l) => l.kind === 'rex')!;
+    const intro = night.log.filter((l) => l.text.startsWith('Rex is our AI sniffer dog'));
+    expect(intro).toHaveLength(1);
+    expect(intro[0].speaker).toBe('Sam');
+    expect(intro[0].text).toBe("Rex is our AI sniffer dog. He's usually right… usually.");
+    expect(intro[0].atMs).toBe(firstBark.atMs);
+    expect(intro[0].id).toBeGreaterThan(firstBark.id);
+    expect(intro[0].real).toMatch(/AI copilot/);
+  });
+});
+
+/** A night where the gang (and anyone a letter lets in) is quietly taken away, up to `ms`: a test bench for late moments. */
+function quietUntil(ms: number): GameState {
+  return runUntil(started(), (x) => {
+    if (x.brokenIn) x.groups = [];
+    return x.timeMs >= ms;
+  });
+}
+
+/** Test setup: the gang stays where it is for a few seconds (no spread tick), so a guard can reach it. */
+function holdStill(s: GameState): GameState {
+  const copy: GameState = JSON.parse(JSON.stringify(s));
+  copy.nextSpreadMs = copy.timeMs + 6000;
+  return copy;
+}
+
+describe('the final dash (last 30 seconds)', () => {
+  const finaleFrom = w.ms.night - w.ms.finale;
+
+  it('is 30 real seconds, starting at 04:48 on the night clock', () => {
+    expect(w.ms.finale).toBe(30_000);
+    expect(msToClock(finaleFrom, HOUR)).toBe('04:48');
+  });
+
+  it('sends every free group straight for the Vault, and says so once', () => {
+    let s = quietUntil(finaleFrom - 2000);
+    s = placeGang(s, 'west-corridor');
+    expect(finaleActive(s)).toBe(false);
+    s = runUntil(s, (x) => x.timeMs >= finaleFrom + 100);
+    expect(finaleActive(s)).toBe(true);
+    expect(s.log.filter((l) => l.text === 'The gang makes a last dash for the Vault!')).toHaveLength(1);
+    // Every spread tick from now on: one door closer to the Vault (west corridor → east corridor → emergency → vault).
+    const path: string[] = [s.groups[0].room];
+    s = runUntil(s, (x) => x.groups[0].room === 'vault' || x.phase !== 'running');
+    for (const id of s.groups[0].visited) if (!path.includes(id)) path.push(id);
+    expect(s.groups[0].room).toBe('vault');
+    expect(path.slice(-3)).toEqual(['east-corridor', 'emergency', 'vault']);
+  });
+
+  it('a lock still holds: a shut-in group stays put, and the screens do not blush', () => {
+    let s = quietUntil(finaleFrom - 4000);
+    s = placeGang(s, 'lab');
+    s = act(s, 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked);
+    s = runUntil(s, () => false);
+    expect(s.outcome?.result).toBe('won');
+    expect(s.groups[0].room).toBe('lab');
+    expect(s.log.some((l) => l.text.startsWith('The gang makes a last dash'))).toBe(false);
+  });
+
+  it('never touches the idle night: still lost at 03:48, Rex still wrong once at the Pharmacy', () => {
+    const night = idleNight();
+    expect(msToClock(night.outcome!.atMs, HOUR)).toBe('03:48');
+    expect(night.finaleStarted).toBe(false);
+    expect(night.log.filter((l) => l.kind === 'rex' && l.truth === false).map((l) => l.room)).toEqual(['pharmacy']);
+  });
+});
+
+describe('"Phew! That was close!" (stopped one room from the Vault)', () => {
+  it('locking a group in next to the Vault: Phew, and a moment of slow motion', () => {
+    let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
+    s = placeGang(s, 'archive');
+    s = act(s, 'lock', 'archive', 'priya');
+    s = runUntil(s, (x) => x.rooms.archive.locked);
+    expect(s.fx.some((f) => f.kind === 'phew' && f.room === 'archive')).toBe(true);
+    expect(s.log.at(-1)?.text === 'Phew! That was close!' || s.log.some((l) => l.text === 'Phew! That was close!')).toBe(true);
+    expect(s.slowMs).toBeGreaterThan(0);
+    // Slow motion: one real second moves the night on by only 0.3 s.
+    const before = s.timeMs;
+    s = advance(s, 1000);
+    expect(s.timeMs - before).toBeGreaterThanOrEqual(200);
+    expect(s.timeMs - before).toBeLessThanOrEqual(400);
+    // ...and then back to normal.
+    s = advance(s, 1000);
+    s = advance(s, 1000);
+    const later = s.timeMs;
+    s = advance(s, 1000);
+    expect(s.timeMs - later).toBe(1000);
+  });
+
+  it('throwing a group out next to the Vault counts too (while others still roam)', () => {
+    let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
+    s = placeGang(s, 'emergency');
+    s.groups.push({ id: 98, room: 'mail-room', enteredMs: s.timeMs, spotted: false, visited: ['mail-room'] });
+    s = act(s, 'lock', 'emergency', 'priya');
+    s = runUntil(s, (x) => x.rooms.emergency.locked);
+    const phews = s.fx.filter((f) => f.kind === 'phew').length;
+    expect(phews).toBe(1);
+    // Already stopped by the lock: the catch that follows is no second "Phew!".
+    s = runUntil(s, (x) => x.slowMs === 0);
+    s = evictAndCatch(s, 'emergency', 'priya');
+    expect(s.catch?.result).toBe('caught');
+    expect(s.fx.filter((f) => f.kind === 'phew').length).toBe(1);
+  });
+
+  it('a catch next to the Vault that stops a group nobody had shut in: Phew', () => {
+    let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
+    s = placeGang(s, 'archive');
+    s.groups.push({ id: 98, room: 'mail-room', enteredMs: s.timeMs, spotted: false, visited: ['mail-room'] });
+    s = evictAndCatch(holdStill(s), 'archive', 'priya');
+    expect(s.catch?.result).toBe('caught');
+    expect(s.fx.some((f) => f.kind === 'phew' && f.room === 'archive')).toBe(true);
+  });
+
+  it('no Phew when that catch ends the night (the end card says it all), nor far from the Vault', () => {
+    let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
+    s = placeGang(s, 'archive');
+    s = evictAndCatch(holdStill(s), 'archive', 'priya');
+    expect(s.outcome?.result).toBe('won');
+    expect(s.fx.some((f) => f.kind === 'phew')).toBe(false);
+
+    let t = runUntil(started(), (x) => x.timeMs >= at('02:00'));
+    t = placeGang(t, 'lab');
+    t = act(t, 'lock', 'lab', 'sam');
+    t = runUntil(t, (x) => x.rooms.lab.locked);
+    expect(t.fx.some((f) => f.kind === 'phew')).toBe(false);
+    expect(t.slowMs).toBe(0);
+  });
+
+  it('a reset ends the slow motion', () => {
+    let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
+    s = placeGang(s, 'archive');
+    s = act(s, 'lock', 'archive', 'priya');
+    s = runUntil(s, (x) => x.rooms.archive.locked);
+    expect(s.slowMs).toBeGreaterThan(0);
+    s = applyIntent(s, { type: 'reset' }).state;
+    expect(s.slowMs).toBe(0);
+    expect(s.orders).toEqual([]);
+    expect(s.finaleStarted).toBe(false);
+  });
+});
+
+describe('what the morning report learns from (orders, empty locks)', () => {
+  it('every order is kept with the moment it was given', () => {
+    let s = runUntil(started(), (x) => x.timeMs >= at('00:30'));
+    const t = s.timeMs;
+    s = act(s, 'patrol', 'lab', 'sam');
+    s = act(s, 'lock', 'pharmacy', 'priya');
+    expect(s.orders).toEqual([
+      { action: 'patrol', room: 'lab', atMs: t },
+      { action: 'lock', room: 'pharmacy', atMs: t },
+    ]);
+  });
+
+  it('a lock on an empty room is marked as such, a lock on the gang is not', () => {
+    let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
+    s = placeGang(s, 'lab');
+    s = act(s, 'lock', 'lab', 'sam');
+    s = act(s, 'lock', 'radiology', 'priya');
+    s = runUntil(s, (x) => x.rooms.lab.locked && x.rooms.radiology.locked);
+    expect(s.done.find((d) => d.room === 'lab')?.empty).toBe(false);
+    expect(s.done.find((d) => d.room === 'radiology')?.empty).toBe(true);
   });
 });
