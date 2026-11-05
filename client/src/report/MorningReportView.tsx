@@ -59,36 +59,43 @@ function Caret() {
   return <span className="caret ml-[0.05em] inline-block h-[0.95em] w-[0.08em] translate-y-[0.12em] bg-current" />;
 }
 
+/** "Written by AI · Claude Haiku 5.5", only when Claude really wrote it. A template report carries no tag. */
 function SourceTag({ report, reality }: { report: MorningReport; reality: boolean }) {
-  const ai = report.source === 'ai';
-  const label = ai ? `Written by AI · ${report.model === 'claude-haiku-5-5' ? 'Claude Haiku 5.5' : report.model}` : 'Template report · no AI';
+  if (report.source !== 'ai') return null;
+  const label = `Written by AI · ${report.model === 'claude-haiku-5-5' ? 'Claude Haiku 5.5' : report.model}`;
   return (
     <span
       className={`inline-flex items-center gap-[0.5em] rounded-full px-[0.8em] py-[0.25em] font-semibold ${
-        reality ? (ai ? 'bg-[#3ee0d8]/15 text-[#3ee0d8] ring-1 ring-[#3ee0d8]/50' : 'bg-white/10 text-[#8494ad] ring-1 ring-white/20') : ai ? 'bg-[#9c86f5]/20 text-[#5b4ba8]' : 'bg-[#c9b8a0]/40 text-[#7a6a50]'
+        reality ? 'bg-[#3ee0d8]/15 text-[#3ee0d8] ring-1 ring-[#3ee0d8]/50' : 'bg-[#9c86f5]/20 text-[#5b4ba8]'
       }`}
       style={{ fontSize: 'max(12px, 1.7cqh)' }}
     >
-      {ai ? '✦' : '✎'} {label}
+      ✦ {label}
     </span>
   );
 }
 
-/** The head guard's note: cream paper, a strip of tape, a signature. */
+const TIPS_HEADING = 'Tips for tomorrow night';
+const LESSONS_HEADING = 'Lessons learned';
+
+/** The head guard's note: cream paper, a strip of tape, tips for tomorrow, a signature. */
 function MuseumNote({ report, live }: { report: MorningReport; live: boolean }) {
-  const parts = [report.museum.title, ...report.museum.paragraphs, '— Chief'];
+  const tips = report.lessons?.museum ?? [];
+  const parts = [report.museum.title, ...report.museum.paragraphs, ...(tips.length ? [TIPS_HEADING, ...tips] : []), '— Chief'];
   const total = parts.reduce((n, p) => n + p.length, 0);
   const shown = reveal(parts, useTyped(report, live, total));
   const [title, ...rest] = shown;
   const sign = rest.pop()!;
+  const paragraphs = rest.slice(0, report.museum.paragraphs.length);
+  const [tipsHeading, ...tipLines] = rest.slice(report.museum.paragraphs.length);
   return (
-    <div className="game-text relative h-full w-full rotate-[-0.8deg] rounded-[1.2cqh] bg-[#fff6e3] px-[5%] py-[4%] text-[#3a2a5c] shadow-[0_1.2cqh_3cqh_rgba(0,0,0,0.45)]">
+    <div className="game-text relative h-full w-full rotate-[-0.8deg] rounded-[1.2cqh] bg-[#fff6e3] px-[5%] py-[3.4%] text-[#3a2a5c] shadow-[0_1.2cqh_3cqh_rgba(0,0,0,0.45)]">
       {/* ruled lines and a strip of tape */}
       <div className="pointer-events-none absolute inset-y-0 left-[3.2%] w-[2px] bg-[#ff9fb0]/50" />
       <div className="absolute -top-[2.2cqh] left-1/2 h-[4.4cqh] w-[18%] -translate-x-1/2 rotate-[2deg] bg-[#f3e3c3]/90 shadow-sm" />
       <div className="relative flex h-full flex-col">
         <div className="flex items-baseline justify-between gap-[2cqw]">
-          <h2 className="font-bold leading-tight" style={{ fontSize: 'max(22px, 5.6cqh)' }}>
+          <h2 className="font-bold leading-tight" style={{ fontSize: 'max(22px, 5.2cqh)' }}>
             {title.text}
             {title.caret && <Caret />}
           </h2>
@@ -96,17 +103,37 @@ function MuseumNote({ report, live }: { report: MorningReport; live: boolean }) 
             Morning note
           </span>
         </div>
-        <div className="mt-[2.5cqh] flex flex-col gap-[1.8cqh]" style={{ fontSize: 'max(16px, 3.4cqh)', lineHeight: 1.38 }}>
-          {rest.map((p, i) => (
+        <div className="mt-[1.8cqh] flex flex-col gap-[1.3cqh]" style={{ fontSize: 'max(16px, 3cqh)', lineHeight: 1.34 }}>
+          {paragraphs.map((p, i) => (
             <p key={i} className={p.text ? '' : 'invisible'}>
               {p.text || '.'}
               {p.caret && <Caret />}
             </p>
           ))}
         </div>
-        <div className="mt-auto flex items-end justify-between">
+        {tipsHeading && (
+          // A sticky note pinned under the letter: advice about tonight's own decisions.
+          <div className={`mt-[1.8cqh] rounded-[1cqh] bg-[#fff0b3] px-[2.4%] py-[1.2cqh] shadow-[0_0.4cqh_1cqh_rgba(90,60,20,0.18)] ${tipsHeading.text ? '' : 'invisible'}`}>
+            <h3 className="font-bold text-[#9a6a10]" style={{ fontSize: 'max(15px, 2.6cqh)' }}>
+              ★ {tipsHeading.text}
+              {tipsHeading.caret && <Caret />}
+            </h3>
+            <ul className="mt-[0.6cqh] flex flex-col gap-[0.5cqh]" style={{ fontSize: 'max(15px, 2.7cqh)', lineHeight: 1.3 }}>
+              {tipLines.map((l, i) => (
+                <li key={i} className={`flex gap-[0.5em] ${l.text ? '' : 'invisible'}`}>
+                  <span className="text-[#e0a02a]">›</span>
+                  <span>
+                    {l.text || '.'}
+                    {l.caret && <Caret />}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="mt-auto flex items-end justify-between pt-[1cqh]">
           <SourceTag report={report} reality={false} />
-          <span className="font-bold text-[#5b4ba8]" style={{ fontSize: 'max(18px, 3.6cqh)' }}>
+          <span className="ml-auto font-bold text-[#5b4ba8]" style={{ fontSize: 'max(18px, 3.6cqh)' }}>
             {sign.text}
             {sign.caret && <Caret />}
           </span>
@@ -116,17 +143,19 @@ function MuseumNote({ report, live }: { report: MorningReport; live: boolean }) 
   );
 }
 
-/** The SOC shift handover: six sections in two columns. */
+/** The SOC shift handover: six sections in two columns, lessons learned across the bottom. */
 function SocHandover({ report, live, endedAt }: { report: MorningReport; live: boolean; endedAt: string }) {
   const sections = SOC_SECTIONS.map(([k, heading]) => ({ heading, lines: report.soc[k] }));
-  const parts = sections.flatMap((s) => [s.heading, ...s.lines]);
+  const lessons = report.lessons?.soc ?? [];
+  const parts = [...sections.flatMap((s) => [s.heading, ...s.lines]), ...(lessons.length ? [LESSONS_HEADING, ...lessons] : [])];
   const total = parts.reduce((n, p) => n + p.length, 0);
   const shown = reveal(parts, useTyped(report, live, total));
   let i = 0;
   const blocks = sections.map((s) => ({ heading: shown[i++], lines: s.lines.map(() => shown[i++]) }));
+  const learned = lessons.length ? { heading: shown[i++], lines: lessons.map(() => shown[i++]) } : null;
   return (
-    <div className="soc-text flex h-full w-full flex-col rounded-[1cqh] bg-[#0b1424] px-[3.5%] py-[3%] text-[#e6edf7] ring-2 ring-[#2f4a73]">
-      <div className="flex items-baseline justify-between gap-[2cqw] border-b border-[#24395c] pb-[1.6cqh]">
+    <div className="soc-text flex h-full w-full flex-col rounded-[1cqh] bg-[#0b1424] px-[3.5%] py-[2.6%] text-[#e6edf7] ring-2 ring-[#2f4a73]">
+      <div className="flex items-baseline justify-between gap-[2cqw] border-b border-[#24395c] pb-[1.4cqh]">
         <h2 className="font-bold tracking-wide" style={{ fontSize: 'max(18px, 3.6cqh)' }}>
           SOC shift handover
         </h2>
@@ -134,14 +163,14 @@ function SocHandover({ report, live, endedAt }: { report: MorningReport; live: b
           NIGHT SHIFT SOC · incident window 00:00–{endedAt}
         </span>
       </div>
-      <div className="mt-[2cqh] grid min-h-0 flex-1 overflow-hidden grid-cols-2 gap-x-[4%] gap-y-[2.2cqh]" style={{ gridAutoFlow: 'column', gridTemplateRows: 'repeat(3, auto)', alignContent: 'start' }}>
+      <div className="mt-[1.6cqh] grid min-h-0 flex-1 overflow-hidden grid-cols-2 gap-x-[4%] gap-y-[1.8cqh]" style={{ gridAutoFlow: 'column', gridTemplateRows: 'repeat(3, auto)', alignContent: 'start' }}>
         {blocks.map((b, n) => (
           <section key={n}>
             <h3 className="font-bold uppercase text-[#3ee0d8]" style={{ fontSize: 'max(12px, 2cqh)', letterSpacing: '0.12em' }}>
-              {b.heading.text || ' '}
+              {b.heading.text || ' '}
               {b.heading.caret && <Caret />}
             </h3>
-            <ul className="mt-[0.8cqh] flex flex-col gap-[0.6cqh]" style={{ fontSize: 'max(14px, 2.5cqh)', lineHeight: 1.32 }}>
+            <ul className="mt-[0.6cqh] flex flex-col gap-[0.5cqh]" style={{ fontSize: 'max(14px, 2.4cqh)', lineHeight: 1.3 }}>
               {b.lines.map((l, j) => (
                 <li key={j} className={`flex gap-[0.5em] ${l.text ? '' : 'invisible'}`}>
                   <span className="text-[#3ee0d8]">›</span>
@@ -155,9 +184,30 @@ function SocHandover({ report, live, endedAt }: { report: MorningReport; live: b
           </section>
         ))}
       </div>
-      <div className="mt-[1.4cqh]">
-        <SourceTag report={report} reality />
-      </div>
+      {learned && (
+        <section className={`mt-[1.2cqh] rounded-[0.8cqh] bg-[#c9a6ff]/10 px-[2%] py-[1cqh] ring-1 ring-[#c9a6ff]/40 ${learned.heading.text ? '' : 'invisible'}`}>
+          <h3 className="font-bold uppercase text-[#c9a6ff]" style={{ fontSize: 'max(12px, 2cqh)', letterSpacing: '0.12em' }}>
+            {learned.heading.text || ' '}
+            {learned.heading.caret && <Caret />}
+          </h3>
+          <ul className="mt-[0.5cqh] flex flex-col gap-[0.4cqh]" style={{ fontSize: 'max(14px, 2.4cqh)', lineHeight: 1.3 }}>
+            {learned.lines.map((l, j) => (
+              <li key={j} className={`flex gap-[0.5em] ${l.text ? '' : 'invisible'}`}>
+                <span className="text-[#c9a6ff]">›</span>
+                <span>
+                  {l.text || '.'}
+                  {l.caret && <Caret />}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {report.source === 'ai' && (
+        <div className="mt-[1.2cqh]">
+          <SourceTag report={report} reality />
+        </div>
+      )}
     </div>
   );
 }

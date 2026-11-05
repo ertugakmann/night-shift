@@ -2,7 +2,7 @@
 // them. The server asks Claude for a nicer version of the same report; the template is the fallback, so
 // the demo never depends on the API. Pure TypeScript, no I/O.
 import { ACTION_REAL, type ActionKind, type GameState, type Outcome } from './engine';
-import { BENCHMARKS, IMPACT_LABELS, IMPACT_TYPES, msToClock, theRoom, world, type ImpactType } from './scenario';
+import { BENCHMARKS, IMPACT_LABELS, IMPACT_TYPES, WING_NAMES, msToClock, theRoom, world, type ImpactType } from './scenario';
 
 /** The six sections of the SOC shift handover, in order. */
 export const SOC_SECTIONS = [
@@ -26,6 +26,14 @@ export interface MorningReport {
   museum: { title: string; paragraphs: string[] };
   /** The SOC shift handover (reality view): a few short lines per section. */
   soc: Record<SocSection, string[]>;
+  /** 2–3 pieces of advice about tonight's decisions: "Tips for tomorrow night" / "Lessons learned". */
+  lessons: { museum: string[]; soc: string[] };
+}
+
+/** One piece of advice from the night's decisions, in both voices. */
+export interface Lesson {
+  game: string;
+  soc: string;
 }
 
 export function reportKey(outcome: Outcome): string {
@@ -84,6 +92,8 @@ export interface NightFacts {
   };
   /** The key moments, in both voices. */
   timeline: { at: string; game: string; soc: string }[];
+  /** What the player's decisions teach, most important first (the template uses the first 3). */
+  lessons: Lesson[];
 }
 
 function span(state: GameState, ms: number | null): string | null {
@@ -165,8 +175,126 @@ export function nightFacts(state: GameState): NightFacts {
       fakeDomains: [...new Set(w.sc.phishing.letters.filter((l) => l.phishing).map((l) => l.address.split('@')[1]))],
     },
     timeline: timeline.slice(-40),
+    lessons: lessonsFrom(state),
   };
 }
+
+// ---------- Lessons ----------
+
+const DID: Partial<Record<ActionKind, string>> = { patrol: 'checked', lock: 'locked', evict: 'cleared out' };
+
+/**
+ * Advice about the player's own decisions, read from the event log: how fast Rex's right barks were
+ * acted on, the bark that sent a guard for nothing, letters let in, groups found but never trapped,
+ * locks on empty rooms, missing candlelight. Most important first; always at least two.
+ */
+export function lessonsFrom(state: GameState): Lesson[] {
+  const w = world(state.scenarioId);
+  const clock = (ms: number) => msToClock(ms, w.sc.night.realSecondsPerGameHour);
+  const sec = (ms: number) => Math.max(1, Math.round(ms / 1000));
+  /** "1 second", "20 seconds". */
+  const secs = (ms: number) => (sec(ms) === 1 ? '1 second' : `${sec(ms)} seconds`);
+  const windowSec = w.sc.rex.followWindowSec;
+  const found: { weight: number; lesson: Lesson }[] = [];
+  const add = (weight: number, game: string, soc: string) => found.push({ weight, lesson: { game, soc } });
+  const decisive = (a: ActionKind) => a === 'patrol' || a === 'lock' || a === 'evict';
+  const answerTo = (room: string, atMs: number) => state.orders.find((o) => decisive(o.action) && o.room === room && o.atMs >= atMs);
+  const barks = state.log.filter((e) => e.kind === 'rex' && e.room !== null);
+
+  // Rex was right: how long until someone acted on it (the first right bark per room).
+  const seenRooms = new Set<string>();
+  let slowDone = false;
+  let fastDone = false;
+  for (const b of barks) {
+    if (!b.truth || seenRooms.has(b.room!)) continue;
+    seenRooms.add(b.room!);
+    const room = w.room.get(b.room!)!;
+    const answer = answerTo(room.id, b.atMs);
+    if (answer && answer.atMs - b.atMs <= w.ms.followWindow) {
+      if (!fastDone) {
+        fastDone = true;
+        const d = sec(answer.atMs - b.atMs);
+        add(3, `You ${DID[answer.action]} ${theRoom(room.name)} ${secs(answer.atMs - b.atMs)} after Rex barked. Trusting him paid off.`, `${ACTION_REAL[answer.action]} on ${room.real} ${d} s after a true AI alert: keep that pace.`);
+      }
+      continue;
+    }
+    if (slowDone) continue;
+    slowDone = true;
+    if (answer) {
+      const d = sec(answer.atMs - b.atMs);
+      add(10, `You ${DID[answer.action]} ${theRoom(room.name)} ${secs(answer.atMs - b.atMs)} after Rex's first warning. Next time, act on Rex sooner.`, `${ACTION_REAL[answer.action]} on ${room.real} came ${d} s after a true AI alert. Aim for under ${windowSec} s.`);
+    } else {
+      add(9, `Rex was right about ${theRoom(room.name)} at ${clock(b.atMs)}, but nobody went. Next time, send a guard when he barks.`, `True AI alert on ${room.real} at ${clock(b.atMs)} was never actioned. Triage AI alerts within ${windowSec} s.`);
+    }
+  }
+
+  // Rex was wrong, and was followed.
+  const fooled = barks.find((b) => {
+    if (b.truth !== false) return false;
+    const answer = answerTo(b.room!, b.atMs);
+    return !!answer && answer.atMs - b.atMs <= w.ms.followWindow;
+  });
+  if (fooled) {
+    const room = w.room.get(fooled.room!)!;
+    add(6, `Rex sent you to ${theRoom(room.name)} for nothing at ${clock(fooled.atMs)}. When only a camera glitches, wait for a second clue.`, `False positive on ${room.real} at ${clock(fooled.atMs)} cost an analyst. Corroborate AI alerts with a second source.`);
+  }
+
+  // The post.
+  const letters = state.stats.letters;
+  const domains = [...new Set(w.sc.phishing.letters.filter((l) => l.phishing).map((l) => l.address.split('@')[1]))];
+  if (letters.wrong > 0) {
+    add(8, `A fake letter from ${list(domains)} got through. Check the sender's address before you say Safe.`, `Phishing from ${list(domains)} was released. Check sender domain, SPF and Reply-To first.`);
+  } else if (letters.missed > 0) {
+    add(7, "Nurse Ada's letter waited too long. Look at the sender and the link, then decide fast.", `A reported email got no verdict. Phishing triage needs an answer within ${w.sc.phishing.decideSec} s.`);
+  }
+
+  // Found, but never trapped.
+  const escaped = state.groupLog.filter((r) => r.spottedMs !== null && r.stoppedMs === null).length;
+  if (escaped > 0) {
+    add(7, `You found the gang but they slipped away${escaped > 1 ? ` ${escaped} times` : ''}. Keep a second guard ready to lock as soon as a patrol spots them.`, `${escaped} detected threat${escaped > 1 ? 's' : ''} never contained. Pair every detection with immediate isolation.`);
+  }
+
+  // Detection.
+  const first = state.groupLog[0];
+  if (first && state.groupLog.every((r) => r.spottedMs === null)) {
+    add(6, "Nobody ever saw the gang. Send a patrol to the Mail Room early: that's where they get in.", 'Initial access was never detected. Hunt at the entry point (email) first.');
+  } else if (first && first.spottedMs !== null && first.spottedMs - first.appearedMs > 30_000) {
+    const d = sec(first.spottedMs - first.appearedMs);
+    add(5, `The gang was inside for ${secs(first.spottedMs - first.appearedMs)} before anyone saw them. Patrol the Mail Room early.`, `First foothold undetected for ${d} s. Hunt at the entry point early.`);
+  }
+
+  if (state.stats.keysStolen && !state.stats.keysChanged) {
+    add(5, 'The gang kept the master keys. Type the new code fast when the Key Room falls.', 'Stolen admin credentials stayed valid. Rehearse the emergency password reset.');
+  }
+
+  // A lock on an empty room.
+  const emptyLock = state.done.find((d) => d.action === 'lock' && d.empty);
+  if (emptyLock) {
+    const room = w.room.get(emptyLock.room)!;
+    add(4, `You locked ${theRoom(room.name)} with nobody inside, so its exhibits closed for nothing. Patrol first, then lock.`, `${room.real} isolated with no infection present. Confirm first: isolation costs care.`);
+  }
+
+  // A critical department closed, and no candles in its wing.
+  const unlit = w.sc.rooms.find((r) => r.complaint && (state.rooms[r.id].locked || state.rooms[r.id].dark) && !state.candlelight[r.wing]);
+  if (unlit) {
+    add(4, `${theRoom(unlit.name).replace(/^the/, 'The')} stayed closed without candles. Light them in the ${WING_NAMES[unlit.wing].name} to keep care going.`, `No downtime procedures for ${unlit.real} while it was offline. Invoke them early.`);
+  }
+
+  // Always something to take away.
+  if (state.outcome?.result === 'lost') {
+    add(1, 'Keep a padlock spare for the Archive and the Emergency Hall: the last doors before the Vault.', 'Keep isolation capacity in reserve for the segments next to the patient records.');
+  } else {
+    add(1, 'Patrol, then lock straight away: it worked tonight. Do it again tomorrow.', 'Detect, then isolate at once: the playbook worked. Keep it.');
+  }
+  add(0, 'When Rex barks, look at his clues: a staff report beats a camera glitch.', 'Weigh AI alerts by their evidence: a staff report is stronger than a single EDR alert.');
+
+  return found
+    .map((f, i) => ({ ...f, i }))
+    .sort((a, b) => b.weight - a.weight || a.i - b.i)
+    .map((f) => f.lesson)
+    .slice(0, 5);
+}
+
 
 // ---------- Template ----------
 
@@ -320,5 +448,6 @@ export function templateReport(state: GameState): MorningReport {
     model: null,
     museum: museumTemplate(f),
     soc: socTemplate(f),
+    lessons: { museum: f.lessons.slice(0, 3).map((l) => l.game), soc: f.lessons.slice(0, 3).map((l) => l.soc) },
   };
 }

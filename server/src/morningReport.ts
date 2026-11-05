@@ -21,6 +21,7 @@ const ReportSchema = z.object({
     aiCopilotPerformance: Lines,
     nextSteps: Lines,
   }),
+  lessons: z.object({ museum: Lines, soc: Lines }),
 });
 
 const SYSTEM = `You write the end-of-shift report for NIGHT SHIFT, a game about a hospital security operations centre (SOC), told as a museum at night.
@@ -28,9 +29,11 @@ The metaphor: galleries are hospital departments, exhibits are clinical systems,
 
 Write two versions of the same night, from the facts given. Use only the facts: never invent events, numbers, systems or names.
 
-1. museum: the head guard's morning note to the team. Warm, short and lightly funny, never scary. Cover how the night went, which galleries were hit, what Sam, Priya and Tom did, and how Rex behaved (use the trust numbers, e.g. "we followed Rex 3 times, he was wrong once"), and the letters staff asked about in the post (phishing: how many were called right, and any extra intruders a bad call let in). Mention the real patient impact plainly. A short title (under 6 words) and 3 or 4 short paragraphs, each under 45 words. Gallery names, not hospital names.
+1. museum: the head guard's morning note to the team. Warm, short and lightly funny, never scary. Cover how the night went, which galleries were hit, what Sam, Priya and Tom did, and how Rex behaved (use the trust numbers, e.g. "we followed Rex 3 times, he was wrong once"), and the letters staff asked about in the post (phishing: how many were called right, and any extra intruders a bad call let in). Mention the real patient impact plainly. A short title (under 6 words) and exactly 3 short paragraphs, each under 45 words (the advice goes in lessons, not here). Gallery names, not hospital names.
 
-2. soc: a professional SOC shift handover for the next shift, using hospital department and system names. Short, factual lines, 1 to 3 per section, each under 18 words: incidentSummary (attack, MTTD and MTTR, which are averages over the groups the gang split into, with how many were detected and contained, and the outcome), affectedSystems, actionsTaken (who did what, when, plus the phishing triage result: correct calls and any payloads executed), patientImpact (with care continuity against the benchmarks), aiCopilotPerformance (alerts, false positives, followed and ignored), nextSteps (concrete, most urgent first; if a phishing email was opened, block its sender domain).`;
+2. soc: a professional SOC shift handover for the next shift, using hospital department and system names. Short, factual lines, 1 to 3 per section, each under 18 words: incidentSummary (attack, MTTD and MTTR, which are averages over the groups the gang split into, with how many were detected and contained, and the outcome), affectedSystems, actionsTaken (who did what, when, plus the phishing triage result: correct calls and any payloads executed), patientImpact (with care continuity against the benchmarks), aiCopilotPerformance (alerts, false positives, followed and ignored), nextSteps (concrete, most urgent first; if a phishing email was opened, block its sender domain).
+
+3. lessons: 2 or 3 pieces of advice for this player about their own decisions tonight, most important first, in both voices. museum: second person, friendly, naming Rex, the guards or the galleries, e.g. "You locked the Lab Gallery 40 seconds after Rex's first warning. Next time, act on Rex sooner." soc: the same advice as a SOC lesson learned, with department names. Build them from facts.lessons (observations about the player's decisions, most important first) and keep their exact numbers and times. Each under 24 words.`;
 
 /** Short enough to fit the screen, whatever comes back. */
 function clip(text: string, max: number): string {
@@ -40,8 +43,9 @@ function clip(text: string, max: number): string {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max * 0.6))}…`;
 }
 
-function tidy(raw: z.infer<typeof ReportSchema>, key: string): MorningReport | null {
-  const paragraphs = raw.museum.paragraphs.map((p) => clip(p, 300)).filter(Boolean).slice(0, 4);
+function tidy(raw: z.infer<typeof ReportSchema>, key: string, fallback: MorningReport['lessons']): MorningReport | null {
+  // Three paragraphs, so the note still fits the screen with the tips under it.
+  const paragraphs = raw.museum.paragraphs.map((p) => clip(p, 280)).filter(Boolean).slice(0, 3);
   // Each section gets about five lines on screen: up to 3 lines of 110 characters, 260 in all.
   const fit = (lines: string[]) => {
     let used = 0;
@@ -53,7 +57,13 @@ function tidy(raw: z.infer<typeof ReportSchema>, key: string): MorningReport | n
   };
   const soc = Object.fromEntries(SOC_SECTIONS.map(([k]) => [k, fit(raw.soc[k])])) as MorningReport['soc'];
   if (paragraphs.length < 2 || SOC_SECTIONS.some(([k]) => soc[k].length === 0)) return null;
-  return { key, source: 'ai', model: REPORT_MODEL, museum: { title: clip(raw.museum.title, 48), paragraphs }, soc };
+  // Advice: 2 or 3 short lines. If Claude gave fewer than two, the ones read from the event log fill in.
+  const advice = (lines: string[], spare: string[]) => {
+    const own = lines.map((l) => clip(l, 150)).filter(Boolean).slice(0, 3);
+    return own.length >= 2 ? own : [...own, ...spare.filter((l) => !own.includes(l))].slice(0, 2);
+  };
+  const lessons = { museum: advice(raw.lessons.museum, fallback.museum), soc: advice(raw.lessons.soc, fallback.soc) };
+  return { key, source: 'ai', model: REPORT_MODEL, museum: { title: clip(raw.museum.title, 48), paragraphs }, soc, lessons };
 }
 
 let client: Anthropic | null | undefined;
@@ -87,7 +97,7 @@ async function askClaude(state: GameState, key: string): Promise<MorningReport> 
     );
     if (response.stop_reason === 'refusal') throw new Error('refused');
     if (!response.parsed_output) throw new Error(`no report in the answer (${response.stop_reason})`);
-    const report = tidy(response.parsed_output, key);
+    const report = tidy(response.parsed_output, key, templateReport(state).lessons);
     if (!report) throw new Error('report incomplete');
     return report;
   } finally {
