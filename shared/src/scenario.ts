@@ -48,6 +48,21 @@ export interface Room {
   exhibits: Exhibit[];
 }
 
+/** A letter (an email, in the reality view): real, or phishing with the classic tells. */
+export interface PhishingLetter {
+  at: string;
+  phishing: boolean;
+  from: string;
+  address: string;
+  replyTo: string;
+  subject: string;
+  body: string;
+  linkText: string | null;
+  link: string | null;
+  /** Sender check (SPF), shown in the email's headers. */
+  spf: 'pass' | 'fail';
+}
+
 /** Game clock time, "HH:MM". */
 type Clock = string;
 
@@ -106,6 +121,13 @@ export interface Scenario {
   impactPerGameHour: Record<ImpactType, number>;
   /** A lost night: a major incident, and at least this many ambulances diverted. */
   majorIncidentAmbulances: number;
+  /** "Safe or phishing?": letters that drop into the Mail Room during the night. */
+  phishing: {
+    decideSec: number;
+    /** Who asks on the radio. */
+    asker: string;
+    letters: PhishingLetter[];
+  };
   clues: {
     cctvChancePerTick: number;
     falseCctv: { at: Clock; room: RoomId }[];
@@ -155,6 +177,7 @@ export interface World {
     catchPenalty: number;
     wires: number;
     keys: number;
+    letter: number;
     followWindow: number;
     vandalise: number;
     vaultLose: number;
@@ -222,6 +245,7 @@ function buildWorld(sc: Scenario): World {
       catchPenalty: sc.actions.catchPenaltySec * 1000,
       wires: sc.actions.wiresSec * 1000,
       keys: sc.actions.keysSec * 1000,
+      letter: sc.phishing.decideSec * 1000,
       followWindow: sc.rex.followWindowSec * 1000,
       vandalise: sc.intruders.vandaliseAfterSec * 1000,
       vaultLose: sc.intruders.vaultLoseAfterSec * 1000,

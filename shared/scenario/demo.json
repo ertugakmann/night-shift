@@ -368,6 +368,37 @@
 
   "majorIncidentAmbulances": 2,
 
+  "phishing": {
+    "decideSec": 6,
+    "asker": "Nurse Ada, Ward 4",
+    "letters": [
+      {
+        "at": "01:00",
+        "phishing": true,
+        "from": "IT Support",
+        "address": "it-support@nhs-secure-login.co",
+        "replyTo": "verify@nhs-secure-login.co",
+        "subject": "URGENT: your account will be locked",
+        "body": "We detected unusual activity. Your account will be locked in 1 hour unless you confirm your password now.",
+        "linkText": "Confirm my password",
+        "link": "http://nhs-secure-login.co/verify?id=88213",
+        "spf": "fail"
+      },
+      {
+        "at": "02:30",
+        "phishing": false,
+        "from": "Grace, Pharmacy",
+        "address": "grace.okoye@stmarys.nhs.uk",
+        "replyTo": "grace.okoye@stmarys.nhs.uk",
+        "subject": "Morning delivery at 06:30",
+        "body": "The morning stock delivery arrives at 06:30 at the loading bay. Nothing to do tonight. Thanks!",
+        "linkText": null,
+        "link": null,
+        "spf": "pass"
+      }
+    ]
+  },
+
   "clues": {
     "cctvChancePerTick": 0.5,
     "falseCctv": [

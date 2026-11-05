@@ -55,6 +55,8 @@ export interface Group {
   /** Seen by a patrol: flees at the next spread tick unless the room is locked. */
   spotted: boolean;
   visited: RoomId[];
+  /** Let in by a phishing letter: decides with its own random stream, so the original gang's route never changes. */
+  stream?: 'phish';
 }
 
 export interface Task {
@@ -206,6 +208,22 @@ export interface Wires {
   resultAtMs: number | null;
 }
 
+/** "Safe or phishing?": a letter in the Mail Room; answer before the time runs out. */
+export interface LetterGame {
+  id: number;
+  /** Which letter of the scenario. */
+  index: number;
+  phishing: boolean;
+  startedMs: number;
+  endsMs: number;
+  answer: 'safe' | 'phishing' | null;
+  /** right: well spotted. wrong: a bad call. missed: no answer in time. */
+  result: 'right' | 'wrong' | 'missed' | null;
+  /** A bad call or no answer: where a new group got in (null if the doors held). */
+  breach: RoomId | null;
+  resultAtMs: number | null;
+}
+
 /** "Change the locks": the gang took the master keys; type the code in time to take the advantage away. */
 export interface KeysGame {
   id: number;
@@ -251,6 +269,8 @@ export interface GameState {
   rng: number;
   /** A separate random stream for the guards' idle strolls, so they never change the gang's route. */
   wanderRng: number;
+  /** And one for the groups that phishing lets in. */
+  phishRng: number;
   reality: boolean;
   debug: boolean;
 
@@ -302,6 +322,8 @@ export interface GameState {
     /** The master keys were stolen tonight, and whether the locks were changed in time. */
     keysStolen: boolean;
     keysChanged: boolean;
+    /** Phishing letters: called right, called wrong, left unanswered. */
+    letters: { right: number; wrong: number; missed: number };
     /** Game time the gang broke in, was first spotted, and was last fully stopped (null while any group roams free). */
     brokenInMs: number | null;
     firstSpottedMs: number | null;
@@ -327,6 +349,10 @@ export interface GameState {
   keys: KeysGame | null;
   /** The Key Room fell while another mini game was on: change the locks as soon as it ends. */
   keysPending: boolean;
+  /** "Safe or phishing?" in progress or just finished. */
+  letter: LetterGame | null;
+  /** Letters that have arrived and wait their turn (scenario indexes). */
+  lettersDue: number[];
   nextCatchId: number;
 }
 
@@ -344,6 +370,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     accMs: 0,
     rng: sc.seed >>> 0,
     wanderRng: (sc.seed * 7919 + 13) >>> 0,
+    phishRng: (sc.seed * 104729 + 7) >>> 0,
     reality: false,
     debug: false,
     rooms: perRoom(() => ({ locked: false, dark: false, occupiedMs: 0, litBy: null, complained: false })),
@@ -375,6 +402,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
       rexIgnoredRight: 0,
       keysStolen: false,
       keysChanged: false,
+      letters: { right: 0, wrong: 0, missed: 0 },
       brokenInMs: null,
       firstSpottedMs: null,
       containedMs: null,
@@ -391,6 +419,8 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     wires: null,
     keys: null,
     keysPending: false,
+    letter: null,
+    lettersDue: [],
     nextCatchId: 1,
   };
 }
@@ -498,6 +528,9 @@ function tick(s: GameState, w: World): void {
   for (const f of sc.clues.falseCctv) {
     if (reached(clockToMs(f.at, hour))) cctv(s, w, f.room, false);
   }
+  sc.phishing.letters.forEach((l, i) => {
+    if (reached(clockToMs(l.at, hour))) s.lettersDue.push(i);
+  });
 
   updateGuards(s, w);
   wander(s, w);
@@ -505,13 +538,17 @@ function tick(s: GameState, w: World): void {
   updateCatch(s, w);
   updateWires(s, w);
   updateKeys(s, w);
+  updateLetter(s, w);
   updateRooms(s, w);
   if (s.phase !== 'running') return;
 
   if (s.brokenIn && now >= s.nextSpreadMs) {
     spread(s, w);
     for (const room of sc.rooms) {
-      if (occupied(s, room.id) && rand(s) < sc.clues.cctvChancePerTick) cctv(s, w, room.id, true);
+      const gang = s.groups.some((g) => g.room === room.id && !g.stream);
+      const phished = !gang && s.groups.some((g) => g.room === room.id);
+      if (gang && rand(s) < sc.clues.cctvChancePerTick) cctv(s, w, room.id, true);
+      else if (phished && phishRand(s) < sc.clues.cctvChancePerTick) cctv(s, w, room.id, true);
     }
     updateRex(s, w);
     s.nextSpreadMs += s.masterKeys ? ms.masterKeysTick : ms.spreadTick;
@@ -529,9 +566,9 @@ function tick(s: GameState, w: World): void {
 
 // ---------- Intruders ----------
 
-function addGroup(s: GameState, room: RoomId, visited: RoomId[]): void {
+function addGroup(s: GameState, room: RoomId, visited: RoomId[], stream?: 'phish'): void {
   const id = s.nextGroupId++;
-  s.groups.push({ id, room, enteredMs: s.timeMs, spotted: false, visited });
+  s.groups.push(stream ? { id, room, enteredMs: s.timeMs, spotted: false, visited, stream } : { id, room, enteredMs: s.timeMs, spotted: false, visited });
   s.groupLog.push({ id, appearedMs: s.timeMs, spottedMs: null, stoppedMs: null });
 }
 
@@ -578,12 +615,14 @@ function spread(s: GameState, w: World): void {
     }
     if (g.room === w.vault) continue;
     if (s.timeMs - g.enteredMs < w.ms.minStay) continue;
-    if (rand(s) >= intruders.moveChance) continue;
+    const r = () => groupRand(s, g);
+    if (r() >= intruders.moveChance) continue;
     const dest = pickDestination(s, w, g, false);
     if (!dest) continue;
-    if (s.groups.length < intruders.maxGroups && rand(s) < intruders.splitChance) {
+    const kin = s.groups.filter((x) => x.stream === g.stream).length;
+    if (kin < intruders.maxGroups && r() < intruders.splitChance) {
       // Split: part of the gang moves on, the rest stays behind and keeps the room dark.
-      addGroup(s, dest, [...g.visited, dest]);
+      addGroup(s, dest, [...g.visited, dest], g.stream);
       g.enteredMs = s.timeMs;
     } else {
       moveGroup(s, g, dest);
@@ -614,7 +653,7 @@ function pickDestination(s: GameState, w: World, g: Group, fleeing: boolean): Ro
   }
   if (options.length === 0) return null;
 
-  let r = rand(s) * options.reduce((sum, o) => sum + o.weight, 0);
+  let r = groupRand(s, g) * options.reduce((sum, o) => sum + o.weight, 0);
   let choice = options[options.length - 1];
   for (const o of options) {
     r -= o.weight;
@@ -738,7 +777,7 @@ function updateRex(s: GameState, w: World): void {
 }
 
 /** How far back Rex looks for clues (game ms). */
-const EVIDENCE_MS = 20_000;
+const EVIDENCE_MS = 30_000;
 
 /** The clues Rex goes on for a room: recent staff reports and camera glitches there, in both voices. */
 function evidence(s: GameState, w: World, roomId: RoomId): { game: string; real: string } {
@@ -972,11 +1011,92 @@ function wander(s: GameState, w: World): void {
   }
 }
 
+/** The random stream a group decides with: the gang's own, or the phishing groups'. */
+function groupRand(s: GameState, g: Group): number {
+  return g.stream === 'phish' ? phishRand(s) : rand(s);
+}
+
+function phishRand(s: GameState): number {
+  let t = (s.phishRng = (s.phishRng + 0x6d2b79f5) | 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+// ---------- Safe or phishing? (letters in the Mail Room) ----------
+
+function updateLetter(s: GameState, w: World): void {
+  const l = s.letter;
+  if (l) {
+    if (l.result === null && s.timeMs >= l.endsMs) resolveLetter(s, w, null);
+    else if (l.result !== null && s.timeMs >= (l.resultAtMs ?? 0) + CATCH_RESULT_MS) s.letter = null;
+  }
+  if (s.lettersDue.length > 0 && !miniGameBusy(s) && s.phase === 'running') {
+    const index = s.lettersDue.shift()!;
+    const letter = w.sc.phishing.letters[index];
+    s.letter = {
+      id: s.nextCatchId++,
+      index,
+      phishing: letter.phishing,
+      startedMs: s.timeMs,
+      endsMs: s.timeMs + w.ms.letter,
+      answer: null,
+      result: null,
+      breach: null,
+      resultAtMs: null,
+    };
+    log(s, { kind: 'staff', speaker: w.sc.phishing.asker, text: 'Chief, is this letter safe to open?', real: 'Chief, is this email safe to open?', room: w.sc.intruders.entryRoom });
+  }
+}
+
+function answerLetter(state: GameState, answer: 'safe' | 'phishing'): ApplyResult {
+  const l = state.letter;
+  if (state.phase === 'paused') return { state, error: 'Paused. Press Space to continue.' };
+  if (state.phase !== 'running' || !l || l.result !== null) return { state, error: 'No letter to check.' };
+  const s = clone(state);
+  resolveLetter(s, world(s.scenarioId), answer);
+  return { state: s };
+}
+
+function resolveLetter(s: GameState, w: World, answer: 'safe' | 'phishing' | null): void {
+  const l = s.letter!;
+  const letter = w.sc.phishing.letters[l.index];
+  l.answer = answer;
+  l.resultAtMs = s.timeMs;
+  const right = answer !== null && (answer === 'phishing') === l.phishing;
+  l.result = answer === null ? 'missed' : right ? 'right' : 'wrong';
+  s.stats.letters[l.result]++;
+  if (right) {
+    log(s, l.phishing
+      ? { kind: 'event', text: 'Good catch! The fake letter goes straight in the bin.', real: `Phishing email from ${letter.address} reported and quarantined.` }
+      : { kind: 'event', text: `A real letter from ${letter.from}. Safe to open.`, real: `Legitimate email from ${letter.address} released.` });
+    return;
+  }
+  // A bad call (or none): the letter lets the gang in, through any door that is not locked.
+  const front = w.sc.intruders.frontDoor.room;
+  const entry = !s.rooms[w.sc.intruders.entryRoom].locked ? w.sc.intruders.entryRoom : !s.rooms[front].locked ? front : null;
+  l.breach = entry;
+  const why =
+    answer === null
+      ? 'Nobody checked the post, and someone opened a bad letter.'
+      : l.phishing
+        ? 'That letter was a fake, and someone opened it!'
+        : 'The real letter went in the bin, and the fake follow-up got opened instead.';
+  if (entry) {
+    addGroup(s, entry, [entry], 'phish');
+    s.brokenIn = true;
+    const room = w.room.get(entry)!;
+    log(s, { kind: 'event', room: entry, text: `${why} A new intruder slipped in through ${theRoom(room.name)}.`, real: `Phishing payload executed: new ransomware foothold on ${room.real}.` });
+  } else {
+    log(s, { kind: 'event', text: `${why} But the locked doors kept them out.`, real: 'Phishing payload blocked: entry points isolated.' });
+  }
+}
+
 // ---------- Mini games: one at a time ----------
 
 /** A mini game is on (or its result is still showing). */
 export function miniGameBusy(s: GameState): boolean {
-  return s.catch !== null || s.wires !== null || s.keys !== null;
+  return s.catch !== null || s.wires !== null || s.keys !== null || s.letter !== null;
 }
 
 // ---------- Reconnect the exhibit (Repair) ----------
@@ -1299,6 +1419,8 @@ function end(s: GameState, result: Outcome['result'], reason: string, real: stri
   s.wires = null;
   s.keys = null;
   s.keysPending = false;
+  s.letter = null;
+  s.lettersDue = [];
   if (s.groups.length === 0 && s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
   s.outcome = { result, reason, real, atMs: s.timeMs, summary: summarise(s, result) };
   for (const rs of Object.values(s.rooms)) rs.litBy = null;
@@ -1327,11 +1449,11 @@ function summarise(s: GameState, result: Outcome['result']): NightSummary {
 
 // ---------- Intents ----------
 
-export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch', 'wire', 'code', 'aim'] as const;
+export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch', 'wire', 'code', 'aim', 'letter'] as const;
 export type IntentType = (typeof INTENT_TYPES)[number];
 
 export type Intent =
-  | { type: Exclude<IntentType, 'action' | 'catch' | 'wire' | 'code' | 'aim'> }
+  | { type: Exclude<IntentType, 'action' | 'catch' | 'wire' | 'code' | 'aim' | 'letter'> }
   | { type: 'action'; action: ActionKind; room: RoomId; guard?: string }
   /** A click on someone in the "Catch the intruders" scene. */
   | { type: 'catch'; figure: number }
@@ -1340,7 +1462,9 @@ export type Intent =
   /** One character typed in "Change the locks". */
   | { type: 'code'; char: string }
   /** Where the flashlight points in "Catch the intruders" (scene units). */
-  | { type: 'aim'; x: number; y: number };
+  | { type: 'aim'; x: number; y: number }
+  /** The answer to "is this letter safe to open?". */
+  | { type: 'letter'; answer: 'safe' | 'phishing' };
 
 /** Only the presenter page can start (or skip the intro), reset or hand over control. */
 export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode'];
@@ -1353,6 +1477,7 @@ export function isIntent(value: unknown): value is Intent {
   if (v.type === 'wire') return Number.isInteger(v.from) && Number.isInteger(v.to);
   if (v.type === 'code') return typeof v.char === 'string' && v.char.length === 1;
   if (v.type === 'aim') return Number.isFinite(v.x) && Number.isFinite(v.y);
+  if (v.type === 'letter') return v.answer === 'safe' || v.answer === 'phishing';
   if (v.type !== 'action') return true;
   return (
     ACTIONS.includes(v.action as ActionKind) &&
@@ -1372,6 +1497,8 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
       return joinWire(state, intent.from, intent.to);
     case 'code':
       return typeCode(state, intent.char);
+    case 'letter':
+      return answerLetter(state, intent.answer);
     case 'aim': {
       const c = state.catch;
       if (state.phase !== 'running' || !c || c.result !== null) return { state };

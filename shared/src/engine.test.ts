@@ -419,7 +419,7 @@ describe('Catch the intruders (Evict)', () => {
     s = runUntil(s, (x) => x.catch?.result !== null);
     expect(s.catch!.result).toBe('escaped');
     expect(s.catch!.to).toBe('west-corridor');
-    expect(s.groups.map((g) => g.room)).toEqual(['west-corridor']);
+    expect(s.groups.filter((g) => !g.stream).map((g) => g.room)).toEqual(['west-corridor']); // (phishing letters may let others in)
   });
 
   it('time runs out in an open room with every way out blocked: they stay put', () => {
@@ -757,6 +757,98 @@ describe('feedback on the floor', () => {
   });
 });
 
+describe('Safe or phishing? (letters in the Mail Room)', () => {
+  /** Run until a letter is on the desk, waiting for its question. */
+  const nextLetter = (s: GameState) => runUntil(s, (x) => x.letter !== null && x.letter.result === null);
+
+  it('two letters arrive in the demo night: the first a fake, the second real; a nurse asks on the radio', () => {
+    let s = nextLetter(started());
+    expect(s.letter!.phishing).toBe(true);
+    expect(s.letter!.endsMs - s.letter!.startedMs).toBe(6000);
+    expect(s.log.find((e) => e.text === 'Chief, is this letter safe to open?')).toMatchObject({ kind: 'staff', speaker: 'Nurse Ada, Ward 4', text: 'Chief, is this letter safe to open?', real: 'Chief, is this email safe to open?' });
+    s = applyIntent(s, { type: 'letter', answer: 'phishing' }).state;
+    s = runFor(s, 2000);
+    s = nextLetter(s);
+    expect(s.letter!.phishing).toBe(false);
+    const fake = w.sc.phishing.letters[0];
+    expect(fake.address).toBe('it-support@nhs-secure-login.co');
+    expect(fake.body).toMatch(/locked in 1 hour/);
+    expect(fake.link).toMatch(/nhs-secure-login/);
+  });
+
+  it('calling the fake "Phishing" and the real one "Safe": no new intruders, two right calls', () => {
+    let s = nextLetter(started());
+    const groups = () => s.groupLog.length;
+    s = applyIntent(s, { type: 'letter', answer: 'phishing' }).state;
+    expect(s.letter!.result).toBe('right');
+    const before = groups();
+    s = nextLetter(runFor(s, 2000));
+    s = applyIntent(s, { type: 'letter', answer: 'safe' }).state;
+    expect(s.letter!.result).toBe('right');
+    expect(groups()).toBe(before);
+    expect(s.stats.letters).toEqual({ right: 2, wrong: 0, missed: 0 });
+  });
+
+  it('a wrong call lets a new group in through the Mail Room', () => {
+    let s = nextLetter(started());
+    s = applyIntent(s, { type: 'letter', answer: 'safe' }).state;
+    expect(s.letter!.result).toBe('wrong');
+    expect(s.letter!.breach).toBe('mail-room');
+    const newcomer = s.groups.at(-1)!;
+    expect(newcomer.room).toBe('mail-room');
+    expect(newcomer.stream).toBe('phish');
+    expect(s.stats.letters.wrong).toBe(1);
+  });
+
+  it('no answer in time counts as missed, and lets them in too', () => {
+    let s = nextLetter(started());
+    s = runUntil(s, (x) => x.letter?.result !== null);
+    expect(s.letter!.result).toBe('missed');
+    expect(s.groups.some((g) => g.stream === 'phish')).toBe(true);
+  });
+
+  it('a lock is a lock: with the Mail Room locked they try the front door; with both locked, nobody gets in', () => {
+    let s = act(started(), 'lock', 'mail-room', 'sam');
+    s = nextLetter(s);
+    s = applyIntent(s, { type: 'letter', answer: 'safe' }).state;
+    expect(s.letter!.breach).toBe('entrance-hall');
+
+    let b = act(started(), 'lock', 'mail-room', 'sam');
+    b = act(b, 'lock', 'entrance-hall', 'tom');
+    b = nextLetter(b);
+    const before = b.groups.length;
+    b = applyIntent(b, { type: 'letter', answer: 'safe' }).state;
+    expect(b.letter!.breach).toBeNull();
+    expect(b.groups.length).toBe(before);
+  });
+
+  it('a letter waits while another mini game is on', () => {
+    let s = act(started(), 'lock', 'lab', 'sam');
+    s = runUntil(s, (x) => x.rooms.lab.locked && !x.guards.some((g) => g.task));
+    // start a repair just before the first letter is due
+    s = runUntil(s, (x) => x.timeMs >= clockToMs(w.sc.phishing.letters[0].at, HOUR) - 1500);
+    s = act(s, 'repair', 'lab', 'sam');
+    s = runUntil(s, (x) => x.wires !== null);
+    s = runUntil(s, (x) => x.lettersDue.length > 0);
+    expect(s.letter).toBeNull();
+    s = runUntil(s, (x) => x.letter !== null);
+    expect(s.wires).toBeNull();
+  });
+
+  it('an idle night: both letters missed, yet the original gang keeps its route and the loss stays at 03:48', () => {
+    const night = idleNight();
+    expect(night.stats.letters.missed).toBe(2);
+    expect(night.groupLog.length).toBeGreaterThan(3);
+    expect(msToClock(night.outcome!.atMs, HOUR)).toBe('03:48');
+  });
+
+  it('the answer intent is checked', () => {
+    expect(isIntent({ type: 'letter', answer: 'phishing' })).toBe(true);
+    expect(isIntent({ type: 'letter', answer: 'maybe' })).toBe(false);
+    expect(applyIntent(started(), { type: 'letter', answer: 'safe' }).error).toMatch(/No letter/);
+  });
+});
+
 describe('padlocks and the lock rule', () => {
   const afterBreakIn = () => runUntil(started(), (s) => s.brokenIn);
 
@@ -795,7 +887,7 @@ describe('padlocks and the lock rule', () => {
     s.rooms['west-corridor'].locked = true;
     s.groups[0].spotted = true; // even a spotted group, which always tries to flee
     s = runFor(s, 6 * w.ms.spreadTick);
-    expect(s.groups.map((g) => g.room)).toEqual(['west-corridor']);
+    expect(s.groups.filter((g) => !g.stream).map((g) => g.room)).toEqual(['west-corridor']); // (phishing letters may let others in)
   });
 
   it('nobody gets in: a locked room next to the gang is never entered', () => {
@@ -810,7 +902,7 @@ describe('padlocks and the lock rule', () => {
     s.rooms['key-room'].locked = true;
     s = runUntil(s, (x) => x.masterKeys);
     s = runFor(s, 10 * w.ms.masterKeysTick);
-    expect(s.groups.map((g) => g.room)).toEqual(['key-room']);
+    expect(s.groups.filter((g) => !g.stream).map((g) => g.room)).toEqual(['key-room']);
   });
 });
 
