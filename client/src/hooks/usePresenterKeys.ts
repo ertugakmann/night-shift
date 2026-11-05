@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { IntentType } from '@night-shift/shared';
 import { currentView, sendIntent } from '../net/game';
 
-const KEYS: Record<string, Exclude<IntentType, 'action' | 'catch' | 'wire' | 'code' | 'aim'>> = {
+const KEYS: Record<string, Exclude<IntentType, 'action' | 'catch' | 'wire' | 'code' | 'aim' | 'letter'>> = {
   s: 'start',
   ' ': 'togglePause',
   r: 'reset',

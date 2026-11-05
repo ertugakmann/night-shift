@@ -164,6 +164,35 @@ function RexIcon({ reality }: { reality: boolean }) {
   );
 }
 
+/** The letters of the night: how many were called right, and what the wrong ones cost. */
+function PhishingLine({ snapshot, t, reality, x }: { snapshot: Snapshot; t: Theme; reality: boolean; x: number }) {
+  const { right, wrong, missed } = snapshot.stats.letters;
+  const total = right + wrong + missed;
+  const main = total === 0 ? (reality ? 'No phishing reported' : 'No letters tonight') : reality ? `Phishing triage ${right}/${total}` : `Letters: ${right} of ${total} right`;
+  const bad = wrong + missed;
+  const detail =
+    total === 0
+      ? ''
+      : bad === 0
+        ? reality ? 'every email triaged correctly' : 'every letter called right'
+        : [wrong > 0 && (reality ? `${wrong} wrong call${wrong > 1 ? 's' : ''}` : `${wrong} wrong`), missed > 0 && (reality ? `${missed} not triaged` : `${missed} not checked`)].filter(Boolean).join(' · ');
+  return (
+    <g>
+      {/* an envelope */}
+      <g transform={`translate(${x + 30},${CARD_H - 62})`}>
+        <rect x={-26} y={-18} width={52} height={36} rx={reality ? 3 : 6} fill="none" stroke={bad > 0 ? '#f2994a' : t.accent} strokeWidth={4} />
+        <path d="M-26 -18 L0 4 L26 -18" fill="none" stroke={bad > 0 ? '#f2994a' : t.accent} strokeWidth={4} strokeLinejoin="round" />
+      </g>
+      <text x={x + 74} y={CARD_H - 64} fontSize={24} fontWeight={800} fill={t.text}>
+        {main}
+      </text>
+      <text x={x + 74} y={CARD_H - 38} fontSize={18} fill={bad > 0 ? '#f2994a' : t.sub}>
+        {detail}
+      </text>
+    </g>
+  );
+}
+
 function AnotherNight({ t }: { t: Theme }) {
   return (
     <g
@@ -271,6 +300,9 @@ export function ResultCard({ snapshot, outcome, reality }: { snapshot: Snapshot;
           </g>
         );
       })}
+
+      {/* safe or phishing? the letter calls */}
+      <PhishingLine snapshot={snapshot} t={t} reality={reality} x={right} />
 
       {/* footer */}
       {role === 'presenter' ? (

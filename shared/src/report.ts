@@ -71,6 +71,17 @@ export interface NightFacts {
     ignored: number;
     ignoredRight: number;
   };
+  /** "Safe or phishing?": the letters (emails) staff asked about, and what the calls cost. */
+  phishing: {
+    letters: number;
+    right: number;
+    wrong: number;
+    missed: number;
+    /** New intruder groups (ransomware footholds) let in by a bad call or no answer. */
+    breaches: number;
+    /** The sender domains of the fake letters. */
+    fakeDomains: string[];
+  };
   /** The key moments, in both voices. */
   timeline: { at: string; game: string; soc: string }[];
 }
@@ -147,6 +158,12 @@ export function nightFacts(state: GameState): NightFacts {
       ignored: state.stats.rexIgnored,
       ignoredRight: state.stats.rexIgnoredRight,
     },
+    phishing: {
+      letters: state.stats.letters.right + state.stats.letters.wrong + state.stats.letters.missed,
+      ...state.stats.letters,
+      breaches: state.log.filter((e) => e.kind === 'event' && e.real?.startsWith('Phishing payload executed')).length,
+      fakeDomains: [...new Set(w.sc.phishing.letters.filter((l) => l.phishing).map((l) => l.address.split('@')[1]))],
+    },
     timeline: timeline.slice(-40),
   };
 }
@@ -211,6 +228,16 @@ function rexLine(f: NightFacts): string {
   return `Rex barked ${times(barks)}: ${list(parts)}. ${verdict}`;
 }
 
+function postLine(f: NightFacts): string | null {
+  const p = f.phishing;
+  if (p.letters === 0) return null;
+  const bad = p.wrong + p.missed;
+  if (bad === 0) return `The post: ${p.letters === 1 ? 'one letter came' : `${p.letters} letters came`} and we called ${p.letters === 1 ? 'it' : 'every one'} right. Nobody fell for the fake one. Well spotted.`;
+  const how = [p.wrong > 0 && `${p.wrong} wrong call${p.wrong > 1 ? 's' : ''}`, p.missed > 0 && `${p.missed} nobody checked in time`].filter(Boolean).join(' and ');
+  const cost = p.breaches > 0 ? `, and that let ${p.breaches === 1 ? 'one more group' : `${p.breaches} more groups`} in through the post` : ', but the locked doors held';
+  return `The post: ${p.right} of ${p.letters} letters called right (${how})${cost}. Look at the sender before you open anything!`;
+}
+
 function museumTemplate(f: NightFacts): MorningReport['museum'] {
   const title = f.result === 'won' ? (f.ending === 'dawn' ? 'Morning, team!' : 'Early night, team!') : 'Rough night, team.';
   const opening =
@@ -226,7 +253,7 @@ function museumTemplate(f: NightFacts): MorningReport['museum'] {
   const patients = hurt.length > 0 ? ` Real patients felt it: ${list(hurt)}.` : ' And no patient had to wait.';
   return {
     title,
-    paragraphs: [opening, damage + patients, f.guards.map(guardLine).join(' '), rexLine(f)],
+    paragraphs: [opening, damage + patients, f.guards.map(guardLine).join(' '), [rexLine(f), postLine(f)].filter(Boolean).join(' ')],
   };
 }
 
@@ -248,7 +275,9 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
   if (f.stillLocked.length > 0) next.push(`Bring isolated services back once clean: ${some(f.stillLocked.map((r) => r.department), 2, 'more')}.`);
   if (f.masterKeysStolen) next.push(f.locksChanged ? 'Admin passwords were reset in the night: check for sessions opened before the reset.' : 'Reset all admin credentials and review privileged access.');
   if (f.rex.ignoredRight > 0) next.push('Review the AI copilot alerts that went unanswered.');
-  next.push('Remind staff about phishing: the attack started with an email.');
+  const p = f.phishing;
+  if (p.wrong + p.missed > 0) next.unshift(`Block ${list(p.fakeDomains)} and retrain staff on reporting phishing.`);
+  else next.push('Remind staff about phishing: the attack started with an email.');
 
   return {
     incidentSummary: [
@@ -262,10 +291,14 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
       outcome,
     ],
     affectedSystems: encrypted.length > 0 ? [`Encrypted: ${some(encrypted, 4, 'systems')}.`] : ['No systems encrypted.'],
-    actionsTaken:
-      actions.length > 0
-        ? actions.slice(0, 5).map((a) => `${a.at} ${a.actionReal}, ${a.department} (Analyst ${a.who}).`)
-        : ['No containment actions were taken.'],
+    actionsTaken: [
+      ...(actions.length > 0
+        ? actions.slice(0, p.letters > 0 ? 4 : 5).map((a) => `${a.at} ${a.actionReal}, ${a.department} (Analyst ${a.who}).`)
+        : ['No containment actions were taken.']),
+      ...(p.letters > 0
+        ? [`Phishing triage ${p.right}/${p.letters} correct${p.breaches > 0 ? `, ${p.breaches} payload${p.breaches > 1 ? 's' : ''} executed` : p.wrong + p.missed > 0 ? ', payloads blocked by isolation' : ''}.`]
+        : []),
+    ],
     patientImpact: [
       impact.length > 0 ? `${impact.join(', ')}.` : 'No patients affected.',
       `Care continuity ${f.careContinuity}% (average ${f.averageCare}%, best ${f.bestCare}%).`,

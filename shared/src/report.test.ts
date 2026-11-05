@@ -53,7 +53,7 @@ describe('morning report template', () => {
     expect(r.museum.paragraphs[0]).toMatch(/cracked the Vault at 03:48/);
     expect(r.soc.incidentSummary.join(' ')).toMatch(/Major incident declared at 03:48/);
     expect(r.soc.affectedSystems[0]).toMatch(/^Encrypted: /);
-    expect(r.soc.actionsTaken).toEqual(['No containment actions were taken.']);
+    expect(r.soc.actionsTaken).toEqual(['No containment actions were taken.', 'Phishing triage 0/2 correct, 2 payloads executed.']);
   });
 
   it('credits the guards and names what they did on a won night', () => {
@@ -84,4 +84,28 @@ describe('morning report template', () => {
   });
 
 
+});
+
+describe('phishing in the morning report', () => {
+  it('an idle night: both letters missed, the extra intruders, and blocking the fake domain', () => {
+    const f = nightFacts(idle);
+    expect(f.phishing).toMatchObject({ letters: 2, right: 0, wrong: 0, missed: 2, fakeDomains: ['nhs-secure-login.co'] });
+    expect(f.phishing.breaches).toBe(2);
+    const r = templateReport(idle);
+    expect(r.museum.paragraphs.join(' ')).toMatch(/0 of 2 letters called right \(2 nobody checked in time\), and that let 2 more groups in/);
+    expect(r.soc.actionsTaken.join(' ')).toMatch(/Phishing triage 0\/2 correct, 2 payloads executed\./);
+    expect(r.soc.nextSteps[0]).toBe('Block nhs-secure-login.co and retrain staff on reporting phishing.');
+  });
+
+  it('both letters called right: a well-spotted line and a clean triage', () => {
+    let s = runUntil(started(), (x) => x.letter !== null && x.letter.result === null);
+    s = applyIntent(s, { type: 'letter', answer: 'phishing' }).state;
+    s = runUntil(s, (x) => x.letter !== null && x.letter.result === null);
+    s = applyIntent(s, { type: 'letter', answer: 'safe' }).state;
+    s = runUntil(s, () => false);
+    const r = templateReport(s);
+    expect(nightFacts(s).phishing).toMatchObject({ right: 2, breaches: 0 });
+    expect(r.museum.paragraphs.join(' ')).toMatch(/we called every one right/);
+    expect(r.soc.actionsTaken.join(' ')).toMatch(/Phishing triage 2\/2 correct\./);
+  });
 });

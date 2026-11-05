@@ -8,6 +8,7 @@ import { useGame } from '../net/game';
 import { useRealityWave } from '../reality/useRealityWave';
 import { CatchGame } from './CatchGame';
 import { KeysGame } from './KeysGame';
+import { LetterGame } from './LetterGame';
 import { WiresGame } from './WiresGame';
 
 /** The mini game that is on (only one at a time), and a key that changes with each new one. */
@@ -15,6 +16,7 @@ function current(snapshot: Snapshot | null): { key: string; node: (reality: bool
   if (snapshot?.catch) return { key: `catch-${snapshot.catch.id}`, node: (r) => <CatchGame reality={r} /> };
   if (snapshot?.wires) return { key: `wires-${snapshot.wires.id}`, node: (r) => <WiresGame reality={r} /> };
   if (snapshot?.keys) return { key: `keys-${snapshot.keys.id}`, node: (r) => <KeysGame reality={r} /> };
+  if (snapshot?.letter) return { key: `letter-${snapshot.letter.id}`, node: (r) => <LetterGame reality={r} /> };
   return null;
 }
 
@@ -92,6 +94,15 @@ function badgeFor(snapshot: Snapshot, reality: boolean) {
     const good = k.result === 'changed';
     const total = k.code.replace('-', '').length;
     return { room, done: k.typed, total, endsMs: k.endsMs, limit: w.ms.keys, result: k.result, good, label: k.result ? (good ? (reality ? 'Revoked' : 'New locks!') : reality ? 'Missed' : 'Too slow!') : reality ? 'Password reset' : 'Change locks!' };
+  }
+  const l = snapshot.letter;
+  if (l) {
+    const good = l.result === 'right';
+    const fake = w.sc.phishing.letters[l.index].phishing;
+    const label = l.result
+      ? good ? (reality ? (fake ? 'Quarantined' : 'Released') : 'Good call!') : reality ? 'Breach' : 'Opened!'
+      : reality ? 'Email triage' : 'Safe?';
+    return { room: w.sc.intruders.entryRoom, done: l.answer ? 1 : 0, total: 1, endsMs: l.endsMs, limit: w.ms.letter, result: l.result, good, label };
   }
   return null;
 }
