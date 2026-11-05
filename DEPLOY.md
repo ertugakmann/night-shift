@@ -1,5 +1,7 @@
 # Deploying NIGHT SHIFT
 
+Demo day: see `DEMO.md` (waking Render, the room set-up, what to do when something breaks, the offline plan).
+
 ## Render (online)
 
 1. Push to GitHub.

@@ -1,6 +1,7 @@
 import { MotionConfig } from 'motion/react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { Hud } from './components/Hud';
+import { useDemoScreen } from './hooks/useDemoScreen';
 import { usePresenterKeys } from './hooks/usePresenterKeys';
 import { HomePage } from './pages/HomePage';
 import { PreviewPage } from './pages/PreviewPage';
@@ -9,6 +10,7 @@ import { WallPage } from './pages/WallPage';
 
 export function App() {
   usePresenterKeys();
+  useDemoScreen();
   return (
     <MotionConfig reducedMotion="user">
       <BrowserRouter>

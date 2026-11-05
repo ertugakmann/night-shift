@@ -125,12 +125,18 @@ function checkReport(): void {
   });
 }
 
+// A bug in one tick must never take the live demo down: log it, keep the last good state, carry on.
+let tickErrors = 0;
 let last = performance.now();
 setInterval(() => {
   const now = performance.now();
-  state = advance(state, now - last);
+  try {
+    state = advance(state, now - last);
+    checkReport();
+  } catch (err) {
+    if (tickErrors++ < 5) console.error('Tick failed, keeping the last good state:', err);
+  }
   last = now;
-  checkReport();
   broadcast();
 }, TICK_MS);
 
@@ -172,9 +178,14 @@ io.on('connection', (socket) => {
           : 'Control code hidden. Extra control revoked.',
       );
     } else {
-      const result = applyIntent(state, intent);
-      state = result.state;
-      if (result.error) socket.emit('notice', result.error);
+      try {
+        const result = applyIntent(state, intent);
+        state = result.state;
+        if (result.error) socket.emit('notice', result.error);
+      } catch (err) {
+        console.error(`Intent ${intent.type} failed, ignored:`, err);
+        socket.emit('notice', "That didn't work. Try again.");
+      }
     }
     checkReport();
     broadcast();

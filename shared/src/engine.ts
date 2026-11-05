@@ -1528,7 +1528,8 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
       return { state: { ...state, phase: state.phase === 'running' ? 'paused' : 'running' } };
     case 'reset': {
       const fresh = initialState(state.scenarioId);
-      return { state: { ...fresh, reality: state.reality, debug: state.debug } };
+      // A clean night: back to the museum view (the intro and power-on belong to it). Debug stays, for rehearsals.
+      return { state: { ...fresh, debug: state.debug } };
     }
     case 'toggleReality':
       return { state: { ...state, reality: !state.reality } };

@@ -151,6 +151,12 @@ export function currentView(): GameView {
 }
 
 export function sendIntent(intent: Intent): void {
+  // Never queue intents while the connection is down: socket.io would replay them all on reconnect
+  // (three R presses during a blip would reset three times later). Say so instead.
+  if (!socket.connected) {
+    if (intent.type !== 'aim') showNotice('Connection lost, reconnecting… Try again in a moment.');
+    return;
+  }
   socket.emit('intent', intent);
 }
 

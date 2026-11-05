@@ -198,3 +198,6 @@ body {
 .note-bob { animation: note-bob 1.6s ease-in-out infinite alternate; }
 @keyframes note-bob { from { transform: translateY(0); } to { transform: translateY(-6px); } }
 @media (prefers-reduced-motion: reduce) { .note-bob { animation: none !important; } }
+
+/* Demo screens: the cursor hides after a few idle seconds (useDemoScreen). */
+.cursor-idle, .cursor-idle * { cursor: none !important; }

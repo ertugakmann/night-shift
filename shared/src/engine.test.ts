@@ -849,6 +849,70 @@ describe('Safe or phishing? (letters in the Mail Room)', () => {
   });
 });
 
+describe('R resets cleanly at any moment (demo hardening)', () => {
+  const reset = (s: GameState) => {
+    const r = applyIntent(s, { type: 'reset' });
+    expect(r.error).toBeUndefined();
+    return r.state;
+  };
+  const clean = (s: GameState) => expect(reset(s)).toEqual(initialState());
+  const lightsOn = (s: GameState) => applyIntent(s, { type: 'toggleReality' }).state;
+
+  const moments: [string, () => GameState][] = [
+    ['before the start', () => initialState()],
+    ['during the intro', () => advance(applyIntent(initialState(), { type: 'start' }).state, 5000)],
+    ['mid-night', () => runFor(started(), 60_000)],
+    ['paused', () => applyIntent(runFor(started(), 30_000), { type: 'togglePause' }).state],
+    ['with a guard on the way', () => act(started(), 'patrol', 'vault', 'sam')],
+    ['during Catch the intruders', () => {
+      let s = spotted(placeGang(runFor(started(), 20_000), 'west-corridor'), 'west-corridor');
+      s = act(s, 'evict', 'west-corridor', 'sam');
+      s = runUntil(s, (x) => x.catch !== null);
+      expect(s.catch).not.toBeNull();
+      return s;
+    }],
+    ['during Reconnect the exhibit', () => {
+      let s = act(started(), 'lock', 'lab', 'sam');
+      s = runUntil(s, (x) => x.rooms.lab.locked && !x.guards.some((g) => g.task));
+      s = act(s, 'repair', 'lab', 'sam');
+      s = runUntil(s, (x) => x.wires !== null);
+      expect(s.wires).not.toBeNull();
+      return s;
+    }],
+    ['during Change the locks', () => {
+      const s = runUntil(started(), (x) => x.keys !== null);
+      expect(s.keys).not.toBeNull();
+      return s;
+    }],
+    ['during Safe or phishing', () => {
+      const s = runUntil(started(), (x) => x.letter !== null);
+      expect(s.letter).not.toBeNull();
+      return s;
+    }],
+    ['after a lost night', () => idleNight()],
+    ['after the night, with Lights on', () => lightsOn(idleNight())],
+    ['mid-night with Lights on', () => lightsOn(runFor(started(), 40_000))],
+  ];
+  for (const [name, make] of moments) it(`${name}: a fresh night, museum view`, () => clean(make()));
+
+  it('debug stays on through a reset (rehearsals), everything else is fresh', () => {
+    const s = applyIntent(runFor(started(), 30_000), { type: 'toggleDebug' }).state;
+    expect(reset(s)).toEqual({ ...initialState(), debug: true });
+  });
+
+  it('after a reset the night plays exactly the same again (lost at 03:48)', () => {
+    const again = runUntil(applyIntent(applyIntent(reset(lightsOn(runFor(started(), 70_000))), { type: 'start' }).state, { type: 'skipIntro' }).state, () => false);
+    expect(again).toEqual(idleNight());
+    expect(msToClock(again.outcome!.atMs, HOUR)).toBe('03:48');
+  });
+
+  it('pressing R twice, or S right after R, is harmless', () => {
+    const twice = reset(reset(runFor(started(), 50_000)));
+    expect(twice).toEqual(initialState());
+    expect(applyIntent(twice, { type: 'start' }).state.phase).toBe('intro');
+  });
+});
+
 describe('padlocks and the lock rule', () => {
   const afterBreakIn = () => runUntil(started(), (s) => s.brokenIn);
 
