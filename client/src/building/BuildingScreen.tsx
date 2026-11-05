@@ -326,7 +326,7 @@ function NameTag({ name, y }: { name: string; y: number }) {
 
 function GuardSprite({ snapshot, id, uid }: { snapshot: Snapshot; id: string; uid: string }) {
   const guard = snapshot.guards.find((g) => g.id === id)!;
-  const pose = guardPose(guard);
+  const pose = guardPose(guard, snapshot.timeMs);
   const last = useRef({ x: pose.x, facing: 1 as 1 | -1 });
   if (Math.abs(pose.x - last.current.x) > 0.5) last.current.facing = pose.x < last.current.x ? -1 : 1;
   last.current.x = pose.x;
@@ -336,11 +336,46 @@ function GuardSprite({ snapshot, id, uid }: { snapshot: Snapshot; id: string; ui
       <circle r={150} cy={-40} fill={`url(#${uid}-glow)`} className="flicker" />
       <g className={cheer ? 'cheer' : undefined} style={cheer ? { animationDelay: `${(id.length % 3) * -0.17}s` } : undefined}>
         <g transform={`scale(${GUARD_SCALE})`}>
-          <GuardArt id={id} raised={pose.raised || cheer} walking={pose.walking} facing={last.current.facing} />
+          {/* looking around: a slow turn this way and that */}
+          <g className={pose.act === 'look' && !cheer ? 'look-around' : undefined}>
+            <GuardArt id={id} raised={pose.raised || cheer} walking={pose.walking} facing={last.current.facing} />
+          </g>
+          {pose.act === 'biscuit' && !cheer && <Biscuit />}
+          {pose.act === 'yawn' && !cheer && <Yawn />}
         </g>
       </g>
       <NameTag name={guard.name} y={-170} />
     </motion.g>
+  );
+}
+
+/** Tom's biscuit, held up to his mouth, with a crumb or two. */
+function Biscuit() {
+  return (
+    <g pointerEvents="none">
+      <g className="munch">
+        <circle cx={-26} cy={-44} r={9} fill="#d9a066" stroke="#a8714a" strokeWidth={2} />
+        <circle cx={-29} cy={-46} r={1.6} fill="#5b3a24" />
+        <circle cx={-23} cy={-42} r={1.6} fill="#5b3a24" />
+      </g>
+      {[0, 1, 2].map((i) => (
+        <circle key={i} cx={-22 + i * 5} cy={-30} r={1.8} fill="#d9a066" className="crumb" style={{ animationDelay: `${i * 0.4}s` }} />
+      ))}
+    </g>
+  );
+}
+
+/** A big sleepy yawn. */
+function Yawn() {
+  return (
+    <g pointerEvents="none" className="note-float">
+      <text x={30} y={-104} className="game-text" fontSize={18} fontWeight={800} fill="#a99ce6">
+        z
+      </text>
+      <text x={42} y={-118} className="game-text" fontSize={14} fontWeight={800} fill="#a99ce6">
+        z
+      </text>
+    </g>
   );
 }
 

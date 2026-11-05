@@ -182,3 +182,19 @@ body {
 .shake { animation: shake 0.35s ease-in-out; transform-box: fill-box; transform-origin: center; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-12px); } 75% { transform: translateX(12px); } }
 @media (prefers-reduced-motion: reduce) { .shake { animation: none !important; } }
+
+/* Idle guards: looking around, munching, crumbs falling. */
+.look-around { animation: look-around 2.4s steps(1, end) infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes look-around { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(-1); } }
+.munch { animation: munch 0.5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+@keyframes munch { from { transform: translateY(0) rotate(-8deg); } to { transform: translateY(-3px) rotate(8deg); } }
+.crumb { animation: crumb 1.2s ease-in infinite; }
+@keyframes crumb { from { transform: translateY(0); opacity: 1; } to { transform: translateY(26px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .look-around, .munch, .crumb { animation: none !important; }
+}
+
+/* The first-night tip on the desk bobs gently. */
+.note-bob { animation: note-bob 1.6s ease-in-out infinite alternate; }
+@keyframes note-bob { from { transform: translateY(0); } to { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .note-bob { animation: none !important; } }

@@ -167,7 +167,7 @@ describe('Rex', () => {
   it('barks only above 50% confidence', () => {
     const barks = idleNight().log.filter((l) => l.kind === 'rex');
     expect(barks.length).toBeGreaterThan(5);
-    for (const b of barks) expect(Number(/\((\d+)%\)/.exec(b.text)![1])).toBeGreaterThan(50);
+    for (const b of barks) expect(Number(/(\d+)% sure/.exec(b.text)![1])).toBeGreaterThan(50);
   });
 
   it('a patrol sent soon after a bark follows him', () => {
@@ -645,6 +645,114 @@ describe('critical departments and candlelight', () => {
     const lit = runFor(c, 10_000);
     const litRate = lit.impact.tests - c.impact.tests;
     expect(darkRate / litRate).toBeCloseTo(4, 1);
+  });
+});
+
+describe('Rex explains himself', () => {
+  it('every bark says what it rests on, in both voices', () => {
+    const night = idleNight();
+    const barks = night.log.filter((l) => l.kind === 'rex');
+    for (const b of barks) {
+      expect(b.text).toMatch(/^WOOF! \d+% sure about .+: .+\.$/);
+      expect(b.real).toMatch(/\d+% confidence\. Evidence: .+\.$/);
+    }
+    // the clues are real ones from the log: a camera glitch or a staff report in that room
+    expect(barks.some((b) => /camera glitched there/.test(b.text) && /EDR alert/.test(b.real!))).toBe(true);
+  });
+
+  it('a staff report in the room is quoted as evidence', () => {
+    const night = idleNight();
+    const quoted = night.log.filter((l) => l.kind === 'rex' && / reported "/.test(l.text));
+    expect(quoted.length).toBeGreaterThan(0);
+    expect(quoted[0].real).toMatch(/staff report \(/);
+  });
+
+  it('when he is wrong, he leans on a camera that glitched for nothing', () => {
+    const night = idleNight();
+    const wrong = night.log.find((l) => l.kind === 'rex' && l.truth === false)!;
+    expect(wrong.text).toMatch(/camera glitched there just now/);
+    const glitch = night.log.find((l) => l.kind === 'cctv' && l.room === wrong.room && l.atMs === wrong.atMs);
+    expect(glitch?.truth).toBe(false);
+  });
+
+  it('the desk can show his latest reasoning', () => {
+    const s = runUntil(started(), (x) => x.rex.why !== null);
+    expect(s.rex.why!.text).toContain(`${s.rex.why!.confidence}% sure`);
+  });
+});
+
+describe('idle guards stroll around their wing', () => {
+  const night = (() => {
+    let s = started();
+    const seen: Record<string, Set<string>> = { sam: new Set(), priya: new Set(), tom: new Set() };
+    let biscuit = false;
+    let lit = false;
+    while (s.phase === 'running') {
+      s = advance(s, 100);
+      for (const g of s.guards) seen[g.id].add(g.room);
+      if (s.guards.some((g) => g.wander?.act === 'biscuit')) biscuit = true;
+      if (Object.values(s.rooms).some((r) => r.litBy)) lit = true;
+    }
+    return { s, seen, biscuit, lit };
+  })();
+
+  it('they move between rooms, but only in their own wing', () => {
+    expect(night.seen.sam.size).toBeGreaterThan(1);
+    expect(night.seen.priya.size).toBeGreaterThan(1);
+    expect(night.seen.tom.size).toBeGreaterThan(1);
+    for (const r of night.seen.sam) expect(w.room.get(r)!.wing).toBe('west');
+    for (const r of night.seen.priya) expect(w.room.get(r)!.wing).toBe('east');
+    for (const r of night.seen.tom) expect(w.room.get(r)!.wing).toBe('lobby');
+  });
+
+  it('Tom has a biscuit now and then', () => {
+    expect(night.biscuit).toBe(true);
+  });
+
+  it('strolling never lights a room or finds the gang, and the night keeps its route', () => {
+    expect(night.lit).toBe(false);
+    expect(night.s.stats.spotted).toBe(0);
+    expect(msToClock(night.s.outcome!.atMs, HOUR)).toBe('03:48');
+  });
+
+  it('an order sends them off from where the stroll has got to', () => {
+    let s = runUntil(started(), (x) => x.guards.find((g) => g.id === 'tom')!.room !== 'entrance-hall');
+    const tom = s.guards.find((g) => g.id === 'tom')!;
+    s = act(s, 'patrol', 'key-room', 'tom');
+    const task = s.guards.find((g) => g.id === 'tom')!.task!;
+    expect(task.path[0]).toBe(tom.wander?.phase === 'walk' && s.timeMs - tom.wander.startMs > (tom.wander.untilMs - tom.wander.startMs) / 2 ? tom.wander.to : tom.room);
+    expect(s.guards.find((g) => g.id === 'tom')!.wander).toBeNull();
+  });
+});
+
+describe('feedback on the floor', () => {
+  it('a guard arriving leaves an effect for the screens', () => {
+    let s = act(started(), 'patrol', 'lab', 'sam');
+    s = runUntil(s, (x) => x.guards.find((g) => g.id === 'sam')!.task?.arrived === true);
+    expect(s.fx.some((e) => e.kind === 'arrived' && e.room === 'lab')).toBe(true);
+  });
+
+  it('a lock that lands after the gang has left: "Too late, they\'ve already moved on."', () => {
+    // a spotted group in the open West Corridor flees at the next tick; Priya is far away
+    let s = placeGang(runUntil(started(), (x) => x.brokenIn), 'west-corridor');
+    s.groups[0].spotted = true;
+    s.nextSpreadMs = s.timeMs + 1000; // they flee within a second, before the lock can land
+    s.guards.find((g) => g.id === 'priya')!.room = 'radiology';
+    s.guards.find((g) => g.id === 'sam')!.room = 'pharmacy';
+    s = act(s, 'lock', 'west-corridor', 'priya');
+    s = runUntil(s, (x) => x.rooms['west-corridor'].locked);
+    expect(s.groups.some((g) => g.room === 'west-corridor')).toBe(false);
+    const line = s.log.filter((l) => l.speaker === 'Priya').at(-1)!;
+    expect(line.text).toBe("Too late, they've already moved on.");
+    expect(line.real).toMatch(/Isolation too late/);
+    expect(s.fx.some((e) => e.kind === 'late')).toBe(true);
+  });
+
+  it('a lock in time says so as usual', () => {
+    let s = runUntil(started(), (x) => x.groups.length > 1);
+    s = act(s, 'lock', 'mail-room', 'sam');
+    s = runUntil(s, (x) => x.rooms['mail-room'].locked);
+    expect(s.log.filter((l) => l.speaker === 'Sam').at(-1)!.text).not.toMatch(/Too late/);
   });
 });
 

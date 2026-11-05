@@ -130,7 +130,7 @@ export function Room({ room, snapshot, uid, selected, onSelect, dawnDelay = 0 }:
   // At dawn the name turns to its daylight colours once the light has reached the label (west side).
   const labelDelay = dawn && !lantern ? dawnDelay + 1.6 : 0;
   // Daylight comes in from the east wall; a lantern lights from the guard.
-  const center = lighter ? guardPose(lighter) : dawn ? { x: rect.x + rect.w, y: rect.y + rect.h / 2 } : layout.anchor;
+  const center = lighter ? guardPose(lighter, snapshot.timeMs) : dawn ? { x: rect.x + rect.w, y: rect.y + rect.h / 2 } : layout.anchor;
   // The mask gradient is solid to 72% of the radius, so this lights the whole room with a soft edge.
   const radius = farthestCorner(center.x, center.y, rect) / 0.72 + 40;
   const status: 'ok' | 'closed' | 'broken' = rs.dark ? 'broken' : rs.locked ? 'closed' : 'ok';

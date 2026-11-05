@@ -39,16 +39,24 @@ export interface GuardPose extends Pt {
   walking: boolean;
   /** Lantern raised: patrolling inside the target room. */
   raised: boolean;
+  /** Idle: what they are doing while they pause on a stroll. */
+  act: 'look' | 'yawn' | 'biscuit' | null;
 }
 
-export function guardPose(guard: Guard): GuardPose {
+/** Where a guard is drawn. `timeMs` (the game clock) places an idle guard along a stroll. */
+export function guardPose(guard: Guard, timeMs?: number): GuardPose {
   const offset = GUARD_OFFSET[guard.id] ?? { x: 0, y: 0 };
   const task = guard.task;
+  const wander = guard.wander;
+  if (!task && wander?.phase === 'walk' && timeMs !== undefined) {
+    const t = (timeMs - wander.startMs) / Math.max(1, wander.untilMs - wander.startMs);
+    return { ...along(routePoints([wander.from, wander.to], offset), t), walking: true, raised: false, act: null };
+  }
   if (!task || task.arrived || task.walkMs === 0) {
     const room = task ? task.room : guard.room;
     const a = ROOMS[room].anchor;
-    return { x: a.x + offset.x, y: a.y + offset.y, walking: false, raised: !!task && task.action === 'patrol' };
+    return { x: a.x + offset.x, y: a.y + offset.y, walking: false, raised: !!task && task.action === 'patrol', act: !task && wander?.phase === 'pause' ? wander.act : null };
   }
   const p = along(routePoints(task.path, offset), task.elapsedMs / task.walkMs);
-  return { ...p, walking: true, raised: false };
+  return { ...p, walking: true, raised: false, act: null };
 }

@@ -11,6 +11,8 @@ import { worldOf } from '../game/view';
 import { selectRoom, useGame } from '../net/game';
 import { DangerGlow } from '../building/VaultExtras';
 import { BuildingEnd } from '../end/EndMoment';
+import { Effects } from '../building/Effects';
+import { DangerMeter, dangerLevel } from '../game/danger';
 import { CatchBadge } from '../catch/CatchViews';
 import { RealityStrip, type StripMode } from './RealityStrip';
 import { RealityVaultPanel } from './RealityVaultPanel';
@@ -104,9 +106,19 @@ function SystemCard({
   );
 }
 
-function Analyst({ x, y, name, initial }: { x: number; y: number; name: string; initial: string }) {
+const IDLE_REAL = { look: 'monitoring', yawn: 'idle', biscuit: 'coffee break' } as const;
+
+function Analyst({ x, y, name, initial, act }: { x: number; y: number; name: string; initial: string; act: keyof typeof IDLE_REAL | null }) {
   return (
     <motion.g initial={false} animate={{ x, y: y - 46 }} transition={{ duration: 0.12, ease: 'linear' }}>
+      {act && (
+        <g>
+          <rect x={-58} y={34} width={116} height={24} rx={12} fill="#0d1729" stroke="#2f4a73" strokeWidth={2} />
+          <text y={51} textAnchor="middle" fontSize={14} fill="#8494ad">
+            {IDLE_REAL[act]}
+          </text>
+        </g>
+      )}
       <circle r={28} fill="#16243d" stroke={C.ok} strokeWidth={3} />
       <text y={9} textAnchor="middle" fontSize={24} fontWeight={700} fill={C.ok}>
         {initial}
@@ -329,14 +341,21 @@ export function RealityBuilding({ screen, strip = 'split' }: { screen: BuildingS
       })}
 
       {screen === 5 && <RealityVaultPanel snapshot={snapshot} />}
+      {screen === 5 && (
+        <g transform="translate(4842,160)">
+          <rect x={-12} y={-10} width={312} height={84} rx={10} fill="#0d1729" stroke="#2f4a73" strokeWidth={2} />
+          <DangerMeter x={0} y={0} w={288} h={64} level={dangerLevel(snapshot)} label="EPR RISK: HOPS AWAY" reality />
+        </g>
+      )}
 
       <RealityStrip x0={slice.x} mode={strip} screen={screen} />
 
+      <Effects snapshot={snapshot} rooms={new Set(rooms.map((r) => r.id))} reality />
       <CatchBadge snapshot={snapshot} rooms={new Set(rooms.map((r) => r.id))} reality />
       {/* analysts, on top of everything */}
       {snapshot.guards.map((g) => {
-        const p = guardPose(g);
-        return <Analyst key={g.id} x={p.x} y={p.y} name={g.name} initial={g.name[0]} />;
+        const p = guardPose(g, snapshot.timeMs);
+        return <Analyst key={g.id} x={p.x} y={p.y} name={g.name} initial={g.name[0]} act={p.act} />;
       })}
 
       {screen === 5 && <DangerGlow snapshot={snapshot} slice={slice} uid={uid} />}

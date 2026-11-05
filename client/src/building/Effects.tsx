@@ -61,9 +61,52 @@ function Sparkle({ x, y, r }: { x: number; y: number; r: number }) {
   );
 }
 
-function Effect({ fx }: { fx: Fx }) {
+/** A short word that pops up over a room and floats away: "Found them!", "Locked!", "Too late!". */
+function Callout({ x, y, text, color, reality }: { x: number; y: number; text: string; color: string; reality: boolean }) {
+  const w = text.length * (reality ? 17 : 19) + 44;
+  return (
+    <motion.g
+      initial={{ opacity: 0, y: y + 20, scale: 0.6 }}
+      animate={{ opacity: [0, 1, 1, 0], y: [y + 20, y, y - 10, y - 30], scale: [0.6, 1.1, 1, 1] }}
+      transition={{ duration: 1.5, times: [0, 0.15, 0.75, 1], ease: 'easeOut' }}
+      style={{ transformOrigin: `${x}px ${y}px` }}
+      pointerEvents="none"
+    >
+      <rect x={x - w / 2} y={-28} width={w} height={52} rx={reality ? 10 : 26} fill={reality ? '#0d1729' : '#17123a'} stroke={color} strokeWidth={5} />
+      <text x={x} y={10} textAnchor="middle" className={reality ? 'soc-text' : 'game-text'} fontSize={30} fontWeight={800} fill={color} letterSpacing={reality ? 1.5 : 0}>
+        {text}
+      </text>
+    </motion.g>
+  );
+}
+
+/** A guard arriving: a soft ring of lantern light (reality: a cyan ping). */
+function Arrival({ x, y, reality }: { x: number; y: number; reality: boolean }) {
+  return (
+    <motion.circle
+      cx={x}
+      cy={y - 40}
+      r={60}
+      fill="none"
+      stroke={reality ? '#3ee0d8' : '#ffd27a'}
+      strokeWidth={8}
+      initial={{ scale: 0.3, opacity: 0.9 }}
+      animate={{ scale: 2.4, opacity: 0 }}
+      transition={{ duration: 0.9, ease: 'easeOut' }}
+      style={{ transformOrigin: `${x}px ${y - 40}px` }}
+    />
+  );
+}
+
+function Effect({ fx, reality }: { fx: Fx; reality: boolean }) {
   const room = ROOMS[fx.room];
   if (!room) return null;
+  const top = { x: room.rect.x + room.rect.w / 2, y: room.rect.y + Math.min(110, room.rect.h * 0.35) };
+  if (fx.kind === 'arrived') return <Arrival x={room.anchor.x} y={room.anchor.y} reality={reality} />;
+  if (fx.kind === 'spotted') return <Callout {...top} text={reality ? 'DETECTED' : 'Found them!'} color="#f2994a" reality={reality} />;
+  if (fx.kind === 'locked') return <Callout {...top} text={reality ? 'ISOLATED' : 'Locked!'} color="#9c86f5" reality={reality} />;
+  if (fx.kind === 'late') return <Callout {...top} text={reality ? 'MOVED ON' : 'Too late!'} color="#f2994a" reality={reality} />;
+  if (reality) return null;
   if (fx.kind === 'evicted') return <StarBurst x={room.spots[0].x} y={room.spots[0].y} />;
   if (fx.kind === 'repaired') {
     return (
@@ -77,14 +120,14 @@ function Effect({ fx }: { fx: Fx }) {
   return null;
 }
 
-/** Star bursts and sparkles for recent events in the given rooms. */
-export function Effects({ snapshot, rooms }: { snapshot: Snapshot; rooms: Set<string> }) {
+/** Star bursts, sparkles and short callouts for recent events in the given rooms. */
+export function Effects({ snapshot, rooms, reality = false }: { snapshot: Snapshot; rooms: Set<string>; reality?: boolean }) {
   const active = snapshot.fx.filter((f) => rooms.has(f.room) && snapshot.timeMs - f.atMs < FX_MS);
   return (
     <AnimatePresence>
       {active.map((f) => (
         <motion.g key={f.id} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-          <Effect fx={f} />
+          <Effect fx={f} reality={reality} />
         </motion.g>
       ))}
     </AnimatePresence>

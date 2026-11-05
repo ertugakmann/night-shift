@@ -2,6 +2,7 @@
 // and the red glow that builds as the gang closes in on the Vault.
 import { IMPACT_LABELS, IMPACT_TYPES, type ImpactType, type Snapshot } from '@night-shift/shared';
 import { gameClock, worldOf } from '../game/view';
+import { DangerMeter, dangerLevel } from '../game/danger';
 import { CLOCK_TOWER, SLICE_H, SLICE_W, type Rect } from './layout';
 
 const GOLD = '#f2c65e';
@@ -221,6 +222,11 @@ export function VaultExtras({ snapshot, slice, uid }: { snapshot: Snapshot; slic
       <MuseumClock snapshot={snapshot} />
       <CareGauge snapshot={snapshot} />
       <ImpactPlaques snapshot={snapshot} />
+      {/* how close the gang is, right under the Vault's name */}
+      <g transform="translate(4910,150)">
+        <rect x={-16} y={-10} width={392} height={84} rx={16} fill="#17123a" opacity={0.85} />
+        <DangerMeter x={0} y={0} w={360} h={64} level={dangerLevel(snapshot)} label="DANGER: HOW CLOSE THE GANG IS" reality={false} />
+      </g>
       <DangerGlow snapshot={snapshot} slice={slice} uid={uid} />
     </>
   );

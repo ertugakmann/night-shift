@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
+import { wrap } from './util';
 import type { Snapshot } from '@night-shift/shared';
 import { theRoom } from '@night-shift/shared';
 import { worldOf } from '../game/view';
@@ -104,19 +105,40 @@ export function Rex({ snapshot, selected, reality = false }: { snapshot: Snapsho
         ? `Hmm… ${name}`
         : 'Zzz… all calm';
   const detail = reality ? `${focus.real} · ${value}% confidence` : `Rex is ${value}% sure`;
+  // His latest bark, with the clues it rests on, stays up for a while.
+  const why = snapshot.rex.why && snapshot.timeMs - snapshot.rex.why.atMs < 12_000 && !selected ? snapshot.rex.why : null;
+  const whyRoom = why ? w.room.get(why.room)! : null;
+  const whyText = why ? (reality ? `Evidence: ${why.real.split('Evidence: ')[1] ?? ''}` : why.text.split(': ').slice(1).join(': ')) : '';
+  const whyLines = why ? wrap(whyText, 46, 3) : [];
+  const bubbleH = why ? 52 + whyLines.length * 24 : 78;
   return (
     <g className="game-text">
       {/* bubble */}
-      <g transform={`translate(${X - 240},${Y - 186})`}>
-        <rect width={420} height={78} rx={reality ? 12 : 22} fill={reality ? '#0d1729' : '#fff4e0'} stroke={barking ? '#c9a6ff' : reality ? '#2f4a73' : '#e8dcc8'} strokeWidth={4} />
-        <path d="M300 76 L330 104 L340 76 Z" fill={reality ? '#0d1729' : '#fff4e0'} />
+      <g transform={`translate(${X - (why ? 262 : 240)},${Y - 108 - bubbleH - (why && reality ? 44 : 0)})`}>
+        <rect width={why ? 540 : 420} height={bubbleH} rx={reality ? 12 : 22} fill={reality ? '#0d1729' : '#fff4e0'} stroke={barking || why ? '#c9a6ff' : reality ? '#2f4a73' : '#e8dcc8'} strokeWidth={4} />
+        <path d={`M${why ? 322 : 300} ${bubbleH - 2} L${why ? 352 : 330} ${bubbleH + 26} L${why ? 362 : 340} ${bubbleH - 2} Z`} fill={reality ? '#0d1729' : '#fff4e0'} />
         <Paw x={34} y={42} scale={1.4} />
-        <text x={64} y={36} fontSize={22} fontWeight={700} fill={reality ? '#e6edf7' : '#2a1d5c'}>
-          {line.length > 30 ? `${line.slice(0, 29)}…` : line}
-        </text>
-        <text x={64} y={64} fontSize={19} fill={reality ? '#c9a6ff' : '#6a5a8a'}>
-          {detail.length > 36 ? `${detail.slice(0, 35)}…` : detail}
-        </text>
+        {why && whyRoom ? (
+          <>
+            <text x={64} y={36} fontSize={22} fontWeight={700} fill={reality ? '#e6edf7' : '#2a1d5c'}>
+              {reality ? `${why.confidence}% · ${whyRoom.real.length > 26 ? whyRoom.real.slice(0, 25) + '…' : whyRoom.real}` : `WOOF! ${why.confidence}% sure: ${theRoom(whyRoom.name)}`}
+            </text>
+            {whyLines.map((l, i) => (
+              <text key={i} x={64} y={64 + i * 24} fontSize={18} fill={reality ? '#c9a6ff' : '#6a5a8a'}>
+                {l}
+              </text>
+            ))}
+          </>
+        ) : (
+          <>
+            <text x={64} y={36} fontSize={22} fontWeight={700} fill={reality ? '#e6edf7' : '#2a1d5c'}>
+              {line.length > 30 ? `${line.slice(0, 29)}…` : line}
+            </text>
+            <text x={64} y={64} fontSize={19} fill={reality ? '#c9a6ff' : '#6a5a8a'}>
+              {detail.length > 36 ? `${detail.slice(0, 35)}…` : detail}
+            </text>
+          </>
+        )}
       </g>
       <g transform={`translate(${X + 130},${Y - 6}) scale(0.8)`}>
         <motion.g animate={woof ? { y: [0, -14, 0, -8, 0] } : { y: 0 }} transition={{ duration: 0.6 }} key={lastBark?.id ?? 'calm'}>

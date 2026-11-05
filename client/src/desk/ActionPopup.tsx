@@ -10,7 +10,7 @@ const W = 470;
 const H = 236;
 const INK = '#2a1d5c';
 
-function ActionIcon({ action }: { action: ActionKind }) {
+export function ActionIcon({ action }: { action: ActionKind }) {
   switch (action) {
     case 'patrol':
       return (
@@ -151,6 +151,8 @@ export function ActionPopup({
               : ACTION_LABEL[action];
         return (
           <g key={action} onClick={() => act(action)} onPointerEnter={() => setHover(action)} onPointerLeave={() => setHover((h) => (h === action ? null : h))} style={{ cursor: 'pointer' }} opacity={blocked ? 0.38 : 1}>
+            {/* what you can do right now glows; the rest stays dim */}
+            {!blocked && <rect x={bx - 4} y={by - 4} width={90} height={106} rx={21} fill="none" stroke={reality ? '#3ee0d8' : '#ffd27a'} strokeWidth={4} className="shimmer" />}
             <rect x={bx} y={by} width={82} height={98} rx={18} fill={blocked ? '#e8dcc8' : '#2c2468'} />
             <circle cx={bx + 41} cy={by + 38} r={27} fill={blocked ? '#d6c8b0' : '#3a2f7a'} />
             <g transform={`translate(${bx + 41},${by + 38})`}>

@@ -1,4 +1,7 @@
-import type { Snapshot } from '@night-shift/shared';
+import { useState } from 'react';
+import { ACTIONS, type Role, type Snapshot } from '@night-shift/shared';
+import { ActionIcon } from './ActionPopup';
+import { actionBlocked } from './util';
 import { guardPose } from '../building/geometry';
 import { DOORS, ROOMS } from '../building/layout';
 import { worldOf } from '../game/view';
@@ -20,7 +23,8 @@ function Paw({ x, y, scale = 1 }: { x: number; y: number; scale?: number }) {
 }
 
 /** The building plan pinned to the desk: every room, its state, the guards, and Rex's hunches. */
-export function MiniMap({ snapshot, selected, reality = false }: { snapshot: Snapshot; selected: string | null; reality?: boolean }) {
+export function MiniMap({ snapshot, selected, reality = false, role = 'watcher' }: { snapshot: Snapshot; selected: string | null; reality?: boolean; role?: Role }) {
+  const [hover, setHover] = useState<string | null>(null);
   const w = worldOf(snapshot);
   const bark = w.sc.rex.barkThreshold;
   const width = 6400 * MAP_SCALE;
@@ -55,6 +59,8 @@ export function MiniMap({ snapshot, selected, reality = false }: { snapshot: Sna
         return (
           <g
             key={room.id}
+            onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(room.id)}
+            onPointerLeave={() => setHover((h) => (h === room.id ? null : h))}
             onClick={(e) => {
               e.stopPropagation();
               selectRoom(isSelected ? null : room.id);
@@ -128,15 +134,45 @@ export function MiniMap({ snapshot, selected, reality = false }: { snapshot: Sna
         );
       })}
 
+      {hover && hover !== selected && <HoverActions snapshot={snapshot} room={hover} reality={reality} canAct={role !== 'watcher'} />}
+
       {/* guards */}
       {snapshot.guards.map((g) => {
-        const p = guardPose(g);
+        const p = guardPose(g, snapshot.timeMs);
         return (
           <g key={g.id} transform={`translate(${mapX(p.x)},${mapY(p.y) - 10})`} pointerEvents="none" style={{ transition: 'transform 120ms linear' }}>
             <circle r={13} fill="#17123a" stroke={GUARD_COLOR[g.id] ?? '#fff'} strokeWidth={4} />
             <text y={6} textAnchor="middle" className="game-text" fontSize={16} fontWeight={700} fill={GUARD_COLOR[g.id] ?? '#fff'}>
               {g.name[0]}
             </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/** Hovering a room: the actions you could give there right now light up, the rest stay dim. */
+function HoverActions({ snapshot, room, reality, canAct }: { snapshot: Snapshot; room: string; reality: boolean; canAct: boolean }) {
+  const r = ROOMS[room].rect;
+  const slots = ACTIONS.filter((a) => a !== 'unlock').map((a) => (a === 'lock' && snapshot.rooms[room].locked ? 'unlock' : a));
+  const size = 40;
+  const gap = 6;
+  const w = slots.length * size + (slots.length - 1) * gap + 16;
+  const cx = Math.min(MAP_X + 6400 * MAP_SCALE - w / 2, Math.max(MAP_X + w / 2, mapX(r.x + r.w / 2)));
+  const cy = Math.min(mapY(r.y + r.h) - 4, mapY(r.y + r.h / 2) + 26);
+  return (
+    <g pointerEvents="none" transform={`translate(${cx - w / 2},${cy - size / 2 - 8})`}>
+      <rect width={w} height={size + 16} rx={14} fill={reality ? '#0d1729' : '#17123a'} opacity={0.94} stroke={reality ? '#2f4a73' : '#5b4ba8'} strokeWidth={2} />
+      {slots.map((a, i) => {
+        const ok = canAct && actionBlocked(snapshot, room, a) === null;
+        return (
+          <g key={a} transform={`translate(${8 + i * (size + gap) + size / 2},${8 + size / 2})`} opacity={ok ? 1 : 0.25}>
+            {ok && <circle r={size / 2} fill="none" stroke={reality ? '#3ee0d8' : '#ffd27a'} strokeWidth={3} className="shimmer" />}
+            <circle r={size / 2 - 3} fill={reality ? '#13233d' : '#3a2f7a'} />
+            <g transform="scale(0.72)">
+              <ActionIcon action={a} />
+            </g>
           </g>
         );
       })}

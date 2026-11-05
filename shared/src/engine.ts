@@ -70,6 +70,22 @@ export interface Task {
   found: boolean;
   /** Evict and repair: the mini game has begun (a guard who arrives while another one runs waits). */
   started?: boolean;
+  /** Lock: the gang was in the room when the lock was sent (if they are gone when it lands: too late). */
+  hadGang?: boolean;
+}
+
+/**
+ * An idle guard strolling around their own wing: a pause (looking around, a yawn, Tom's biscuit), then a
+ * slow walk to a neighbouring room. Purely for life on screen: it lights nothing and finds nobody.
+ */
+export interface Wander {
+  phase: 'pause' | 'walk';
+  /** Walking from `from` to `to` (guard.room stays `from` until they get there). */
+  from: RoomId;
+  to: RoomId;
+  startMs: number;
+  untilMs: number;
+  act: 'look' | 'yawn' | 'biscuit' | null;
 }
 
 export interface Guard {
@@ -78,6 +94,8 @@ export interface Guard {
   /** Room the guard is in right now (changes while walking). */
   room: RoomId;
   task: Task | null;
+  /** Strolling while idle (null while on a task). */
+  wander: Wander | null;
 }
 
 export type LogKind = 'radio' | 'staff' | 'cctv' | 'rex' | 'event';
@@ -98,7 +116,7 @@ export interface LogEntry {
 /** Short-lived visual cue for the screens (star burst, sparkle...). Never affects the game. */
 export interface Fx {
   id: number;
-  kind: 'spotted' | 'evicted' | 'repaired' | 'vandalised' | 'locked';
+  kind: 'spotted' | 'evicted' | 'repaired' | 'vandalised' | 'locked' | 'arrived' | 'late';
   room: RoomId;
   atMs: number;
 }
@@ -231,6 +249,8 @@ export interface GameState {
   /** Time received but not yet simulated (less than one step). */
   accMs: number;
   rng: number;
+  /** A separate random stream for the guards' idle strolls, so they never change the gang's route. */
+  wanderRng: number;
   reality: boolean;
   debug: boolean;
 
@@ -261,6 +281,8 @@ export interface GameState {
      * otherwise the bark counts as ignored. `truth`: the gang really was there when he barked.
      */
     pending: { room: RoomId; truth: boolean; untilMs: number }[];
+    /** Why Rex barked the last time: the clues he went on, in both voices. */
+    why: { room: RoomId; atMs: number; confidence: number; text: string; real: string } | null;
   };
 
   stats: {
@@ -321,12 +343,13 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     timeMs: 0,
     accMs: 0,
     rng: sc.seed >>> 0,
+    wanderRng: (sc.seed * 7919 + 13) >>> 0,
     reality: false,
     debug: false,
     rooms: perRoom(() => ({ locked: false, dark: false, occupiedMs: 0, litBy: null, complained: false })),
     groups: [],
     nextGroupId: 1,
-    guards: sc.guards.map((g) => ({ id: g.id, name: g.name, room: g.startRoom, task: null })),
+    guards: sc.guards.map((g) => ({ id: g.id, name: g.name, room: g.startRoom, task: null, wander: null })),
     candlelight: Object.fromEntries(WINGS.map((wing) => [wing, false])) as Record<Wing, boolean>,
     brokenIn: false,
     entrySplit: false,
@@ -336,7 +359,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     care: 100,
     lowestCare: 100,
     impact: Object.fromEntries(IMPACT_TYPES.map((t) => [t, 0])) as Record<ImpactType, number>,
-    rex: { estimates: perRoom(() => 0), mistake: null, mistakeDone: false, pending: [] },
+    rex: { estimates: perRoom(() => 0), mistake: null, mistakeDone: false, pending: [], why: null },
     stats: {
       dispatches: 0,
       patrols: 0,
@@ -477,6 +500,7 @@ function tick(s: GameState, w: World): void {
   }
 
   updateGuards(s, w);
+  wander(s, w);
   complaints(s, w);
   updateCatch(s, w);
   updateWires(s, w);
@@ -681,6 +705,8 @@ function updateRex(s: GameState, w: World): void {
       s.rex.mistake = { room, untilMs: s.timeMs + w.ms.rexMistakeHold };
       s.rex.mistakeDone = true;
       mistakeStarts = room;
+      // What fools him: a camera in that room glitches for no reason, just before he barks.
+      cctv(s, w, room, false);
     }
   }
   if (s.rex.mistake) {
@@ -700,17 +726,39 @@ function updateRex(s: GameState, w: World): void {
       // Each bark is one decision for the player: patrol there soon (follow) or not (ignore).
       s.rex.pending = s.rex.pending.filter((p) => p.room !== room.id);
       s.rex.pending.push({ room: room.id, truth, untilMs: s.timeMs + w.ms.followWindow });
-      log(s, {
-        kind: 'rex',
-        speaker: 'Rex',
-        room: room.id,
-        text: `Woof! Rex is sure about ${theRoom(room.name)} (${next[room.id]}%).`,
-        real: `AI copilot: likely compromise in ${room.real} (${next[room.id]}% confidence).`,
-        truth,
-      });
+      const why = evidence(s, w, room.id);
+      const confidence = next[room.id];
+      const text = `WOOF! ${confidence}% sure about ${theRoom(room.name)}: ${why.game}.`;
+      const real = `AI copilot: ${room.real}, ${confidence}% confidence. Evidence: ${why.real}.`;
+      s.rex.why = { room: room.id, atMs: s.timeMs, confidence, text, real };
+      log(s, { kind: 'rex', speaker: 'Rex', room: room.id, text, real, truth });
     }
   }
   s.rex.estimates = next;
+}
+
+/** How far back Rex looks for clues (game ms). */
+const EVIDENCE_MS = 20_000;
+
+/** The clues Rex goes on for a room: recent staff reports and camera glitches there, in both voices. */
+function evidence(s: GameState, w: World, roomId: RoomId): { game: string; real: string } {
+  const room = w.room.get(roomId)!;
+  const recent = s.log.filter((l) => l.room === roomId && s.timeMs - l.atMs <= EVIDENCE_MS);
+  const report = [...recent].reverse().find((l) => l.kind === 'staff' && l.truth === true);
+  const camera = [...recent].reverse().find((l) => l.kind === 'cctv');
+  const game: string[] = [];
+  const real: string[] = [];
+  if (report) {
+    game.push(`${report.speaker} reported "${report.text.replace(/[.!]$/, '')}"`);
+    real.push(`staff report (${room.real})`);
+  }
+  if (camera) {
+    const ago = Math.round((s.timeMs - camera.atMs) / 1000);
+    game.push(`the camera glitched there ${ago <= 1 ? 'just now' : `${ago} seconds ago`}`);
+    real.push(`EDR alert (${room.real})`);
+  }
+  if (game.length === 0) return { game: "his nose says they're close", real: `anomalous network traffic near ${room.real}` };
+  return { game: game.join(', and '), real: real.join(', ') };
 }
 
 /** Trust analysis: a bark nobody patrolled within the window counts as ignored. */
@@ -878,6 +926,47 @@ function complaints(s: GameState, w: World): void {
       log(s, { kind: 'staff', speaker: room.complaint.speaker, text: room.complaint.text, room: room.id });
     } else if (!closed) {
       rs.complained = false;
+    }
+  }
+}
+
+// ---------- Idle guards stroll around their wing ----------
+
+/** mulberry32 on the strolls' own stream: the gang's RNG is never touched. */
+function wanderRand(s: GameState): number {
+  let t = (s.wanderRng = (s.wanderRng + 0x6d2b79f5) | 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function wander(s: GameState, w: World): void {
+  for (const g of s.guards) {
+    if (g.task) {
+      g.wander = null;
+      continue;
+    }
+    const wv = g.wander;
+    if (wv && s.timeMs < wv.untilMs) continue;
+    if (wv?.phase === 'walk') g.room = wv.to;
+    const home = w.room.get(w.sc.guards.find((x) => x.id === g.id)!.startRoom)!.wing;
+    const here = w.room.get(g.room)!;
+    let next: RoomId | null = null;
+    if (here.wing !== home) {
+      // back towards their own wing after a job
+      const homeRoom = w.sc.guards.find((x) => x.id === g.id)!.startRoom;
+      next = shortestPath(w, g.room, homeRoom)[1] ?? null;
+    } else if (wv?.phase === 'pause' && wanderRand(s) < 0.6) {
+      const options = w.neighbours.get(g.room)!.filter((n) => w.room.get(n)!.wing === home && n !== w.vault);
+      if (options.length) next = options[Math.floor(wanderRand(s) * options.length)];
+    }
+    if (next) {
+      // a slow stroll: about twice a guard's walking time
+      g.wander = { phase: 'walk', from: g.room, to: next, startMs: s.timeMs, untilMs: s.timeMs + w.ms.walkPerRoom * 2.2, act: null };
+    } else {
+      const r = wanderRand(s);
+      const act: Wander['act'] = g.id === 'tom' && r < 0.35 ? 'biscuit' : r < 0.75 ? 'look' : 'yawn';
+      g.wander = { phase: 'pause', from: g.room, to: g.room, startMs: s.timeMs, untilMs: s.timeMs + 1500 + Math.round(wanderRand(s) * 2500), act };
     }
   }
 }
@@ -1072,6 +1161,7 @@ function updateGuards(s: GameState, w: World): void {
     if (!task.arrived && task.elapsedMs >= task.walkMs) {
       task.arrived = true;
       guard.room = task.room;
+      if (task.walkMs > 0) fx(s, 'arrived', task.room);
       if (task.action === 'patrol') s.rooms[task.room].litBy = guard.id;
     }
     if (task.action === 'evict' || task.action === 'repair') {
@@ -1153,7 +1243,13 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
         s.stats.locks++;
         fx(s, 'locked', task.room);
       }
-      say(s, guard, lockedLine(guard.id, n, name), task.room, `${room.real} isolated from the network.`);
+      if (task.hadGang && inside.length === 0) {
+        // They were here when the lock was sent, and slipped out before it landed.
+        fx(s, 'late', task.room);
+        say(s, guard, "Too late, they've already moved on.", task.room, `Isolation too late: the ransomware had already moved on from ${room.real}.`);
+      } else {
+        say(s, guard, lockedLine(guard.id, n, name), task.room, `${room.real} isolated from the network.`);
+      }
       break;
 
     case 'evict':
@@ -1401,6 +1497,9 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
 
   const s = clone(state);
   const g = s.guards.find((x) => x.id === guard.id)!;
+  // Strolling: set off from where they are (past the halfway mark of a walk, that is the next room).
+  if (g.wander?.phase === 'walk' && s.timeMs - g.wander.startMs > (g.wander.untilMs - g.wander.startMs) / 2) g.room = g.wander.to;
+  g.wander = null;
   const path = shortestPath(w, g.room, room.id);
   g.task = {
     action: intent.action,
@@ -1411,6 +1510,7 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
     elapsedMs: 0,
     arrived: false,
     found: false,
+    hadGang: intent.action === 'lock' ? occupied(s, room.id) : undefined,
   };
   s.stats.dispatches++;
 

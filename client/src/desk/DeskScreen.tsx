@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { padlocks, type Snapshot } from '@night-shift/shared';
+import { DangerMeter, dangerLevel } from '../game/danger';
 import { selectRoom, useGame } from '../net/game';
 import { RealityStrip, type StripMode } from '../reality/RealityStrip';
 import { ScreenEndWash } from '../end/EndMoment';
@@ -108,6 +109,47 @@ function PadlockTray({ snapshot, reality }: { snapshot: Snapshot; reality: boole
   );
 }
 
+/**
+ * Right of the map: how many groups of the gang are stopped so far (the total grows as they split),
+ * and how close the nearest group is to the Vault.
+ */
+function StatusColumn({ snapshot, reality }: { snapshot: Snapshot; reality: boolean }) {
+  const total = snapshot.groupLog.length;
+  const stopped = snapshot.groupLog.filter((r) => r.stoppedMs !== null).length;
+  const x = 1456;
+  const w = 110;
+  return (
+    <g className={reality ? 'soc-text' : 'game-text'} pointerEvents="none">
+      <rect x={x} y={30} width={w} height={232} rx={12} fill={reality ? '#0d1729' : '#17123a'} stroke={reality ? '#2f4a73' : '#4a3d99'} strokeWidth={3} />
+      <text x={x + w / 2} y={54} textAnchor="middle" fontSize={16} fontWeight={800} fill={reality ? '#7f8ea8' : '#f2c65e'} letterSpacing={0.5}>
+        {reality ? 'CONTAINED' : 'STOPPED'}
+      </text>
+      <text x={x + w / 2} y={98} textAnchor="middle" fontSize={40} fontWeight={800} fill={total > 0 && stopped === total ? '#3ee0d8' : reality ? '#e6edf7' : '#fff1cf'}>
+        {total === 0 ? '–' : `${stopped}/${total}`}
+      </text>
+      <text x={x + w / 2} y={120} textAnchor="middle" fontSize={16} fill={reality ? '#7f8ea8' : '#b9adf0'}>
+        {reality ? 'threats' : 'intruders'}
+      </text>
+      <DangerMeter x={x} y={132} w={w} h={124} level={dangerLevel(snapshot)} label={reality ? 'EPR RISK' : 'DANGER'} reality={reality} vertical />
+    </g>
+  );
+}
+
+/** The first 20 seconds of a night: how to play, until the first order. */
+function Tip({ snapshot, reality }: { snapshot: Snapshot; reality: boolean }) {
+  if (snapshot.phase !== 'running' || snapshot.timeMs >= 20_000 || snapshot.stats.dispatches > 0) return null;
+  const text = reality ? 'Tip: select a department to dispatch an analyst.' : 'Tip: click a room to send a guard.';
+  const w = text.length * 13 + 60;
+  return (
+    <g className={`${reality ? 'soc-text' : 'game-text'} note-bob`} pointerEvents="none">
+      <rect x={640 - w / 2} y={294} width={w} height={48} rx={24} fill={reality ? '#3ee0d8' : '#ffd27a'} stroke={reality ? '#0d1729' : '#2a1d5c'} strokeWidth={3} />
+      <text x={640} y={326} textAnchor="middle" fontSize={24} fontWeight={800} fill={reality ? '#04212a' : '#2a1d5c'}>
+        {text}
+      </text>
+    </g>
+  );
+}
+
 /** A sticky note for the moments between play: before the shift, paused, and the end of the night. */
 function StickyNote({ snapshot }: { snapshot: Snapshot }) {
   let title: string | null = null;
@@ -186,7 +228,8 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
       )}
       {snapshot && (
         <g className={reality ? 'soc-text' : undefined} transform={reality && strip !== 'none' ? 'translate(64,0) scale(0.92)' : undefined}>
-          <MiniMap snapshot={snapshot} selected={selected} reality={reality} />
+          <MiniMap snapshot={snapshot} selected={selected} reality={reality} role={role} />
+          <StatusColumn snapshot={snapshot} reality={reality} />
           <NistStrip snapshot={snapshot} reality={reality} />
           <PadlockTray snapshot={snapshot} reality={reality} />
           <Radio snapshot={snapshot} reality={reality} />
@@ -194,6 +237,7 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
           <Cctv snapshot={snapshot} reality={reality} />
           <Rex snapshot={snapshot} selected={selected} reality={reality} />
           <StickyNote snapshot={snapshot} />
+          <Tip snapshot={snapshot} reality={reality} />
           {selected && <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} reality={reality} />}
         </g>
       )}
