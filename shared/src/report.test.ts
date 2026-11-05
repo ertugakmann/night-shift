@@ -177,3 +177,28 @@ describe('lessons: advice about the player’s own decisions', () => {
     expect(templateReport(idle).model).toBeNull();
   });
 });
+
+describe('time to spot / time to stop (MTTD and MTTR)', () => {
+  it('the museum note says it in plain words, never MTTD or MTTR', () => {
+    const note = templateReport(won).museum.paragraphs.join(' ');
+    expect(note).toMatch(/Time to spot: \d+ (min|h)[^.]* on the night clock \(\d of \d groups\)\./);
+    expect(note).toMatch(/Time to stop: (at once|\d+ (min|h)[^.]* on the night clock \(\d of \d\))\./);
+    expect(note).not.toMatch(/MTTD|MTTR/);
+    // a night where nobody ever saw them
+    expect(templateReport(idle).museum.paragraphs.join(' ')).toMatch(/Time to spot: never\. Time to stop: never\./);
+  });
+
+  it('the SOC handover writes the terms out: MTTD (mean time to detect), MTTR (mean time to respond)', () => {
+    const summary = templateReport(won).soc.incidentSummary.join(' ');
+    expect(summary).toMatch(/MTTD \(mean time to detect\): \d/);
+    const f = nightFacts(won);
+    if (!f.respondedAtOnce) expect(summary).toMatch(/MTTR \(mean time to respond\): \d/);
+  });
+
+  it('the numbers are the same in both voices (only the words change)', () => {
+    const f = nightFacts(won);
+    const note = templateReport(won).museum.paragraphs.join(' ');
+    expect(note).toContain(f.timeToDetect!.split(',')[0]);
+    expect(templateReport(won).soc.incidentSummary.join(' ')).toContain(f.timeToDetect!);
+  });
+});

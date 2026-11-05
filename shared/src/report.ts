@@ -4,6 +4,15 @@
 import { ACTION_REAL, type ActionKind, type GameState, type Outcome } from './engine';
 import { BENCHMARKS, IMPACT_LABELS, IMPACT_TYPES, WING_NAMES, msToClock, theRoom, world, type ImpactType } from './scenario';
 
+/**
+ * MTTD and MTTR in each voice. Museum: plain words ("Time to spot"); reality: the SOC term with its meaning.
+ * Same numbers in both (the per-group averages in NightSummary).
+ */
+export const TIME_LABELS = {
+  detect: { museum: 'Time to spot', reality: 'MTTD (mean time to detect)' },
+  respond: { museum: 'Time to stop', reality: 'MTTR (mean time to respond)' },
+} as const;
+
 /** The six sections of the SOC shift handover, in order. */
 export const SOC_SECTIONS = [
   ['incidentSummary', 'Incident summary'],
@@ -366,6 +375,14 @@ function postLine(f: NightFacts): string | null {
   return `The post: ${p.right} of ${p.letters} letters called right (${how})${cost}. Look at the sender before you open anything!`;
 }
 
+/** "Time to spot: 21 min on the night clock (2 of 3 groups). Time to stop: never." */
+function timesLine(f: NightFacts): string {
+  const night = (span: string) => span.split(',')[0];
+  const spot = f.timeToDetect ? `${night(f.timeToDetect)} (${f.groupsSpotted} of ${f.groups} groups)` : 'never';
+  const stop = f.timeToRespond === null ? 'never' : f.respondedAtOnce ? 'at once' : `${night(f.timeToRespond)} (${f.groupsStopped} of ${f.groups})`;
+  return `${TIME_LABELS.detect.museum}: ${spot}. ${TIME_LABELS.respond.museum}: ${stop}.`;
+}
+
 function museumTemplate(f: NightFacts): MorningReport['museum'] {
   const title = f.result === 'won' ? (f.ending === 'dawn' ? 'Morning, team!' : 'Early night, team!') : 'Rough night, team.';
   const opening =
@@ -381,7 +398,7 @@ function museumTemplate(f: NightFacts): MorningReport['museum'] {
   const patients = hurt.length > 0 ? ` Real patients felt it: ${list(hurt)}.` : ' And no patient had to wait.';
   return {
     title,
-    paragraphs: [opening, damage + patients, f.guards.map(guardLine).join(' '), [rexLine(f), postLine(f)].filter(Boolean).join(' ')],
+    paragraphs: [`${opening} ${timesLine(f)}`, damage + patients, f.guards.map(guardLine).join(' '), [rexLine(f), postLine(f)].filter(Boolean).join(' ')],
   };
 }
 
@@ -410,12 +427,12 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
   return {
     incidentSummary: [
       'Ransomware intrusion via a phishing email.',
-      f.timeToDetect ? `MTTD ${f.timeToDetect} (${f.groupsSpotted} of ${f.groups} groups detected).` : 'Never detected by a scan during the shift.',
+      f.timeToDetect ? `${TIME_LABELS.detect.reality}: ${f.timeToDetect} (${f.groupsSpotted} of ${f.groups} groups detected).` : 'Never detected by a scan during the shift.',
       f.timeToRespond === null
         ? 'Not contained during the shift.'
         : f.respondedAtOnce
           ? `Isolated before it could move (${f.groupsStopped} of ${f.groups} groups contained).`
-          : `MTTR ${f.timeToRespond} (${f.groupsStopped} of ${f.groups} groups contained).`,
+          : `${TIME_LABELS.respond.reality}: ${f.timeToRespond} (${f.groupsStopped} of ${f.groups} groups contained).`,
       outcome,
     ],
     affectedSystems: encrypted.length > 0 ? [`Encrypted: ${some(encrypted, 4, 'systems')}.`] : ['No systems encrypted.'],

@@ -1,7 +1,7 @@
 // The result card at the end of the night: care continuity against the benchmarks, MTTD and MTTR, the
 // trust analysis for Rex, and the patient impact. Drawn in SVG (1200×760 units, origin top-left) so it
 // sits on screen 5 and over the /wall office alike. Museum and SOC styles share the layout.
-import { BENCHMARKS, IMPACT_LABELS, IMPACT_TYPES, type Outcome, type Snapshot } from '@night-shift/shared';
+import { BENCHMARKS, IMPACT_LABELS, IMPACT_TYPES, type Outcome, type Snapshot, TIME_LABELS } from '@night-shift/shared';
 import { motion } from 'motion/react';
 import { ImpactIcon } from '../building/VaultExtras';
 import { sendIntent, useGame } from '../net/game';
@@ -115,7 +115,7 @@ function CareBlock({ value, t, reality }: { value: number; t: Theme; reality: bo
 }
 
 /** MTTD or MTTR: the average over the groups it applies to, and how many of the gang's groups that was. */
-function TimeTile({ x, label, tag, ms, missing, count, instant, snapshot, t }: { x: number; label: string; tag: string; ms: number | null; missing: string; count: string; instant: string; snapshot: Snapshot; t: Theme }) {
+function TimeTile({ x, label, tag, ms, missing, count, instant, snapshot, t }: { x: number; label: string; tag?: string; ms: number | null; missing: string; count: string; instant: string; snapshot: Snapshot; t: Theme }) {
   const d = durations(snapshot, ms);
   if (ms === 0) {
     // stopped before anyone needed to respond: no time to show
@@ -267,8 +267,8 @@ export function ResultCard({ snapshot, outcome, reality }: { snapshot: Snapshot;
       <CareBlock value={s.careContinuity} t={t} reality={reality} />
 
       {/* detect and respond */}
-      <TimeTile x={right} label="MTTD" tag={reality ? 'mean time to detect' : 'time to spot them'} ms={s.mttdMs} missing="Never spotted" instant={reality ? 'Immediate' : 'At once'} count={`${s.spotted} of ${s.groups} ${reality ? 'detected' : 'spotted'}`} snapshot={snapshot} t={t} />
-      <TimeTile x={right + 340} label="MTTR" tag={reality ? 'mean time to respond' : 'time to stop them'} ms={s.mttrMs} missing="Never stopped" instant={reality ? 'Immediate' : 'At once'} count={`${s.stopped} of ${s.groups} ${reality ? 'contained' : 'stopped'}`} snapshot={snapshot} t={t} />
+      <TimeTile x={right} label={reality ? 'MTTD' : TIME_LABELS.detect.museum} tag={reality ? '(mean time to detect)' : undefined} ms={s.mttdMs} missing="Never spotted" instant={reality ? 'Immediate' : 'At once'} count={`${s.spotted} of ${s.groups} ${reality ? 'detected' : 'spotted'}`} snapshot={snapshot} t={t} />
+      <TimeTile x={right + 340} label={reality ? 'MTTR' : TIME_LABELS.respond.museum} tag={reality ? '(mean time to respond)' : undefined} ms={s.mttrMs} missing="Never stopped" instant={reality ? 'Immediate' : 'At once'} count={`${s.stopped} of ${s.groups} ${reality ? 'contained' : 'stopped'}`} snapshot={snapshot} t={t} />
 
       {/* trust in Rex */}
       <Tile x={right} y={336} w={rw} h={150} t={t} title={reality ? 'AI copilot trust' : 'Trust in Rex'} />
