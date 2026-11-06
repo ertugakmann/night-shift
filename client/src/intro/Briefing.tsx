@@ -181,7 +181,7 @@ function StartHint({ v, presenter }: { v: Voice; presenter: boolean }) {
   return (
     <g style={{ cursor: 'pointer', pointerEvents: 'auto' }} onClick={() => sendIntent({ type: 'nextIntro' })}>
       <rect x={W / 2 - 220} y={834} width={440} height={56} rx={28} fill={v.real ? '#0f2e2c' : '#f2c65e'} stroke={v.accent} strokeWidth={3} />
-      <Lines x={W / 2} y={872} lines={[text]} size={28} weight={700} v={v} color={v.real ? '#b8ffe2' : '#2a1d5c'} />
+      <Lines x={W / 2} y={872} lines={[text]} size={28} weight={700} v={v} color={v.real ? '#b8ffe2' : '#ffffff'} />
     </g>
   );
 }
