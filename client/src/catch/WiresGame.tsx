@@ -1,12 +1,13 @@
 // "Reconnect the exhibit": Repair as a mini game. Cable ends on the left, sockets on the right, in mixed
 // order; drag each cable to the socket of its colour (or tap one, then the other). Reality view: patching
 // the restored system's network links, with port names. The server owns the game; every screen watches it.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { theRoom } from '@night-shift/shared';
+import { PresenterCursor, useMirrorPointer } from '../desk/PresenterCursor';
 import { ROOMS } from '../building/layout';
 import { ExhibitArt, exhibitBox } from '../building/Exhibit';
 import { worldOf } from '../game/view';
-import { sendIntent, useGame } from '../net/game';
+import { reportPointer, sendIntent, useGame } from '../net/game';
 import { MiniHeader, MiniResult } from './MiniHeader';
 
 const W = 1600;
@@ -24,12 +25,22 @@ function cable(x1: number, y1: number, x2: number, y2: number): string {
 }
 
 export function WiresGame({ reality }: { reality: boolean }) {
-  const { snapshot, role } = useGame();
+  const { snapshot, role, pointer } = useGame();
   const g = snapshot?.wires;
   const svg = useRef<SVGSVGElement>(null);
-  const [drag, setDrag] = useState<{ from: number; x: number; y: number; moved: boolean } | null>(null);
+  const [local, setDrag] = useState<{ from: number; x: number; y: number; moved: boolean } | null>(null);
+  const mirror = useMirrorPointer(svg);
+  // the cable in the presenter's hand goes out to the watching desks, and is let go when the game ends
+  useEffect(() => {
+    if (role === 'presenter') reportPointer({ wire: local ? { from: local.from, moved: local.moved } : null });
+  }, [role, local?.from, local?.moved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => reportPointer({ wire: null }), []);
   if (!snapshot || !g) return null;
   const canAct = role !== 'watcher' && g.result === null;
+  const watching = role === 'watcher';
+  // watching: the presenter's cable, drawn to their cursor (never one already plugged in)
+  const held = pointer?.wire && pointer.cursor && g.result === null && !g.connected.includes(g.left[pointer.wire.from]) ? { ...pointer.wire, x: pointer.cursor.x, y: pointer.cursor.y } : null;
+  const drag = watching ? held : local;
 
   const toSvg = (e: React.PointerEvent) => {
     const m = svg.current?.getScreenCTM();
@@ -53,6 +64,7 @@ export function WiresGame({ reality }: { reality: boolean }) {
   };
 
   function down(e: React.PointerEvent) {
+    mirror.press(e);
     if (!canAct) return;
     const p = toSvg(e);
     const from = nearest(p.x, p.y, 'left');
@@ -70,12 +82,13 @@ export function WiresGame({ reality }: { reality: boolean }) {
     }
   }
   function move(e: React.PointerEvent) {
-    if (!drag) return;
+    mirror.track(e);
+    if (!drag || watching) return;
     const p = toSvg(e);
     setDrag({ ...drag, x: p.x, y: p.y, moved: drag.moved || Math.hypot(p.x - LEFT_X, p.y - rowY(drag.from)) > 30 });
   }
   function up(e: React.PointerEvent) {
-    if (!drag) return;
+    if (!drag || watching) return;
     const p = toSvg(e);
     const to = nearest(p.x, p.y, 'right');
     if (to >= 0) {
@@ -103,6 +116,7 @@ export function WiresGame({ reality }: { reality: boolean }) {
       onPointerMove={move}
       onPointerUp={up}
       onPointerCancel={() => setDrag(null)}
+      onPointerLeave={mirror.leave}
       role="application"
       aria-label="Reconnect the exhibit"
     >
@@ -212,6 +226,7 @@ export function WiresGame({ reality }: { reality: boolean }) {
           sub={g.result === 'fixed' ? (reality ? `${room.real} restored from backup.` : `${room.name} is running again.`) : reality ? 'Links not up. Run the restore again.' : 'Still switched off. Try Repair again.'}
         />
       )}
+      {watching && <PresenterCursor pointer={pointer} />}
     </svg>
   );
 }

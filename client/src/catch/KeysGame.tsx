@@ -1,7 +1,9 @@
 // "Change the locks": the gang has the master keys. Type the short code (OWL-7) before time runs out,
 // on a keyboard or with the tiles (touch screens). Reality view: an emergency reset of the admin passwords.
 // Keyboard typing is handled once per page in usePresenterKeys, so this only draws and takes taps.
+import { useRef } from 'react';
 import { sendIntent, useGame } from '../net/game';
+import { PresenterCursor, useMirrorPointer } from '../desk/PresenterCursor';
 import { worldOf } from '../game/view';
 import { MiniHeader, MiniResult } from './MiniHeader';
 
@@ -9,7 +11,9 @@ const W = 1600;
 const H = 900;
 
 export function KeysGame({ reality }: { reality: boolean }) {
-  const { snapshot, role } = useGame();
+  const { snapshot, role, pointer } = useGame();
+  const svg = useRef<SVGSVGElement>(null);
+  const mirror = useMirrorPointer(svg);
   const k = snapshot?.keys;
   if (!snapshot || !k) return null;
   const canAct = role !== 'watcher' && k.result === null;
@@ -21,7 +25,18 @@ export function KeysGame({ reality }: { reality: boolean }) {
   const tilesX = (W - (k.tiles.length * tileW + (k.tiles.length - 1) * gap)) / 2;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="block h-full w-full select-none" style={{ touchAction: 'none' }} role="application" aria-label="Change the locks">
+    <svg
+      ref={svg}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="xMidYMid meet"
+      className="block h-full w-full select-none"
+      style={{ touchAction: 'none' }}
+      onPointerDown={mirror.press}
+      onPointerMove={mirror.track}
+      onPointerLeave={mirror.leave}
+      role="application"
+      aria-label="Change the locks"
+    >
       {reality ? <rect width={W} height={H} fill="#0a1120" /> : <rect width={W} height={H} fill="#2a1d5c" />}
       {/* the alert */}
       <g className={reality ? 'soc-text' : 'game-text'}>
@@ -94,6 +109,7 @@ export function KeysGame({ reality }: { reality: boolean }) {
           sub={k.result === 'changed' ? (reality ? 'The stolen admin passwords no longer work.' : 'The master keys are useless now.') : reality ? 'Stolen admin credentials still valid.' : 'The intruders keep the master keys.'}
         />
       )}
+      {role === 'watcher' && <PresenterCursor pointer={pointer} />}
     </svg>
   );
 }

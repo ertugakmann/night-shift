@@ -134,6 +134,10 @@ export function reportPointer(patch: Partial<PresenterPointer>): void {
   if (view.role !== 'presenter' || pointerTimer) return;
   pointerTimer = setTimeout(flushPointer, Math.max(0, 50 - (Date.now() - pointerSentAt)));
 }
+/** The presenter pressed: watchers draw a click ring where the cursor is. One count for every surface. */
+export function reportPress(cursor: PresenterPointer['cursor']): void {
+  reportPointer({ cursor, clicks: (mine.clicks + 1) % 1_000_000 });
+}
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<GameView>): void {

@@ -15,11 +15,13 @@ export interface PresenterPointer {
   cursor: { x: number; y: number; touch: boolean } | null;
   /** How many times the presenter has pressed on the desk; a change draws a click ring on watchers. */
   clicks: number;
+  /** Reconnect the exhibit: the cable the presenter is holding (its row on the left), drawn to the cursor. */
+  wire: { from: number; moved: boolean } | null;
 }
 
 export const DESK_W = 1600;
 export const DESK_H = 900;
-export const NO_POINTER: PresenterPointer = { selected: null, hover: null, cursor: null, clicks: 0 };
+export const NO_POINTER: PresenterPointer = { selected: null, hover: null, cursor: null, clicks: 0, wire: null };
 
 const ROOM_IDS = new Set(DEMO.rooms.map((r) => r.id));
 const room = (v: unknown): string | null => (typeof v === 'string' && ROOM_IDS.has(v) ? v : null);
@@ -35,7 +37,10 @@ export function parsePointer(raw: unknown): PresenterPointer | null {
     cursor = { x: clamp(c.x, DESK_W), y: clamp(c.y, DESK_H), touch: c.touch === true };
   }
   const clicks = typeof r.clicks === 'number' && Number.isFinite(r.clicks) ? Math.max(0, Math.floor(r.clicks)) % 1_000_000 : 0;
-  return { selected: room(r.selected), hover: room(r.hover), cursor, clicks };
+  const w = r.wire as Record<string, unknown> | null | undefined;
+  const from = w && typeof w === 'object' ? w.from : undefined;
+  const wire = typeof from === 'number' && Number.isInteger(from) && from >= 0 && from < 8 ? { from, moved: w!.moved === true } : null;
+  return { selected: room(r.selected), hover: room(r.hover), cursor, clicks, wire };
 }
 
 /** The room a page shows as picked: a watcher sees the presenter's, anyone with control their own. */

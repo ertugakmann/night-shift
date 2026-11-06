@@ -3,7 +3,9 @@
 // Reality view: the same letter as an email under review (headers, SPF, link preview).
 import { AnimatePresence, motion } from 'motion/react';
 import type { PhishingLetter, Snapshot } from '@night-shift/shared';
+import { useRef } from 'react';
 import { sendIntent, useGame } from '../net/game';
+import { PresenterCursor, useMirrorPointer } from '../desk/PresenterCursor';
 import { worldOf } from '../game/view';
 import { MiniHeader } from './MiniHeader';
 
@@ -25,10 +27,25 @@ function wrap(text: string, max: number): string[] {
 
 type Answer = 'safe' | 'phishing';
 
+// the two answer buttons along the bottom
+const BUTTON_Y = 735;
+const BUTTON_W = 420;
+const BUTTON_H = 120;
+const BUTTONS: { a: Answer; x: number }[] = [
+  { a: 'safe', x: 330 },
+  { a: 'phishing', x: 850 },
+];
+
 export function LetterGame({ reality }: { reality: boolean }) {
-  const { snapshot, role } = useGame();
+  const { snapshot, role, pointer } = useGame();
+  const svg = useRef<SVGSVGElement>(null);
+  const mirror = useMirrorPointer(svg);
   const l = snapshot?.letter;
   if (!snapshot || !l) return null;
+  const watching = role === 'watcher';
+  // watching: the button under the presenter's cursor lights up as it arrives
+  const cur = watching ? pointer?.cursor : null;
+  const pointed: Answer | null = cur && cur.y >= BUTTON_Y && cur.y <= BUTTON_Y + BUTTON_H ? (BUTTONS.find((b) => cur.x >= b.x && cur.x <= b.x + BUTTON_W)?.a ?? null) : null;
   const w = worldOf(snapshot);
   const letter = w.sc.phishing.letters[l.index];
   const canAct = role !== 'watcher' && l.result === null;
@@ -37,12 +54,23 @@ export function LetterGame({ reality }: { reality: boolean }) {
   };
 
   return (
-    <svg viewBox={`0 0 ${W} 900`} preserveAspectRatio="xMidYMid meet" className="block h-full w-full select-none" style={{ touchAction: 'none' }} role="application" aria-label="Safe or phishing?">
+    <svg
+      ref={svg}
+      viewBox={`0 0 ${W} 900`}
+      preserveAspectRatio="xMidYMid meet"
+      className="block h-full w-full select-none"
+      style={{ touchAction: 'none' }}
+      onPointerDown={mirror.press}
+      onPointerMove={mirror.track}
+      onPointerLeave={mirror.leave}
+      role="application"
+      aria-label="Safe or phishing?"
+    >
       <rect width={W} height={900} fill={reality ? '#0a1120' : '#2a1d5c'} />
       {reality ? <EmailView letter={letter} /> : <PaperView letter={letter} />}
       <Stamp snapshot={snapshot} reality={reality} />
       {l.result === null ? (
-        <Buttons reality={reality} canAct={canAct} onAnswer={answer} watching={role === 'watcher'} />
+        <Buttons reality={reality} canAct={canAct} onAnswer={answer} watching={watching} pointed={pointed} />
       ) : (
         <Verdict snapshot={snapshot} reality={reality} />
       )}
@@ -59,6 +87,7 @@ export function LetterGame({ reality }: { reality: boolean }) {
         reality={reality}
         canAct={role !== 'watcher'}
       />
+      {watching && <PresenterCursor pointer={pointer} />}
     </svg>
   );
 }
@@ -134,22 +163,24 @@ function EmailView({ letter }: { letter: PhishingLetter }) {
 }
 
 // ---------- the two buttons ----------
-function Buttons({ reality, canAct, watching, onAnswer }: { reality: boolean; canAct: boolean; watching: boolean; onAnswer: (a: Answer) => void }) {
+function Buttons({ reality, canAct, watching, onAnswer, pointed }: { reality: boolean; canAct: boolean; watching: boolean; onAnswer: (a: Answer) => void; pointed: Answer | null }) {
   const button = (a: Answer, x: number) => {
     const safe = a === 'safe';
     const color = safe ? '#3ee0d8' : '#f2994a';
     const label = reality ? (safe ? 'Release' : 'Report phishing') : safe ? 'Safe' : 'Phishing!';
+    const lit = pointed === a;
     return (
       <g
-        transform={`translate(${x},735)`}
-        style={{ cursor: canAct ? 'pointer' : 'default' }}
-        opacity={canAct ? 1 : 0.55}
+        transform={`translate(${x},${BUTTON_Y})`}
+        style={{ cursor: canAct ? 'pointer' : 'default', transition: 'opacity 150ms ease' }}
+        opacity={canAct || lit ? 1 : 0.55}
         onPointerDown={(e) => {
           e.preventDefault();
           onAnswer(a);
         }}
       >
-        <rect width={420} height={120} rx={reality ? 12 : 60} fill={reality ? '#0d1729' : '#17123a'} stroke={color} strokeWidth={6} />
+        <rect x={-10} y={-10} width={BUTTON_W + 20} height={BUTTON_H + 20} rx={reality ? 18 : 70} fill="none" stroke={color} strokeWidth={6} opacity={lit ? 0.45 : 0} style={{ transition: 'opacity 150ms ease' }} />
+        <rect width={BUTTON_W} height={BUTTON_H} rx={reality ? 12 : 60} fill={reality ? '#0d1729' : '#17123a'} stroke={color} strokeWidth={6} />
         {/* icon: a tick, or a fish hook */}
         <g transform="translate(78,60)" fill="none" stroke={color} strokeWidth={9} strokeLinecap="round" strokeLinejoin="round">
           {safe ? <path d="M-24 0 L-6 18 L26 -18" /> : <path d="M8 -30 L8 10 A16 16 0 0 1 -24 10 L-24 2 M-24 2 L-14 10" />}
@@ -162,8 +193,9 @@ function Buttons({ reality, canAct, watching, onAnswer }: { reality: boolean; ca
   };
   return (
     <g>
-      {button('safe', 330)}
-      {button('phishing', 850)}
+      {BUTTONS.map((b) => (
+        <g key={b.a}>{button(b.a, b.x)}</g>
+      ))}
       {watching && (
         <text x={800} y={880} textAnchor="middle" className={reality ? 'soc-text' : 'game-text'} fontSize={20} fill="#b9adf0" pointerEvents="none">
           Watching

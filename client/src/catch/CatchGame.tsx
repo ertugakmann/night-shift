@@ -2,7 +2,7 @@
 // (berets) hides among innocent night visitors. Click every intruder before time runs out; a wrong click
 // costs seconds. In the reality view the same scene is a live-response process list: end the malicious
 // processes, leave the clinical ones alone. The server owns the game, so every screen watches it live.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { theRoom, type Catch, type CatchFigure, type Snapshot } from '@night-shift/shared';
 import { ROOMS } from '../building/layout';
@@ -11,6 +11,7 @@ import { IntruderArt } from '../building/Characters';
 import { worldOf } from '../game/view';
 import { sendIntent, useGame } from '../net/game';
 import { Confetti } from '../building/Effects';
+import { PresenterCursor, useMirrorPointer } from '../desk/PresenterCursor';
 
 const W = 1600;
 const H = 900;
@@ -474,15 +475,24 @@ const AIM_EVERY_MS = 90;
  * dark finds nobody). Everyone watching sees the player's light.
  */
 export function CatchGame({ reality }: { reality: boolean }) {
-  const { snapshot, role } = useGame();
+  const { snapshot, role, pointer } = useGame();
   const svg = useRef<SVGSVGElement>(null);
   const [local, setLocal] = useState<Pt | null>(null);
   const lastSent = useRef(0);
+  const mirror = useMirrorPointer(svg);
+  // watching: the light rides on the presenter's cursor while their hand moves (smoother than the
+  // aim in the snapshot); when it rests, the aim leads (someone else with control may be playing)
+  const cursor = pointer?.cursor ?? null;
+  const movedAt = useRef(0);
+  useEffect(() => {
+    if (cursor) movedAt.current = performance.now();
+  }, [cursor?.x, cursor?.y]); // eslint-disable-line react-hooks/exhaustive-deps
   const c = snapshot?.catch;
   if (!snapshot || !c) return null;
   const canAct = role !== 'watcher';
   const live = c.result === null;
-  const light: Pt = (canAct && local) || c.aim || { x: 800, y: reality ? 420 : 560 };
+  const presenterHand = !canAct && live && cursor && performance.now() - movedAt.current < 1000 ? { x: cursor.x, y: cursor.y } : null;
+  const light: Pt = (canAct && local) || presenterHand || c.aim || { x: 800, y: reality ? 420 : 560 };
 
   const toScene = (e: React.PointerEvent): Pt => {
     const m = svg.current?.getScreenCTM();
@@ -526,14 +536,22 @@ export function CatchGame({ reality }: { reality: boolean }) {
       preserveAspectRatio="xMidYMid meet"
       className="block h-full w-full select-none"
       style={{ touchAction: 'none', cursor: canAct && live ? 'crosshair' : 'default' }}
-      onPointerDown={down}
-      onPointerMove={(e) => canAct && live && aim(toScene(e))}
+      onPointerDown={(e) => {
+        mirror.press(e);
+        down(e);
+      }}
+      onPointerMove={(e) => {
+        mirror.track(e);
+        if (canAct && live) aim(toScene(e));
+      }}
+      onPointerLeave={mirror.leave}
       role="application"
       aria-label="Catch the intruders"
     >
       {reality ? <ProcessList c={c} snapshot={snapshot} light={light} /> : <MuseumScene c={c} snapshot={snapshot} light={light} />}
       <Header c={c} snapshot={snapshot} reality={reality} canAct={canAct} />
       <Result c={c} snapshot={snapshot} reality={reality} />
+      {!canAct && <PresenterCursor pointer={pointer} />}
     </svg>
   );
 }

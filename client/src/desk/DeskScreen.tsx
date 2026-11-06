@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { padlocks, type Snapshot } from '@night-shift/shared';
 import { DangerMeter, dangerLevel } from '../game/danger';
 import { reportPointer, selectRoom, useGame } from '../net/game';
-import { PresenterCursor } from './PresenterCursor';
+import { PresenterCursor, miniGameOn, useMirrorPointer } from './PresenterCursor';
 import { RealityStrip, type StripMode } from '../reality/RealityStrip';
 import { ScreenEndWash } from '../end/EndMoment';
 import { ActionPopup } from './ActionPopup';
@@ -194,23 +194,13 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
   const watching = role === 'watcher';
 
   // The presenter's hand on the desk, in desk units, mirrored to every watching desk.
-  function track(e: React.PointerEvent) {
-    if (role !== 'presenter') return;
-    const m = svgRef.current?.getScreenCTM();
-    if (!m) return;
-    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
-    reportPointer({ cursor: { x: p.x, y: p.y, touch: e.pointerType === 'touch' } });
-  }
-  const clicks = useRef(0);
-  function press(e: React.PointerEvent) {
-    if (role !== 'presenter') return;
-    clicks.current += 1;
-    reportPointer({ clicks: clicks.current });
-    track(e);
-  }
+  const { track, press, leave } = useMirrorPointer(svgRef);
   function untrack() {
-    if (role === 'presenter') reportPointer({ cursor: null, hover: null });
+    leave();
+    if (role === 'presenter') reportPointer({ hover: null });
   }
+  // a mini game covers the desk: its own cursor shows there instead
+  const mini = miniGameOn(snapshot);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -274,7 +264,7 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
           {selected && <ActionPopup snapshot={snapshot} roomId={selected} canAct reality={reality} />}
         </g>
       )}
-      {watching && <PresenterCursor pointer={pointer} />}
+      {watching && !mini && <PresenterCursor pointer={pointer} />}
       <ScreenEndWash screen={2} rect={{ x: 0, y: 0, w: 1600, h: 900 }} reality={reality} />
       {reality && <RealityStrip x0={0} y={832} mode={strip} screen={2} />}
     </svg>

@@ -1,6 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import type { PresenterPointer } from '@night-shift/shared';
+import type { PresenterPointer, Snapshot } from '@night-shift/shared';
+import { reportPointer, reportPress, useGame } from '../net/game';
+
+/** A mini game (Catch, Reconnect, Change the locks, a letter) is over the desk. */
+export function miniGameOn(snapshot: Snapshot | null): boolean {
+  return !!(snapshot?.catch || snapshot?.wires || snapshot?.keys || snapshot?.letter);
+}
+
+/**
+ * The presenter's hand on a 1600×900 surface (the desk, or a mini game over it), reported for the
+ * watching desks. Only the presenter's page sends anything; the handlers do nothing elsewhere.
+ */
+export function useMirrorPointer(svg: React.RefObject<SVGSVGElement | null>) {
+  const { role } = useGame();
+  const at = (e: React.PointerEvent): PresenterPointer['cursor'] => {
+    const m = svg.current?.getScreenCTM();
+    if (!m) return null;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    return { x: p.x, y: p.y, touch: e.pointerType === 'touch' };
+  };
+  return {
+    track(e: React.PointerEvent) {
+      if (role === 'presenter') reportPointer({ cursor: at(e) });
+    },
+    press(e: React.PointerEvent) {
+      if (role === 'presenter') reportPress(at(e));
+    },
+    leave() {
+      if (role === 'presenter') reportPointer({ cursor: null });
+    },
+  };
+}
 
 const IDLE_MS = 3000; // like the real cursor: hides when the presenter's hand rests
 const RING_MS = 600;
@@ -28,11 +59,14 @@ export function PresenterCursor({ pointer }: { pointer: PresenterPointer | null 
   // A ring where the presenter pressed; the count seen on arrival (or a refresh) never draws one.
   const [rings, setRings] = useState<{ id: number; x: number; y: number }[]>([]);
   const lastClicks = useRef<number | null>(null);
+  const lastAt = useRef(cursor); // a quick tap may lift the finger before the press reaches us
+  if (cursor) lastAt.current = cursor;
   useEffect(() => {
     const seen = lastClicks.current;
     lastClicks.current = clicks;
-    if (seen === null || clicks === seen || !cursor) return;
-    const ring = { id: clicks, x: cursor.x, y: cursor.y };
+    const where = cursor ?? lastAt.current;
+    if (seen === null || clicks === seen || !where) return;
+    const ring = { id: clicks, x: where.x, y: where.y };
     setRings((r) => [...r.slice(-3), ring]);
     const t = setTimeout(() => setRings((r) => r.filter((x) => x !== ring)), RING_MS);
     return () => clearTimeout(t);
