@@ -12,6 +12,14 @@
   --color-danger: #ff6b6b;
 }
 
+/*
+ * 4K screens: everything in rem (badges, tab bars, buttons, notices) grows with the screen, like the SVG
+ * scenes do. 16px up to 1920×1080 (unchanged there and at 1280×720), then in proportion: 32px at 3840×2160.
+ */
+html {
+  font-size: max(16px, min(0.8333vw, 1.4815vh));
+}
+
 /* No scrolling anywhere: the app always fits the viewport. */
 html,
 body,
