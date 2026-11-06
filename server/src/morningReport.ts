@@ -28,42 +28,32 @@ const SYSTEM = `You write the end-of-shift report for NIGHT SHIFT, a game about 
 The metaphor: galleries are hospital departments, exhibits are clinical systems, the intruders are ransomware (in the museum voice always call them "the intruders", never "the gang"), guards Sam, Mia and Tom are SOC analysts, Rex the guard dog is the AI copilot, locking a gallery is isolating a system, and the Vault is the electronic patient records. Patients are always real, in both voices.
 
 Write two versions of the same night, from the facts given. Use only the facts: never invent events, numbers, systems or names.
+The report must fit on one screen without scrolling, and nothing you write is ever cut off. So keep it short: short, complete sentences, never trailing off with "..." or "…". Pick the most important facts rather than squeezing in all of them.
 
-1. museum: the head guard's morning note to the team. Warm, short and lightly funny, never scary. Cover how the night went, which galleries were hit, what Sam, Mia and Tom did, and how Rex behaved (use the trust numbers, e.g. "we followed Rex 3 times, he was wrong once"), and the letters staff asked about in the post (phishing: how many were called right, and any extra intruders a bad call let in). Mention the real patient impact plainly. Explain why the care score (careContinuity, the night's average) is where it is, from facts.why (what moved it most, with points: negative cost care, positive saved it). Never write MTTD or MTTR in this voice: say "time to spot" and "time to stop" (timeToDetect and timeToRespond in the facts). A short title (under 6 words) and exactly 3 short paragraphs, each under 45 words (the advice goes in lessons, not here). Gallery names, not hospital names.
+1. museum: the head guard's morning note to the team. Warm, short and lightly funny, never scary. Cover how the night went, which galleries were hit, what Sam, Mia and Tom did, and how Rex behaved (use the trust numbers, e.g. "we followed Rex 3 times, he was wrong once"), and the letters staff asked about in the post (phishing: how many were called right, and any extra intruders a bad call let in). Mention the real patient impact plainly. Explain why the care score (careContinuity, the night's average) is where it is, from facts.why (what moved it most, with points: negative cost care, positive saved it). Never write MTTD or MTTR in this voice: say "time to spot" and "time to stop" (timeToDetect and timeToRespond in the facts). A short title (under 6 words) and exactly 3 short paragraphs, each of 2 or 3 short sentences and under 40 words in all (the advice goes in lessons, not here). Gallery names, not hospital names. If a guard took no actions (an empty actions list), say they had a quiet night; never say they were busy.
 
-2. soc: a professional SOC shift handover for the next shift, using hospital department and system names. Short, factual lines, 1 to 3 per section, each under 18 words: incidentSummary (attack, "MTTD (mean time to detect)" and "MTTR (mean time to respond)" written out like that, which are averages over the groups the gang split into, with how many were detected and contained, and the outcome), affectedSystems, actionsTaken (who did what, when, plus the phishing triage result: correct calls and any payloads executed), patientImpact (the care score for the night and the factors that drove it most), aiCopilotPerformance (alerts, false positives, followed and ignored), nextSteps (concrete, most urgent first; if a phishing email was opened, block its sender domain).
+2. soc: a professional SOC shift handover for the next shift, using hospital department and system names. Short, factual lines, 1 to 3 per section, each one complete sentence under 16 words: incidentSummary (attack, "MTTD (mean time to detect)" and "MTTR (mean time to respond)" written out like that, which are averages over the groups the attack split into, with how many were detected and contained, and the outcome), affectedSystems, actionsTaken (who did what, when, plus the phishing triage result: correct calls and any payloads executed), patientImpact (the care score for the night and the factors that drove it most), aiCopilotPerformance (alerts, false positives, followed and ignored), nextSteps (concrete, most urgent first; if a phishing email was opened, block its sender domain).
 
-3. lessons: 2 or 3 pieces of advice for this player about their own decisions tonight, most important first, in both voices. museum: second person, friendly, naming Rex, the guards or the galleries, e.g. "You locked the Lab Gallery 40 seconds after Rex's first warning. Next time, act on Rex sooner." soc: the same advice as a SOC lesson learned, with department names. Base them on what moved the care score (facts.why) and on facts.lessons (observations about the player's decisions, most important first) and keep their exact numbers and times. Each under 24 words.`;
+3. lessons: 2 or 3 pieces of advice for this player about their own decisions tonight, most important first, in both voices. museum: second person, friendly, naming Rex, the guards or the galleries, e.g. "You locked the Lab Gallery 40 seconds after Rex's first warning. Next time, act on Rex sooner." soc: the same advice as a SOC lesson learned, with department names. Base them on what moved the care score (facts.why) and on facts.lessons (observations about the player's decisions, most important first) and keep their exact numbers and times. Each one or two short sentences, under 22 words.`;
 
-/** Short enough to fit the screen, whatever comes back. */
-function clip(text: string, max: number): string {
-  const t = text.replace(/\s+/g, ' ').trim();
-  if (t.length <= max) return t;
-  const cut = t.slice(0, max - 1);
-  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max * 0.6))}…`;
+/** Tidy whitespace. Text is never cut: the prompt keeps it short, and the screen shrinks the type if it must. */
+function tidyText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 function tidy(raw: z.infer<typeof ReportSchema>, key: string, fallback: MorningReport['lessons']): MorningReport | null {
-  // Three paragraphs, so the note still fits the screen with the tips under it.
-  const paragraphs = raw.museum.paragraphs.map((p) => clip(p, 280)).filter(Boolean).slice(0, 3);
-  // Each section gets about five lines on screen: up to 3 lines of 110 characters, 260 in all.
-  const fit = (lines: string[]) => {
-    let used = 0;
-    return lines
-      .map((l) => clip(l, 110))
-      .filter(Boolean)
-      .slice(0, 3)
-      .filter((l, i) => (used += l.length) <= 260 || i === 0);
-  };
-  const soc = Object.fromEntries(SOC_SECTIONS.map(([k]) => [k, fit(raw.soc[k])])) as MorningReport['soc'];
+  // Whole sentences only: at most 3 paragraphs and 3 lines per section, each kept as written.
+  const paragraphs = raw.museum.paragraphs.map(tidyText).filter(Boolean).slice(0, 3);
+  const lines = (list: string[]) => list.map(tidyText).filter(Boolean).slice(0, 3);
+  const soc = Object.fromEntries(SOC_SECTIONS.map(([k]) => [k, lines(raw.soc[k])])) as MorningReport['soc'];
   if (paragraphs.length < 2 || SOC_SECTIONS.some(([k]) => soc[k].length === 0)) return null;
   // Advice: 2 or 3 short lines. If Claude gave fewer than two, the ones read from the event log fill in.
-  const advice = (lines: string[], spare: string[]) => {
-    const own = lines.map((l) => clip(l, 150)).filter(Boolean).slice(0, 3);
+  const advice = (list: string[], spare: string[]) => {
+    const own = lines(list);
     return own.length >= 2 ? own : [...own, ...spare.filter((l) => !own.includes(l))].slice(0, 2);
   };
   const lessons = { museum: advice(raw.lessons.museum, fallback.museum), soc: advice(raw.lessons.soc, fallback.soc) };
-  return { key, source: 'ai', model: REPORT_MODEL, museum: { title: clip(raw.museum.title, 48), paragraphs }, soc, lessons };
+  return { key, source: 'ai', model: REPORT_MODEL, museum: { title: tidyText(raw.museum.title), paragraphs }, soc, lessons };
 }
 
 let client: Anthropic | null | undefined;

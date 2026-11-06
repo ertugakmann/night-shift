@@ -410,20 +410,29 @@ function guardLine(g: NightFacts['guards'][number]): string {
     const cur = best.get(a.gallery);
     if (!cur || rank(a) < rank(cur)) best.set(a.gallery, a);
   }
-  const bits = [...best.values()]
-    .sort((a, b) => rank(a) - rank(b))
-    .slice(0, 3)
-    .map((a) => `${a.success ? VERB[a.action][0] : VERB[a.action][1]} ${theRoom(a.gallery)}`);
-  return `${g.name} ${list(bits)}.`;
+  // The two that say most, one verb per kind: "caught the intruders in the Mail Room and the Lab Gallery".
+  const byVerb = new Map<string, string[]>();
+  for (const a of [...best.values()].sort((a, b) => rank(a) - rank(b)).slice(0, 2)) {
+    const verb = a.success ? VERB[a.action][0] : VERB[a.action][1];
+    byVerb.set(verb, [...(byVerb.get(verb) ?? []), theRoom(a.gallery).replace(/^The /, 'the ')]);
+  }
+  return `${g.name} ${list([...byVerb].map(([verb, rooms]) => `${verb} ${list(rooms)}`))}.`;
+}
+
+/** The team in one go: a line per busy guard, or one shared line on a night nobody was sent anywhere. */
+function teamLine(f: NightFacts): string {
+  if (f.guards.every((g) => g.actions.length === 0)) return 'Sam, Mia and Tom had a quiet night (the coffee machine is still broken).';
+  return f.guards.map(guardLine).join(' ');
 }
 
 function rexLine(f: NightFacts): string {
   const { followed, followedWrong, ignored, ignoredRight, barks } = f.rex;
   if (barks === 0) return 'Rex slept through the whole thing. Good boy, technically.';
   const parts: string[] = [];
-  if (followed > 0) parts.push(`we followed his nose ${times(followed)} and he was wrong ${followedWrong === 0 ? 'never' : times(followedWrong)}`);
-  if (ignored > 0) parts.push(`we ignored him ${times(ignored)} and he was right ${ignoredRight === 0 ? 'never' : ignoredRight === ignored && ignored > 1 ? 'every time' : times(ignoredRight)}`);
-  const verdict = ignoredRight > 0 ? 'Next time, maybe listen to the dog.' : f.rex.wrongBarks > 0 ? 'He did bark at an empty room once. Nobody is perfect.' : 'Extra treats for Rex.';
+  if (followed > 0) parts.push(`we followed him ${times(followed)} ${followedWrong === 0 ? '(never wrong)' : `(wrong ${times(followedWrong)})`}`);
+  if (ignored > 0) parts.push(`ignored him ${times(ignored)}${ignoredRight === 0 ? '' : ` (right ${ignoredRight === ignored && ignored > 1 ? 'every time' : times(ignoredRight)})`}`);
+  if (followed === 0 && parts.length) parts[0] = `we ${parts[0]}`;
+  const verdict = ignoredRight > 0 ? 'Next time, listen to the dog.' : f.rex.wrongBarks > 0 ? 'One bark at nothing. Nobody is perfect.' : 'Extra treats for Rex.';
   return `Rex barked ${times(barks)}: ${list(parts)}. ${verdict}`;
 }
 
@@ -431,15 +440,15 @@ function postLine(f: NightFacts): string | null {
   const p = f.phishing;
   if (p.letters === 0) return null;
   const bad = p.wrong + p.missed;
-  if (bad === 0) return `The post: ${p.letters === 1 ? 'one letter came' : `${p.letters} letters came`} and we called ${p.letters === 1 ? 'it' : 'every one'} right. Nobody fell for the fake one. Well spotted.`;
+  if (bad === 0) return `The post: ${p.letters === 1 ? 'one letter came' : `${p.letters} letters came`} and we called ${p.letters === 1 ? 'it' : 'every one'} right. Well spotted.`;
   const how = [p.wrong > 0 && `${p.wrong} wrong call${p.wrong > 1 ? 's' : ''}`, p.missed > 0 && `${p.missed} nobody checked in time`].filter(Boolean).join(' and ');
-  const cost = p.breaches > 0 ? `, and that let ${p.breaches === 1 ? 'one more group' : `${p.breaches} more groups`} in through the post` : ', but the locked doors held';
-  return `The post: ${p.right} of ${p.letters} letters called right (${how})${cost}. Look at the sender before you open anything!`;
+  const cost = p.breaches > 0 ? `, and that let ${p.breaches === 1 ? 'one more group' : `${p.breaches} more groups`} in` : ', but the locked doors held';
+  return `The post: ${p.right} of ${p.letters} letters called right (${how})${cost}. Check the sender first!`;
 }
 
 /** "Time to spot: 21 min on the night clock (2 of 3 groups). Time to stop: never." */
 function timesLine(f: NightFacts): string {
-  const night = (span: string) => span.split(',')[0];
+  const night = (span: string) => span.split(',')[0].replace(' on the night clock', '');
   const spot = f.timeToDetect ? `${night(f.timeToDetect)} (${f.groupsSpotted} of ${f.groups} groups)` : 'never';
   const stop = f.timeToRespond === null ? 'never' : f.respondedAtOnce ? 'at once' : `${night(f.timeToRespond)} (${f.groupsStopped} of ${f.groups})`;
   return `${TIME_LABELS.detect.museum}: ${spot}. ${TIME_LABELS.respond.museum}: ${stop}.`;
@@ -447,7 +456,7 @@ function timesLine(f: NightFacts): string {
 
 /** "What moved it most: the Lab Gallery dark for 1h 20m (−8) and a wrong call on a letter (−4)." */
 function whySentence(f: NightFacts): string | null {
-  const top = f.why.slice(0, 3);
+  const top = f.why.slice(0, 2);
   if (top.length === 0) return 'Nothing much dented it.';
   const bits = top.map((x) => `${x.game.replace(/^The /, 'the ')} (${pointsText(x.points)})`);
   return `What moved it most: ${list(bits)}.`;
@@ -461,20 +470,35 @@ function museumTemplate(f: NightFacts): MorningReport['museum'] {
       : `The intruders cracked the Vault at ${f.endedAt} and the ambulances had to be sent elsewhere. Our care score for the night: ${f.careContinuity}%.`;
   const dark = f.vandalised.map((v) => theRoom(v.gallery));
   const damage =
-    dark.length === 0 ? 'Not a single gallery went dark. The cleaners will be bored.' : `${some(dark, 4, 'galleries').replace(/^the/, 'The')} went dark${f.backupsDestroyed ? ', and the Archive is wrecked' : ''}. Bring the toolbox.`;
+    dark.length === 0 ? 'Not a single gallery went dark.' : `${some(dark, 2, 'galleries').replace(/^the/, 'The')} went dark${f.backupsDestroyed ? ', and the Archive is wrecked' : ''}.`;
   const hurt = IMPACT_TYPES.filter((t) => f.patientImpact[t] > 0).map((t) => `${f.patientImpact[t]} ${IMPACT_LABELS[t].toLowerCase()}`);
   const patients = hurt.length > 0 ? ` Real patients felt it: ${list(hurt)}.` : ' And no patient had to wait.';
+  // Three short paragraphs, like the ones Claude is asked for: the score and why, the galleries and the team,
+  // then Rex, the post and the times. Short enough to fit the screen with the tips under it.
   return {
     title,
-    paragraphs: [[opening, whySentence(f), timesLine(f)].filter(Boolean).join(' '), damage + patients, f.guards.map(guardLine).join(' '), [rexLine(f), postLine(f)].filter(Boolean).join(' ')],
+    paragraphs: [
+      [opening, whySentence(f)].filter(Boolean).join(' ') + patients,
+      `${damage} ${teamLine(f)}`,
+      [rexLine(f), postLine(f), timesLine(f)].filter(Boolean).join(' '),
+    ],
   };
+}
+
+/** The actions that say most (eradicate, isolate, restore before scans), then back in time order. */
+const ACTION_WEIGHT: ActionKind[] = ['evict', 'lock', 'repair', 'candlelight', 'patrol', 'unlock'];
+function keyActions<T extends { action: ActionKind; at: string }>(actions: T[], max: number): T[] {
+  return [...actions]
+    .sort((a, b) => ACTION_WEIGHT.indexOf(a.action) - ACTION_WEIGHT.indexOf(b.action) || a.at.localeCompare(b.at))
+    .slice(0, max)
+    .sort((a, b) => a.at.localeCompare(b.at));
 }
 
 function socTemplate(f: NightFacts): MorningReport['soc'] {
   const outcome =
     f.ending === 'vault'
-      ? `Major incident declared at ${f.endedAt}: electronic patient records encrypted, ambulances diverted.`
-      : 'Incident window closed at 06:00 with patient records protected.';
+      ? `Major incident declared at ${f.endedAt}: ransomware (via phishing) encrypted the patient records; ambulances diverted.`
+      : 'Ransomware intrusion via phishing; incident window closed at 06:00 with patient records protected.';
   const encrypted = f.vandalised.flatMap((v) => v.systems);
   const actions = f.guards.flatMap((g) => g.actions.filter((a) => a.success).map((a) => ({ ...a, who: g.name })));
   actions.sort((a, b) => a.at.localeCompare(b.at));
@@ -483,7 +507,7 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
   const next: string[] = [];
   if (f.intrudersLeftIn.length > 0) next.push(`Hunt and eradicate remaining ransomware in ${some(f.intrudersLeftIn.map((r) => r.department), 2, 'segments')}.`);
   if (encrypted.length > 0) next.push(f.backupsDestroyed ? 'Rebuild backups before restoring encrypted systems.' : `Restore from backup: ${some(encrypted, 2, 'systems')}.`);
-  if (f.stillLocked.length > 0) next.push(`Bring isolated services back once clean: ${some(f.stillLocked.map((r) => r.department), 2, 'more')}.`);
+  if (f.stillLocked.length > 0) next.push(`Bring isolated services back once clean: ${some(f.stillLocked.map((r) => r.department), 2, 'services')}.`);
   if (f.masterKeysStolen) next.push(f.locksChanged ? 'Admin passwords were reset in the night: check for sessions opened before the reset.' : 'Reset all admin credentials and review privileged access.');
   if (f.rex.ignoredRight > 0) next.push('Review the AI copilot alerts that went unanswered.');
   const p = f.phishing;
@@ -492,19 +516,18 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
 
   return {
     incidentSummary: [
-      'Ransomware intrusion via a phishing email.',
+      outcome,
       f.timeToDetect ? `${TIME_LABELS.detect.reality}: ${f.timeToDetect} (${f.groupsSpotted} of ${f.groups} groups detected).` : 'Never detected by a scan during the shift.',
       f.timeToRespond === null
         ? 'Not contained during the shift.'
         : f.respondedAtOnce
           ? `Isolated before it could move (${f.groupsStopped} of ${f.groups} groups contained).`
           : `${TIME_LABELS.respond.reality}: ${f.timeToRespond} (${f.groupsStopped} of ${f.groups} groups contained).`,
-      outcome,
     ],
     affectedSystems: encrypted.length > 0 ? [`Encrypted: ${some(encrypted, 4, 'systems')}.`] : ['No systems encrypted.'],
     actionsTaken: [
       ...(actions.length > 0
-        ? actions.slice(0, p.letters > 0 ? 4 : 5).map((a) => `${a.at} ${a.actionReal}, ${a.department} (Analyst ${a.who}).`)
+        ? keyActions(actions, p.letters > 0 ? 2 : 3).map((a) => `${a.at} ${a.actionReal}, ${a.department} (Analyst ${a.who}).`)
         : ['No containment actions were taken.']),
       ...(p.letters > 0
         ? [`Phishing triage ${p.right}/${p.letters} correct${p.breaches > 0 ? `, ${p.breaches} payload${p.breaches > 1 ? 's' : ''} executed` : p.wrong + p.missed > 0 ? ', payloads blocked by isolation' : ''}.`]
@@ -519,7 +542,7 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
       `${f.rex.barks} alerts, ${f.rex.wrongBarks} false positive${f.rex.wrongBarks === 1 ? '' : 's'}.`,
       `Acted on ${f.rex.followed} (${f.rex.followedWrong} false), left ${f.rex.ignored} unanswered (${f.rex.ignoredRight} true positive${f.rex.ignoredRight === 1 ? '' : 's'}).`,
     ],
-    nextSteps: next.slice(0, 4),
+    nextSteps: next.slice(0, 3),
   };
 }
 

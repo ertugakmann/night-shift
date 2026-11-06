@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { advance, applyIntent, factorText, initialState, lessonsFrom, nightFacts, pointsText, reportKey, SOC_SECTIONS, templateReport, type ActionKind, type GameState } from './index';
+import { playNight } from './bots';
 
 function started(): GameState {
   return applyIntent(applyIntent(initialState(), { type: 'start' }).state, { type: 'skipIntro' }).state;
@@ -59,7 +60,7 @@ describe('morning report template', () => {
   it('credits the guards and names what they did on a won night', () => {
     const r = templateReport(won);
     expect(won.outcome!.result).toBe('won');
-    const guards = r.museum.paragraphs[2];
+    const guards = r.museum.paragraphs[1];
     expect(guards).toMatch(/Sam caught the intruders in the Mail Room/); // the Catch action, in the museum's words
     expect(guards).not.toMatch(/evict|showed the gang out/i);
     expect(guards).toMatch(/Tom .*the Entrance Hall/);
@@ -67,7 +68,7 @@ describe('morning report template', () => {
     expect(r.soc.affectedSystems).toEqual(['No systems encrypted.']);
   });
 
-  it('fills every SOC section with short lines, and keeps the note short', () => {
+  it('fills every SOC section with short lines, and keeps the note short (the old budget, still kept)', () => {
     for (const night of [idle, won]) {
       const r = templateReport(night);
       for (const [key] of SOC_SECTIONS) {
@@ -181,8 +182,8 @@ describe('lessons: advice about the player’s own decisions', () => {
 describe('time to spot / time to stop (MTTD and MTTR)', () => {
   it('the museum note says it in plain words, never MTTD or MTTR', () => {
     const note = templateReport(won).museum.paragraphs.join(' ');
-    expect(note).toMatch(/Time to spot: \d+ (min|h)[^.]* on the night clock \(\d of \d groups\)\./);
-    expect(note).toMatch(/Time to stop: (at once|\d+ (min|h)[^.]* on the night clock \(\d of \d\))\./);
+    expect(note).toMatch(/Time to spot: \d+ (min|h)[^.(]* \(\d of \d groups\)\./);
+    expect(note).toMatch(/Time to stop: (at once|\d+ (min|h)[^.(]* \(\d of \d\))\./);
     expect(note).not.toMatch(/MTTD|MTTR/);
     // a night where nobody ever saw them
     expect(templateReport(idle).museum.paragraphs.join(' ')).toMatch(/Time to spot: never\. Time to stop: never\./);
@@ -198,7 +199,7 @@ describe('time to spot / time to stop (MTTD and MTTR)', () => {
   it('the numbers are the same in both voices (only the words change)', () => {
     const f = nightFacts(won);
     const note = templateReport(won).museum.paragraphs.join(' ');
-    expect(note).toContain(f.timeToDetect!.split(',')[0]);
+    expect(note).toContain(f.timeToDetect!.split(',')[0].replace(' on the night clock', ''));
     expect(templateReport(won).soc.incidentSummary.join(' ')).toContain(f.timeToDetect!);
   });
 });
@@ -243,4 +244,32 @@ describe('the museum voice says "intruders", never "gang"', () => {
       expect(museum).not.toMatch(/\bgang\b/i);
     }
   });
+});
+
+describe('the report fits the screen whole: nothing is ever cut', () => {
+  // The same budget Claude is asked for (3 paragraphs of 2–3 short sentences, 1–3 short lines per section),
+  // so the template fits at full size too. The screen shrinks the type if a report is longer; it never cuts.
+  const nights: [string, GameState][] = [
+    ['idle', playNight('idle')],
+    ['good', playNight('good')],
+    ['careless', playNight('careless')],
+    ['won', won],
+  ];
+  for (const [name, night] of nights) {
+    it(`${name} night: short paragraphs, short lines, no trailing "…"`, () => {
+      const r = templateReport(night);
+      expect(r.museum.paragraphs.length).toBe(3);
+      for (const p of r.museum.paragraphs) expect(p.length, p).toBeLessThanOrEqual(320);
+      const note = [r.museum.title, ...r.museum.paragraphs, ...r.lessons.museum].join(' ');
+      expect(note.length).toBeLessThanOrEqual(1150);
+      for (const [key] of SOC_SECTIONS) {
+        expect(r.soc[key].length).toBeGreaterThan(0);
+        expect(r.soc[key].length).toBeLessThanOrEqual(3);
+        for (const line of r.soc[key]) expect(line.length, line).toBeLessThanOrEqual(140);
+      }
+      for (const l of [...r.lessons.museum, ...r.lessons.soc]) expect(l.length, l).toBeLessThanOrEqual(170);
+      const all = [note, ...Object.values(r.soc).flat(), ...r.lessons.soc].join('\n');
+      expect(all).not.toMatch(/…|\.\.\./);
+    });
+  }
 });
