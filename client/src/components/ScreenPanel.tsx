@@ -2,6 +2,7 @@ import type { ScreenId } from '@night-shift/shared';
 import { BuildingScreen } from '../building/BuildingScreen';
 import { DeskScreen } from '../desk/DeskScreen';
 import { IntroOverlay } from '../intro/IntroOverlay';
+import { BriefingOverlay } from '../intro/Briefing';
 import { RealityBuilding } from '../reality/RealityBuilding';
 import type { StripMode } from '../reality/RealityStrip';
 import { RealitySwitch } from '../reality/RealitySwitch';
@@ -34,6 +35,7 @@ export function ScreenPanel({ id, embedded = false, strip = 'split' }: { id: Scr
       {id === 2 && <DeskReport />}
       {id === 2 && <ControlCodeCard />}
       <IntroOverlay id={id} quiet={embedded} />
+      <BriefingOverlay id={id} />
     </section>
   );
 }

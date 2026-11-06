@@ -12,6 +12,7 @@ import {
   PRESENTER_ONLY,
   careFactors,
   finaleActive,
+  onBriefing,
   type ActionKind,
   type GameState,
 } from './index';
@@ -891,6 +892,7 @@ describe('R resets cleanly at any moment (demo hardening)', () => {
   const moments: [string, () => GameState][] = [
     ['before the start', () => initialState()],
     ['during the intro', () => advance(applyIntent(initialState(), { type: 'start' }).state, 5000)],
+    ['during the briefing', () => advance(applyIntent(initialState(), { type: 'start' }).state, 30_000)],
     ['mid-night', () => runFor(started(), 60_000)],
     ['paused', () => applyIntent(runFor(started(), 30_000), { type: 'togglePause' }).state],
     ['with a guard on the way', () => act(started(), 'patrol', 'vault', 'sam')],
@@ -1023,18 +1025,75 @@ describe('special rooms', () => {
 describe('shift-start intro', () => {
   const radioCheck = (s: GameState) => s.log.filter((l) => l.kind === 'radio').map((l) => l.speaker);
 
-  it('plays before the clock starts, then hands over at 00:00 with the radio check', () => {
+  /** Plays the intro the way the presenter does: wait for the briefing, Enter once, watch the rest. */
+  const watchIntro = () => {
+    let s = applyIntent(initialState(), { type: 'start' }).state;
+    while (!onBriefing(s)) s = advance(s, 100);
+    s = applyIntent(s, { type: 'nextIntro' }).state;
+    while (s.phase === 'intro') s = advance(s, 100);
+    return s;
+  };
+
+  it('plays before the clock starts, waits on the briefing, then hands over at 00:00 with the radio check', () => {
     let s = applyIntent(initialState(), { type: 'start' }).state;
     expect(s.phase).toBe('intro');
     s = advance(s, 10_000);
     expect(s.phase).toBe('intro');
+    expect(onBriefing(s)).toBe(false);
     expect(s.timeMs).toBe(0);
     expect(radioCheck(s)).toEqual([]);
+    // After the power-on the briefing waits for the presenter, however long it takes. The clock stands still.
+    for (let i = 0; i < 600; i++) s = advance(s, 100);
+    expect(s.phase).toBe('intro');
+    expect(onBriefing(s)).toBe(true);
+    expect(s.introMs).toBe(w.ms.briefing);
+    expect(s.timeMs).toBe(0);
+    expect(radioCheck(s)).toEqual([]);
+    // Enter: the briefing goes, the radio check follows, then the night.
+    s = applyIntent(s, { type: 'nextIntro' }).state;
+    expect(onBriefing(s)).toBe(false);
+    expect(s.phase).toBe('intro');
     while (s.phase === 'intro') s = advance(s, 100);
     expect(s.phase).toBe('running');
     expect(s.introMs).toBe(w.ms.intro);
     expect(s.timeMs).toBe(0);
     expect(radioCheck(s)).toEqual(['Sam', 'Mia', 'Tom']);
+  });
+
+  it('the briefing comes after the banner and the power-on, before the radio check', () => {
+    expect(w.ms.briefing).toBeGreaterThanOrEqual(7000 + 4 * 900 + 700); // the last screen has powered on
+    expect(w.ms.briefing).toBeLessThan(Math.min(...w.sc.intro.radioCheck.map((l) => l.atSec * 1000)));
+  });
+
+  it('Enter once before the briefing jumps to it; Enter after it skips what is left', () => {
+    let s = advance(applyIntent(initialState(), { type: 'start' }).state, 1000);
+    s = applyIntent(s, { type: 'nextIntro' }).state;
+    expect(onBriefing(s)).toBe(true);
+    expect(s.introMs).toBe(w.ms.briefing);
+    s = applyIntent(s, { type: 'nextIntro' }).state; // starts the night
+    s = advance(s, 300);
+    expect(s.phase).toBe('intro');
+    s = applyIntent(s, { type: 'nextIntro' }).state; // skips the rest
+    expect(s.phase).toBe('running');
+    expect(radioCheck(s)).toEqual(['Sam', 'Mia', 'Tom']);
+  });
+
+  it('Enter twice quickly (skipIntro) skips the whole intro, briefing included, from any moment', () => {
+    for (const at of [0, 3000, 11_000]) {
+      const s = applyIntent(advance(applyIntent(initialState(), { type: 'start' }).state, at), { type: 'skipIntro' }).state;
+      expect(s.phase).toBe('running');
+      expect(s.briefingDone).toBe(true);
+      expect(radioCheck(s)).toEqual(['Sam', 'Mia', 'Tom']);
+    }
+    let s = applyIntent(initialState(), { type: 'start' }).state;
+    while (!onBriefing(s)) s = advance(s, 100);
+    s = applyIntent(s, { type: 'skipIntro' }).state;
+    expect(s.phase).toBe('running');
+  });
+
+  it('only the presenter can move the intro on', () => {
+    expect(PRESENTER_ONLY).toContain('nextIntro');
+    expect(PRESENTER_ONLY).toContain('skipIntro');
   });
 
   it('can be skipped, and the radio check still happens', () => {
@@ -1044,8 +1103,7 @@ describe('shift-start intro', () => {
   });
 
   it('does not change the night: watching the intro or skipping it gives the same game', () => {
-    let watched = applyIntent(initialState(), { type: 'start' }).state;
-    while (watched.phase === 'intro') watched = advance(watched, 100);
+    const watched = watchIntro();
     const skipped = started();
     const night = (s: GameState) => runUntil(s, () => false);
     expect({ ...night(watched), accMs: 0 }).toEqual({ ...night(skipped), accMs: 0 });
@@ -1055,6 +1113,16 @@ describe('shift-start intro', () => {
     const s = applyIntent(initialState(), { type: 'start' }).state;
     expect(applyIntent(s, { type: 'action', action: 'patrol', room: 'lab' }).error).toMatch(/Enter/);
     expect(applyIntent(s, { type: 'togglePause' }).error).toMatch(/Enter/);
+    const briefing = applyIntent(s, { type: 'nextIntro' }).state;
+    expect(applyIntent(briefing, { type: 'action', action: 'patrol', room: 'lab' }).error).toMatch(/briefing.*Enter/);
+  });
+
+  it('R during the briefing gives a fresh night, and S starts a new briefing', () => {
+    let s = applyIntent(applyIntent(initialState(), { type: 'start' }).state, { type: 'nextIntro' }).state;
+    s = applyIntent(s, { type: 'reset' }).state;
+    expect(s).toEqual(initialState());
+    s = applyIntent(applyIntent(s, { type: 'start' }).state, { type: 'nextIntro' }).state;
+    expect(onBriefing(s)).toBe(true);
   });
 });
 

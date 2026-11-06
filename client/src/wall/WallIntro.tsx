@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import type { Snapshot } from '@night-shift/shared';
+import { onBriefing, type Snapshot } from '@night-shift/shared';
 import { gameClock, worldOf } from '../game/view';
 import { BEAT, MISSION, inIntro } from '../intro/timeline';
 import { IntroBanner } from '../brand/Banner';
@@ -57,7 +57,7 @@ export function WallIntro({ snapshot }: { snapshot: Snapshot | null }) {
         </div>
       )}
       <div className="absolute right-4 bottom-4 rounded-lg bg-black/40 px-3 py-1 text-[#e8e0ff]/70" style={{ fontSize: 'clamp(16px, 1.8vmin, 22px)' }}>
-        Enter to skip
+        {onBriefing(snapshot) ? 'Enter twice to skip the briefing' : 'Enter to skip'}
       </div>
     </div>
   );

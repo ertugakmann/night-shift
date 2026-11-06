@@ -11,6 +11,7 @@
 
   "intro": {
     "durationSec": 20,
+    "briefingAtSec": 11.4,
     "radioCheck": [
       { "atSec": 12, "guard": "sam", "text": "West wing, all quiet." },
       { "atSec": 13.4, "guard": "mia", "text": "East wing clear, chief." },

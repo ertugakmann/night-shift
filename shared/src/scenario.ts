@@ -99,7 +99,8 @@ export interface Scenario {
   /** `finaleSec`: the last real seconds of the night, when the gang makes its dash for the Vault (about the clock, not the balance: not scaled). */
   night: { start: Clock; end: Clock; realSecondsPerGameHour: number; finaleSec: number };
   /** Shift-start intro, played on every page at once before the clock starts. */
-  intro: { durationSec: number; radioCheck: { atSec: number; guard: string; text: string }[] };
+  /** `briefingAtSec`: after the power-on the intro stops on the briefing until the presenter presses Enter. */
+  intro: { durationSec: number; briefingAtSec: number; radioCheck: { atSec: number; guard: string; text: string }[] };
   intruders: {
     entryRoom: RoomId;
     breakInAt: Clock;
@@ -198,6 +199,8 @@ export interface World {
     /** The last seconds of the night: the dash for the Vault. */
     finale: number;
     intro: number;
+    /** Where the intro waits on the briefing. */
+    briefing: number;
     breakIn: number;
     spreadTick: number;
     masterKeysTick: number;
@@ -267,6 +270,7 @@ function buildWorld(sc: Scenario): World {
       night: at(sc.night.end) - at(sc.night.start),
       finale: sc.night.finaleSec * 1000,
       intro: sc.intro.durationSec * 1000,
+      briefing: sc.intro.briefingAtSec * 1000,
       breakIn: at(sc.intruders.breakInAt),
       spreadTick: sc.intruders.spreadTickSec * 1000,
       masterKeysTick: sc.intruders.masterKeysSpreadTickSec * 1000,

@@ -13,14 +13,18 @@ const KEYS: Record<string, Exclude<IntentType, 'action' | 'catch' | 'wire' | 'co
   d: 'toggleDebug',
   c: 'toggleCode',
   b: 'clearRecord',
-  enter: 'skipIntro',
+  enter: 'nextIntro',
 };
 
-/** S start, Enter skip intro, Space pause, R reset, L lights, D debug, C control code, B clear the record. The server decides who is allowed. */
+/** Two Enters within this time skip the whole intro, briefing included (rehearsals). */
+const DOUBLE_ENTER_MS = 600;
+
+/** S start, Enter: on to the briefing / start the night / skip the rest (twice quickly: skip it all), Space pause, R reset, L lights, D debug, C control code, B clear the record. The server decides who is allowed. */
 export function usePresenterKeys(): void {
   useEffect(() => {
     let resetArmedAt = -Infinity;
     let recordArmedAt = -Infinity;
+    let enterAt = -Infinity;
     function onKeyDown(e: KeyboardEvent) {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
@@ -55,6 +59,15 @@ export function usePresenterKeys(): void {
         recordArmedAt = -Infinity;
       }
       resetArmedAt = -Infinity;
+      if (type === 'nextIntro') {
+        // Only during the intro (Enter means nothing else to the night).
+        if (snapshot?.phase !== 'intro') return;
+        const now = performance.now();
+        const double = now - enterAt < DOUBLE_ENTER_MS;
+        enterAt = double ? -Infinity : now;
+        sendIntent({ type: double ? 'skipIntro' : 'nextIntro' });
+        return;
+      }
       sendIntent({ type });
     }
     window.addEventListener('keydown', onKeyDown);

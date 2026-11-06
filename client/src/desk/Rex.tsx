@@ -9,7 +9,7 @@ const X = 1270;
 const Y = 860;
 
 /** Rex: a chubby guard dog with huge ears, curled up in the corner of the desk. */
-function RexArt({ alert }: { alert: boolean }) {
+export function RexArt({ alert }: { alert: boolean }) {
   return (
     <g>
       <ellipse cx={0} cy={10} rx={150} ry={22} fill="#000" opacity={0.25} />
@@ -68,7 +68,7 @@ function RexArt({ alert }: { alert: boolean }) {
 }
 
 /** Rex in the reality view: an AI copilot module with a status ring. */
-function CopilotArt({ alert }: { alert: boolean }) {
+export function CopilotArt({ alert }: { alert: boolean }) {
   return (
     <g>
       <circle r={92} fill="none" stroke={alert ? '#c9a6ff' : '#2f4a73'} strokeWidth={4} strokeDasharray="10 8" className={alert ? 'march' : ''} />

@@ -309,6 +309,8 @@ export interface GameState {
   phase: Phase;
   /** How far the shift-start intro has played (real ms). The game clock waits at 00:00 meanwhile. */
   introMs: number;
+  /** The presenter has ended the briefing (Enter): the intro plays on past it to the radio check. */
+  briefingDone: boolean;
   /** Simulated time since 00:00 on the game clock, in real ms. */
   timeMs: number;
   /** Time received but not yet simulated (less than one step). */
@@ -427,6 +429,7 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     scenarioId,
     phase: 'idle',
     introMs: 0,
+    briefingDone: false,
     timeMs: 0,
     accMs: 0,
     rng: sc.seed >>> 0,
@@ -542,10 +545,20 @@ function playIntro(state: GameState, dtMs: number): GameState {
   const s = clone(state);
   const w = world(s.scenarioId);
   const before = s.introMs;
-  s.introMs = Math.min(w.ms.intro, s.introMs + dtMs);
+  // The briefing waits for the presenter: the intro (and the clock) stand still on it until Enter.
+  s.introMs = Math.min(s.briefingDone ? w.ms.intro : w.ms.briefing, s.introMs + dtMs);
   radioCheck(s, w, before, s.introMs);
   if (s.introMs >= w.ms.intro) s.phase = 'running';
   return s;
+}
+
+/** True while the intro stands on the briefing, waiting for the presenter's Enter. */
+export function onBriefing(s: Pick<GameState, 'phase' | 'introMs' | 'briefingDone' | 'scenarioId'>): boolean {
+  return s.phase === 'intro' && !s.briefingDone && s.introMs >= world(s.scenarioId).ms.briefing;
+}
+
+function introError(s: GameState): string {
+  return onBriefing(s) ? 'The briefing is on. Press Enter to start the night.' : 'The shift is starting. Press Enter to skip.';
 }
 
 /** Log the radio-check lines whose cue falls in (from, to]. */
@@ -1690,7 +1703,7 @@ function summarise(s: GameState, result: Outcome['result']): NightSummary {
 
 // ---------- Intents ----------
 
-export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'clearRecord', 'action', 'catch', 'wire', 'code', 'aim', 'letter'] as const;
+export const INTENT_TYPES = ['start', 'nextIntro', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'clearRecord', 'action', 'catch', 'wire', 'code', 'aim', 'letter'] as const;
 export type IntentType = (typeof INTENT_TYPES)[number];
 
 export type Intent =
@@ -1707,8 +1720,8 @@ export type Intent =
   /** The answer to "is this letter safe to open?". */
   | { type: 'letter'; answer: 'safe' | 'phishing' };
 
-/** Only the presenter page can start (or skip the intro), reset or hand over control. */
-export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode', 'clearRecord'];
+/** Only the presenter page can start (or move the intro on), reset or hand over control. */
+export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'nextIntro', 'skipIntro', 'reset', 'toggleCode', 'clearRecord'];
 
 export function isIntent(value: unknown): value is Intent {
   if (typeof value !== 'object' || value === null) return false;
@@ -1749,22 +1762,33 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
     }
     case 'start':
       if (state.phase === 'running') return { state, error: 'Already running.' };
-      if (state.phase === 'intro') return { state, error: 'The shift is starting. Press Enter to skip.' };
+      if (state.phase === 'intro') return { state, error: introError(state) };
       if (state.phase === 'ended') return { state, error: 'The night is over. Press R to reset.' };
       if (state.phase === 'paused') return { state: { ...state, phase: 'running' } };
-      return { state: { ...state, phase: 'intro', introMs: 0 } };
+      return { state: { ...state, phase: 'intro', introMs: 0, briefingDone: false } };
+    case 'nextIntro': {
+      // Enter, once: before the briefing it jumps to the briefing, on the briefing it starts the night
+      // (the radio check follows), after it skips what is left.
+      if (state.phase !== 'intro') return { state, error: 'No intro playing.' };
+      const w = world(state.scenarioId);
+      if (state.introMs < w.ms.briefing) return { state: { ...state, introMs: w.ms.briefing } };
+      if (!state.briefingDone) return { state: { ...state, briefingDone: true } };
+      return applyIntent(state, { type: 'skipIntro' });
+    }
     case 'skipIntro': {
+      // Enter twice, quickly (rehearsals): the whole intro, briefing included, at once.
       if (state.phase !== 'intro') return { state, error: 'No intro playing.' };
       const s = clone(state);
       const w = world(s.scenarioId);
       radioCheck(s, w, s.introMs, w.ms.intro); // the radio check still happens, just all at once
       s.introMs = w.ms.intro;
+      s.briefingDone = true;
       s.phase = 'running';
       return { state: s };
     }
     case 'togglePause':
       if (state.phase === 'idle') return { state, error: 'Not started yet. Press S.' };
-      if (state.phase === 'intro') return { state, error: 'The shift is starting. Press Enter to skip.' };
+      if (state.phase === 'intro') return { state, error: introError(state) };
       if (state.phase === 'ended') return { state, error: 'The night is over. Press R to reset.' };
       return { state: { ...state, phase: state.phase === 'running' ? 'paused' : 'running' } };
     case 'reset': {
@@ -1799,7 +1823,7 @@ function dispatch(state: GameState, intent: Extract<Intent, { type: 'action' }>)
   const room = w.room.get(intent.room);
   if (!room) return fail('Unknown room.');
   if (state.phase === 'idle') return fail('The night has not started yet.');
-  if (state.phase === 'intro') return fail('The shift is starting. Press Enter to skip.');
+  if (state.phase === 'intro') return fail(introError(state));
   if (state.phase === 'paused') return fail('Paused. Press Space to continue.');
   if (state.phase === 'ended') return fail('The night is over.');
 

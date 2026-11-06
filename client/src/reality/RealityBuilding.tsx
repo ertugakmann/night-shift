@@ -108,7 +108,7 @@ function SystemCard({
 
 const IDLE_REAL = { look: 'monitoring', yawn: 'idle', biscuit: 'coffee break' } as const;
 
-function Analyst({ x, y, name, initial, act }: { x: number; y: number; name: string; initial: string; act: keyof typeof IDLE_REAL | null }) {
+export function Analyst({ x, y, name, initial, act }: { x: number; y: number; name: string; initial: string; act: keyof typeof IDLE_REAL | null }) {
   return (
     <motion.g initial={false} animate={{ x, y: y - 46 }} transition={{ duration: 0.12, ease: 'linear' }}>
       {act && (
@@ -135,7 +135,7 @@ function Analyst({ x, y, name, initial, act }: { x: number; y: number; name: str
   );
 }
 
-function Ransomware({ x, y, detected }: { x: number; y: number; detected: boolean }) {
+export function Ransomware({ x, y, detected }: { x: number; y: number; detected: boolean }) {
   return (
     <g transform={`translate(${x},${y - 34})`}>
       {detected && <circle r={44} fill="none" stroke={C.encrypted} strokeWidth={3} className="shimmer" />}

@@ -230,3 +230,14 @@ body {
 .cheer-small { animation: cheer-small 0.4s ease-in-out infinite alternate; }
 @keyframes cheer-small { from { transform: translateY(0); } to { transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .cheer-small { animation: none !important; } }
+
+/* The briefing: fades in over the powered-on screens, characters rise one by one, and it all fades out softly on Enter. */
+.briefing-in { animation: briefing-in 800ms ease-in-out both; }
+.briefing-out { animation: briefing-out 800ms ease-in-out both; }
+.briefing-rise { animation: briefing-rise 600ms ease-out both; }
+@keyframes briefing-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes briefing-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes briefing-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .briefing-rise { animation: briefing-in 300ms ease-out both; }
+}
