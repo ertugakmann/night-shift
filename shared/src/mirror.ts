@@ -13,11 +13,13 @@ export interface PresenterPointer {
   hover: string | null;
   /** The mouse or finger in desk units (1600×900), null when it is off the desk. */
   cursor: { x: number; y: number; touch: boolean } | null;
+  /** How many times the presenter has pressed on the desk; a change draws a click ring on watchers. */
+  clicks: number;
 }
 
 export const DESK_W = 1600;
 export const DESK_H = 900;
-export const NO_POINTER: PresenterPointer = { selected: null, hover: null, cursor: null };
+export const NO_POINTER: PresenterPointer = { selected: null, hover: null, cursor: null, clicks: 0 };
 
 const ROOM_IDS = new Set(DEMO.rooms.map((r) => r.id));
 const room = (v: unknown): string | null => (typeof v === 'string' && ROOM_IDS.has(v) ? v : null);
@@ -32,7 +34,8 @@ export function parsePointer(raw: unknown): PresenterPointer | null {
   if (c && typeof c === 'object' && typeof c.x === 'number' && typeof c.y === 'number' && Number.isFinite(c.x) && Number.isFinite(c.y)) {
     cursor = { x: clamp(c.x, DESK_W), y: clamp(c.y, DESK_H), touch: c.touch === true };
   }
-  return { selected: room(r.selected), hover: room(r.hover), cursor };
+  const clicks = typeof r.clicks === 'number' && Number.isFinite(r.clicks) ? Math.max(0, Math.floor(r.clicks)) % 1_000_000 : 0;
+  return { selected: room(r.selected), hover: room(r.hover), cursor, clicks };
 }
 
 /** The room a page shows as picked: a watcher sees the presenter's, anyone with control their own. */
