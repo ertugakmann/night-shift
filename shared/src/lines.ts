@@ -53,7 +53,7 @@ const DISPATCH: Record<ActionKind, string[]> = {
   patrol: ['{name}, check {target}.', '{name}, take a look in {target}.', '{name}, shine a light in {target}, please.'],
   lock: ['{name}, lock {target}.', '{name}, seal {target}.', '{name}, lock up {target} now.'],
   unlock: ['{name}, take the padlock off {target}.', '{name}, open {target} again.'],
-  evict: ['{name}, catch them in {target}.', '{name}, go catch the gang in {target}.', '{name}, catch those berets in {target}.'],
+  evict: ['{name}, catch them in {target}.', '{name}, go catch the intruders in {target}.', '{name}, catch those berets in {target}.'],
   repair: ['{name}, repair {target}.', '{name}, get {target} running again.', '{name}, fix up {target}.'],
   candlelight: ['{name}, light the candles in {target}.', '{name}, switch {target} to candlelight.'],
 };

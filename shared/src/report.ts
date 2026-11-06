@@ -240,7 +240,7 @@ export function nightFacts(state: GameState): NightFacts {
 
 // ---------- Lessons ----------
 
-const DID: Partial<Record<ActionKind, string>> = { patrol: 'checked', lock: 'locked', evict: 'went to catch the gang in' };
+const DID: Partial<Record<ActionKind, string>> = { patrol: 'checked', lock: 'locked', evict: 'went to catch the intruders in' };
 
 /**
  * Advice about the player's own decisions, read from the event log: how fast Rex's right barks were
@@ -310,20 +310,20 @@ export function lessonsFrom(state: GameState): Lesson[] {
   // Found, but never trapped.
   const escaped = state.groupLog.filter((r) => r.spottedMs !== null && r.stoppedMs === null).length;
   if (escaped > 0) {
-    add(7, `You found the gang but they slipped away${escaped > 1 ? ` ${escaped} times` : ''}. Keep a second guard ready to lock as soon as a patrol spots them.`, `${escaped} detected threat${escaped > 1 ? 's' : ''} never contained. Pair every detection with immediate isolation.`);
+    add(7, `You found the intruders but they slipped away${escaped > 1 ? ` ${escaped} times` : ''}. Keep a second guard ready to lock as soon as a patrol spots them.`, `${escaped} detected threat${escaped > 1 ? 's' : ''} never contained. Pair every detection with immediate isolation.`);
   }
 
   // Detection.
   const first = state.groupLog[0];
   if (first && state.groupLog.every((r) => r.spottedMs === null)) {
-    add(6, "Nobody ever saw the gang. Send a patrol to the Mail Room early: that's where they get in.", 'Initial access was never detected. Hunt at the entry point (email) first.');
+    add(6, "Nobody ever saw the intruders. Send a patrol to the Mail Room early: that's where they get in.", 'Initial access was never detected. Hunt at the entry point (email) first.');
   } else if (first && first.spottedMs !== null && first.spottedMs - first.appearedMs > 30_000) {
     const d = sec(first.spottedMs - first.appearedMs);
-    add(5, `The gang was inside for ${secs(first.spottedMs - first.appearedMs)} before anyone saw them. Patrol the Mail Room early.`, `First foothold undetected for ${d} s. Hunt at the entry point early.`);
+    add(5, `The intruders were inside for ${secs(first.spottedMs - first.appearedMs)} before anyone saw them. Patrol the Mail Room early.`, `First foothold undetected for ${d} s. Hunt at the entry point early.`);
   }
 
   if (state.stats.keysStolen && !state.stats.keysChanged) {
-    add(5, 'The gang kept the master keys. Type the new code fast when the Key Room falls.', 'Stolen admin credentials stayed valid. Rehearse the emergency password reset.');
+    add(5, 'The intruders kept the master keys. Type the new code fast when the Key Room falls.', 'Stolen admin credentials stayed valid. Rehearse the emergency password reset.');
   }
 
   // A lock on an empty room.
@@ -347,7 +347,7 @@ export function lessonsFrom(state: GameState): Lesson[] {
     const text = factorText(worst, state.scenarioId);
     const pts = pointsText(worst.points);
     if (worst.kind === 'dark') add(8, `${text.game} cost ${pts.replace('−', '')} points. Lock it once it's clear and repair it: the longer it stays dark, the more it costs.`, `${text.soc} (${pts}). Isolate, then restore from backup early: encrypted systems cost more over time.`);
-    else if (worst.kind === 'locked' && emptyLock?.room !== worst.target) add(8, `${text.game} cost ${pts.replace('−', '')} points. Catch the gang and repair or reopen it to win the exhibits back sooner.`, `${text.soc} (${pts}). Eradicate and restore sooner to bring the service back.`);
+    else if (worst.kind === 'locked' && emptyLock?.room !== worst.target) add(8, `${text.game} cost ${pts.replace('−', '')} points. Catch the intruders and repair or reopen it to win the exhibits back sooner.`, `${text.soc} (${pts}). Eradicate and restore sooner to bring the service back.`);
     else add(7, `${text.game} cost ${pts.replace('−', '')} points. Find them sooner: follow the clues and patrol.`, `${text.soc} (${pts}). Faster detection limits the damage.`);
   }
 
@@ -389,7 +389,7 @@ const VERB: Record<ActionKind, [hit: string, miss: string]> = {
   patrol: ['caught intruders in', 'checked'],
   lock: ['locked', 'locked'],
   unlock: ['reopened', 'reopened'],
-  evict: ['caught the gang in', 'tried to catch the gang in'],
+  evict: ['caught the intruders in', 'tried to catch the intruders in'],
   repair: ['fixed up', 'tried to fix'],
   candlelight: ['lit the candles in', 'lit the candles in'],
 };
@@ -458,7 +458,7 @@ function museumTemplate(f: NightFacts): MorningReport['museum'] {
   const opening =
     f.ending === 'dawn'
       ? `Dawn at last, and the Vault is safe. Our care score for the night: ${f.careContinuity}%.`
-      : `The gang cracked the Vault at ${f.endedAt} and the ambulances had to be sent elsewhere. Our care score for the night: ${f.careContinuity}%.`;
+      : `The intruders cracked the Vault at ${f.endedAt} and the ambulances had to be sent elsewhere. Our care score for the night: ${f.careContinuity}%.`;
   const dark = f.vandalised.map((v) => theRoom(v.gallery));
   const damage =
     dark.length === 0 ? 'Not a single gallery went dark. The cleaners will be bored.' : `${some(dark, 4, 'galleries').replace(/^the/, 'The')} went dark${f.backupsDestroyed ? ', and the Archive is wrecked' : ''}. Bring the toolbox.`;

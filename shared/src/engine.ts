@@ -636,7 +636,7 @@ function tick(s: GameState, w: World): void {
 
   if (s.brokenIn && !s.finaleStarted && inFinale(s, w) && s.groups.some((g) => !s.rooms[g.room].locked && g.room !== w.vault)) {
     s.finaleStarted = true;
-    log(s, { kind: 'event', text: 'The gang makes a last dash for the Vault!', real: 'Final push: the ransomware is racing for the patient records.' });
+    log(s, { kind: 'event', text: 'The intruders make a last dash for the Vault!', real: 'Final push: the ransomware is racing for the patient records.' });
   }
   if (s.brokenIn && now >= s.nextSpreadMs) {
     spread(s, w);
@@ -838,7 +838,7 @@ function updateRooms(s: GameState, w: World): void {
     if (room.special === 'vault' && rs.occupiedMs >= w.ms.vaultLose) {
       s.impact.ambulances = Math.max(s.impact.ambulances, Math.floor(s.impact.ambulances) + w.sc.majorIncidentAmbulances);
       s.care = 0; // the crown jewel is gone: care drops to nothing (and stays there until dawn, see summarise)
-      end(s, 'lost', 'The gang cracked the Vault.', 'Major incident declared: ambulances diverted.');
+      end(s, 'lost', 'The intruders cracked the Vault.', 'Major incident declared: ambulances diverted.');
       return;
     }
     if (!rs.dark && rs.occupiedMs >= w.ms.vandalise) vandalise(s, w, room.id);
@@ -865,7 +865,7 @@ function vandalise(s: GameState, w: World, roomId: RoomId): void {
     log(s, {
       kind: 'event',
       room: roomId,
-      text: 'The gang took the master keys. They move faster now.',
+      text: 'The intruders took the master keys. They move faster now.',
       real: 'Admin credentials stolen: faster spread.',
     });
   }
@@ -1454,7 +1454,7 @@ function resolveKeys(s: GameState, ok: boolean): void {
     s.stats.keysChanged = true;
     log(s, { kind: 'event', text: 'New locks fitted. The master keys are useless now.', real: 'Admin passwords reset. Stolen credentials revoked.' });
   } else {
-    log(s, { kind: 'event', text: 'Too slow. The gang keeps the master keys.', real: 'Reset missed: stolen admin credentials still valid.' });
+    log(s, { kind: 'event', text: 'Too slow. The intruders keep the master keys.', real: 'Reset missed: stolen admin credentials still valid.' });
   }
 }
 

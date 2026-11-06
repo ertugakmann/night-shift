@@ -41,10 +41,10 @@ export function headline(snapshot: Snapshot, outcome: Outcome, reality: boolean)
   if (outcome.result === 'lost') {
     return {
       title: 'Major incident declared',
-      sub: reality ? `Ambulances diverted. Patient records encrypted at ${at}.` : `Ambulances diverted. The gang cracked the Vault at ${at}.`,
+      sub: reality ? `Ambulances diverted. Patient records encrypted at ${at}.` : `Ambulances diverted. The intruders cracked the Vault at ${at}.`,
     };
   }
   const dawn = outcome.atMs >= worldOf(snapshot).ms.night;
   if (reality) return { title: dawn ? 'Incident window closed' : 'Incident contained', sub: dawn ? 'Patient records protected until 06:00.' : `All ransomware eradicated at ${at}.` };
-  return { title: dawn ? 'Dawn. The Vault is safe.' : 'The gang is gone!', sub: dawn ? 'The museum made it through the night.' : `Every intruder shown the door at ${at}.` };
+  return { title: dawn ? 'Dawn. The Vault is safe.' : 'The intruders are gone!', sub: dawn ? 'The museum made it through the night.' : `Every intruder shown the door at ${at}.` };
 }

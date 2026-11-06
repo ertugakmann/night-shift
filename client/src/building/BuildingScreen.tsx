@@ -41,8 +41,7 @@ export function BuildingScreen({ screen }: { screen: BuildingScreenId }) {
   return (
     <svg
       viewBox={`${slice.x} 0 ${SLICE_W} ${SLICE_H}`}
-      // Screen 5 sits a little shorter (the banner strip under it): flush left, so the corridor from screen 4 still meets the edge.
-      preserveAspectRatio={screen === 5 ? "xMinYMin meet" : "xMidYMid meet"}
+      preserveAspectRatio="xMidYMid meet"
       className="block h-full w-full select-none"
       role="img"
       aria-label="Museum floor plan"

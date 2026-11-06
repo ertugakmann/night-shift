@@ -9,7 +9,6 @@ import { RealitySwitch } from '../reality/RealitySwitch';
 import { ControlCodeCard } from './ControlCodeCard';
 import { DeskReport } from '../report/DeskReport';
 import { DeskCatch } from '../catch/CatchViews';
-import { BannerStrip } from '../brand/Banner';
 
 /**
  * One wall screen, drawn as an SVG scene that scales cleanly: full screen on the real wall, or inside a
@@ -29,8 +28,6 @@ export function ScreenPanel({ id, embedded = false, strip = 'split' }: { id: Scr
           <RealitySwitch id={id} museum={museum} reality={reality} />
         </div>
       </div>
-      {/* Screen 5: the MoSAIcSOC banner along the bottom, always there (both views, and in the /wall monitor) */}
-      {id === 5 && <BannerStrip />}
       {id === 2 && <DeskCatch />}
       {id === 2 && <DeskReport />}
       {id === 2 && <ControlCodeCard />}

@@ -25,7 +25,7 @@ const ReportSchema = z.object({
 });
 
 const SYSTEM = `You write the end-of-shift report for NIGHT SHIFT, a game about a hospital security operations centre (SOC), told as a museum at night.
-The metaphor: galleries are hospital departments, exhibits are clinical systems, the intruder gang is ransomware, guards Sam, Mia and Tom are SOC analysts, Rex the guard dog is the AI copilot, locking a gallery is isolating a system, and the Vault is the electronic patient records. Patients are always real, in both voices.
+The metaphor: galleries are hospital departments, exhibits are clinical systems, the intruders are ransomware (in the museum voice always call them "the intruders", never "the gang"), guards Sam, Mia and Tom are SOC analysts, Rex the guard dog is the AI copilot, locking a gallery is isolating a system, and the Vault is the electronic patient records. Patients are always real, in both voices.
 
 Write two versions of the same night, from the facts given. Use only the facts: never invent events, numbers, systems or names.
 

@@ -27,7 +27,7 @@ export function KeysGame({ reality }: { reality: boolean }) {
       <g className={reality ? 'soc-text' : 'game-text'}>
         <rect x={180} y={150} width={W - 360} height={300} rx={reality ? 16 : 36} fill={reality ? '#1a0f16' : '#17123a'} stroke="#ff6b6b" strokeWidth={6} className={k.result === null ? 'danger-pulse' : ''} />
         <text x={W / 2} y={222} textAnchor="middle" fontSize={34} fontWeight={800} fill="#ff9a8a">
-          {reality ? 'Domain admin credentials compromised' : 'The gang stole the master keys!'}
+          {reality ? 'Domain admin credentials compromised' : 'The intruders stole the master keys!'}
         </text>
         <text x={W / 2} y={266} textAnchor="middle" fontSize={24} fill={reality ? '#cfe0f5' : '#fff1cf'}>
           {reality ? 'Emergency password reset. Enter the confirmation code:' : 'Change every lock in the museum. Type the code:'}
@@ -91,7 +91,7 @@ export function KeysGame({ reality }: { reality: boolean }) {
           good={k.result === 'changed'}
           reality={reality}
           title={k.result === 'changed' ? (reality ? 'Credentials revoked' : 'New locks fitted!') : reality ? 'Reset missed' : 'Too slow!'}
-          sub={k.result === 'changed' ? (reality ? 'The stolen admin passwords no longer work.' : 'The master keys are useless now.') : reality ? 'Stolen admin credentials still valid.' : 'The gang keeps the master keys.'}
+          sub={k.result === 'changed' ? (reality ? 'The stolen admin passwords no longer work.' : 'The master keys are useless now.') : reality ? 'Stolen admin credentials still valid.' : 'The intruders keep the master keys.'}
         />
       )}
     </svg>

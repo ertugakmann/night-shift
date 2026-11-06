@@ -275,7 +275,7 @@ export function RealityBuilding({ screen, strip = 'split' }: { screen: BuildingS
   const doors = DOORS.filter((d) => intersects(doorBounds(d), slice));
 
   return (
-    <svg viewBox={`${slice.x} 0 ${SLICE_W} ${SLICE_H}`} preserveAspectRatio={screen === 5 ? "xMinYMin meet" : "xMidYMid meet"} className="soc-text block h-full w-full select-none" role="img" aria-label="Hospital network, reality view">
+    <svg viewBox={`${slice.x} 0 ${SLICE_W} ${SLICE_H}`} preserveAspectRatio="xMidYMid meet" className="soc-text block h-full w-full select-none" role="img" aria-label="Hospital network, reality view">
       <defs>
         <pattern id={`${uid}-unknown`} width={28} height={28} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width={28} height={28} fill="none" />

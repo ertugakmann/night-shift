@@ -60,7 +60,7 @@ describe('morning report template', () => {
     const r = templateReport(won);
     expect(won.outcome!.result).toBe('won');
     const guards = r.museum.paragraphs[2];
-    expect(guards).toMatch(/Sam caught the gang in the Mail Room/); // the Catch action, in the museum's words
+    expect(guards).toMatch(/Sam caught the intruders in the Mail Room/); // the Catch action, in the museum's words
     expect(guards).not.toMatch(/evict|showed the gang out/i);
     expect(guards).toMatch(/Tom .*the Entrance Hall/);
     expect(r.soc.actionsTaken.join(' ')).toMatch(/Eradicate, Email/); // reality: still Eradicate
@@ -226,5 +226,21 @@ describe('why the care score is what it is', () => {
   it('the tips follow the factors: what cost the most care gets advice', () => {
     const lessons = nightFacts(idle).lessons.map((l) => l.game).join(' ');
     expect(lessons).toMatch(/dark for .* cost \d+ points\. Lock it once it's clear and repair it/);
+  });
+});
+
+describe('the museum voice says "intruders", never "gang"', () => {
+  it('in the radio log, the morning report, the tips and every lesson', () => {
+    for (const night of [idle, won]) {
+      const r = templateReport(night);
+      const museum = [
+        ...night.log.map((l) => l.text),
+        r.museum.title,
+        ...r.museum.paragraphs,
+        ...r.lessons.museum,
+        ...lessonsFrom(night).map((l) => l.game),
+      ].join('\n');
+      expect(museum).not.toMatch(/\bgang\b/i);
+    }
   });
 });

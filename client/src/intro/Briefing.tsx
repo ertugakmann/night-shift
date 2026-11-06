@@ -191,7 +191,7 @@ function StartHint({ v, presenter }: { v: Voice; presenter: boolean }) {
 function LobbyBriefing({ v, uid }: { v: Voice; uid: string }) {
   return (
     <>
-      <Title text={v.real ? 'Ransomware' : 'The gang'} v={v} />
+      <Title text={v.real ? 'Ransomware' : 'The intruders'} v={v} />
       <defs>
         <linearGradient id={`${uid}-beam`} x1="0" x2="1" y1="0" y2="0">
           <stop offset="0%" stopColor={v.real ? '#3ee0d8' : '#ffd27a'} stopOpacity={0.55} />
@@ -461,11 +461,9 @@ export function BriefingOverlay({ id }: { id: ScreenId }) {
   if (!on && (!leaving || snapshot?.phase === 'idle')) return null;
   const v = real ? REALITY : MUSEUM;
   return (
-    // Screen 5 keeps its MoSAIcSOC banner strip (4.5% along the bottom) in view, uncovered.
     <div
       data-intro="briefing"
       className={`pointer-events-none absolute inset-0 z-30 ${on ? 'briefing-in' : 'briefing-out'}`}
-      style={id === 5 ? { bottom: '4.5%' } : undefined}
     >
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className={`h-full w-full ${v.font}`}>
         <rect x={-2000} y={-2000} width={W + 4000} height={H + 4000} fill={v.shade} opacity={0.8} />

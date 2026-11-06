@@ -27,16 +27,6 @@ export function BannerSvg({ x, y, width, height }: { x: number; y: number; width
   );
 }
 
-/** Screen 5: a thin strip along the bottom, always there, in both views. */
-export function BannerStrip() {
-  return (
-    <div className="flex shrink-0 items-center justify-center bg-[#0c0922]" style={{ height: '4.5%' }}>
-      {/* small on purpose: kept well under its own size so it stays sharp */}
-      <BannerImg className="h-[72%] w-auto" />
-    </div>
-  );
-}
-
 /** Shift start: on the black screen, like the studio logos before a film. Fades in and out. */
 export function IntroBanner({ t, from, to }: { t: number; from: number; to: number }) {
   if (t < from || t >= to) return null;

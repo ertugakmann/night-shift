@@ -1267,7 +1267,7 @@ describe('the final dash (last 30 seconds)', () => {
     expect(finaleActive(s)).toBe(false);
     s = runUntil(s, (x) => x.timeMs >= finaleFrom + 100);
     expect(finaleActive(s)).toBe(true);
-    expect(s.log.filter((l) => l.text === 'The gang makes a last dash for the Vault!')).toHaveLength(1);
+    expect(s.log.filter((l) => l.text === 'The intruders make a last dash for the Vault!')).toHaveLength(1);
     // Every spread tick from now on: one door closer to the Vault (west corridor → east corridor → emergency → vault).
     const path: string[] = [s.groups[0].room];
     s = runUntil(s, (x) => x.groups[0].room === 'vault' || x.phase !== 'running');
@@ -1284,7 +1284,7 @@ describe('the final dash (last 30 seconds)', () => {
     s = runUntil(s, () => false);
     expect(s.outcome?.result).toBe('won');
     expect(s.groups[0].room).toBe('lab');
-    expect(s.log.some((l) => l.text.startsWith('The gang makes a last dash'))).toBe(false);
+    expect(s.log.some((l) => l.text.startsWith('The intruders make a last dash'))).toBe(false);
   });
 
   it('never touches the idle night: still lost at 03:48, Rex still wrong once at the Pharmacy', () => {
@@ -1401,7 +1401,7 @@ describe('the Catch action (Eradicate in the reality view)', () => {
     s = evictAndCatch(s, 'mail-room', 'sam');
     const lines = s.log.slice(before);
     const order = lines.find((l) => l.speaker === 'You')!;
-    expect(order.text).toMatch(/^Sam, (catch them in|go catch the gang in|catch those berets in) the Mail Room\.$/);
+    expect(order.text).toMatch(/^Sam, (catch them in|go catch the intruders in|catch those berets in) the Mail Room\.$/);
     expect(order.real).toBe('Sam: Eradicate, Email.');
     const caught = lines.find((l) => l.speaker === 'Sam' && /cleared|clear\./.test(l.text))!;
     expect(caught.text).toMatch(/Caught/);
