@@ -1,3 +1,4 @@
 node_modules
 dist
 .env
+.night-shift-record.json

@@ -77,7 +77,7 @@
           "id": "letter-press",
           "name": "The Letter Press",
           "real": "Email server",
-          "criticality": 2,
+          "criticality": 6,
           "impact": null,
           "report": { "speaker": "Clare, ward admin", "text": "My inbox just went blank." }
         }
@@ -96,7 +96,7 @@
           "id": "turnstiles",
           "name": "Brass Turnstiles",
           "real": "Remote access for on-call doctors",
-          "criticality": 3,
+          "criticality": 6,
           "impact": null,
           "report": { "speaker": "Dr Osei, on call", "text": "I can't log in from home to see the scans." }
         }
@@ -116,7 +116,7 @@
           "id": "key-cabinet",
           "name": "The Master Key Cabinet",
           "real": "Staff logins (Active Directory)",
-          "criticality": 4,
+          "criticality": 5,
           "impact": null,
           "report": { "speaker": "Nurse Ada, Ward 4", "text": "My badge stopped opening the drug room." }
         }
@@ -136,7 +136,7 @@
           "id": "west-lamps",
           "name": "Corridor Lamps",
           "real": "West network switch",
-          "criticality": 2,
+          "criticality": 4,
           "impact": null,
           "report": { "speaker": "Malik, lab technician", "text": "The Wi-Fi in the west wing keeps dropping." }
         }
@@ -212,7 +212,7 @@
           "id": "east-lamps",
           "name": "Corridor Lamps",
           "real": "East network switch",
-          "criticality": 2,
+          "criticality": 4,
           "impact": null,
           "report": { "speaker": "Leo, ED charge nurse", "text": "Network's crawling down here." }
         }
@@ -411,6 +411,21 @@
       { "at": "02:31", "speaker": "Nurse Ada, Ward 4", "text": "Printer on Ward 4 is out of paper. Not urgent." },
       { "at": "05:02", "speaker": "Malik, lab technician", "text": "Anyone seen my mug? Blue one." }
     ]
+  },
+
+  "waves": [
+    { "at": "02:00", "room": "entrance-hall", "alt": "mail-room", "guard": "tom", "text": "Chief! More berets at the front door!", "real": "New intrusion: a second ransomware wave via the VPN gateway." },
+    { "at": "04:00", "room": "mail-room", "alt": "entrance-hall", "guard": "tom", "text": "Another lot just slipped in through the Mail Room!", "real": "New intrusion: a third ransomware wave via email." }
+  ],
+
+  "care": {
+    "darkGrowthPerGameHour": 0.5,
+    "darkMaxExtra": 1.5,
+    "phishDrop": 12,
+    "phishLasting": 4,
+    "phishFadeGameHours": 1,
+    "vaultPenalty": 15,
+    "underAttack": 0.5
   },
 
   "rex": {

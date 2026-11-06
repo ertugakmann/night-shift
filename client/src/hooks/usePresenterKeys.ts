@@ -12,13 +12,15 @@ const KEYS: Record<string, Exclude<IntentType, 'action' | 'catch' | 'wire' | 'co
   l: 'toggleReality',
   d: 'toggleDebug',
   c: 'toggleCode',
+  b: 'clearRecord',
   enter: 'skipIntro',
 };
 
-/** S start, Enter skip intro, Space pause, R reset, L lights, D debug, C control code. The server decides who is allowed. */
+/** S start, Enter skip intro, Space pause, R reset, L lights, D debug, C control code, B clear the record. The server decides who is allowed. */
 export function usePresenterKeys(): void {
   useEffect(() => {
     let resetArmedAt = -Infinity;
+    let recordArmedAt = -Infinity;
     function onKeyDown(e: KeyboardEvent) {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
@@ -40,6 +42,17 @@ export function usePresenterKeys(): void {
           showNotice('Press R again to reset the night');
           return;
         }
+      }
+      // Clearing the record takes two presses too, always: it is the one thing a reset never touches.
+      if (type === 'clearRecord') {
+        if (role !== 'presenter') return;
+        const now = performance.now();
+        if (now - recordArmedAt > RESET_CONFIRM_MS) {
+          recordArmedAt = now;
+          showNotice('Press B again to clear the record');
+          return;
+        }
+        recordArmedAt = -Infinity;
       }
       resetArmedAt = -Infinity;
       sendIntent({ type });

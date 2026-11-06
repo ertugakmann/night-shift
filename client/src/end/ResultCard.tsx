@@ -1,7 +1,7 @@
-// The result card at the end of the night: care continuity against the benchmarks, MTTD and MTTR, the
+// The result card at the end of the night: the night's care score with its "Why?" and the player's record, MTTD and MTTR, the
 // trust analysis for Rex, and the patient impact. Drawn in SVG (1200×760 units, origin top-left) so it
 // sits on screen 5 and over the /wall office alike. Museum and SOC styles share the layout.
-import { BENCHMARKS, IMPACT_LABELS, IMPACT_TYPES, type Outcome, type Snapshot, TIME_LABELS } from '@night-shift/shared';
+import { IMPACT_LABELS, IMPACT_TYPES, pointsText, type Outcome, type Snapshot, TIME_LABELS, whyLines } from '@night-shift/shared';
 import { motion } from 'motion/react';
 import { ImpactIcon } from '../building/VaultExtras';
 import { sendIntent, useGame } from '../net/game';
@@ -29,7 +29,7 @@ const MUSEUM: Theme = { card: '#17123a', edge: '#f2c65e', tile: '#241c55', tileE
 const SOC: Theme = { card: '#0b1424', edge: '#2f4a73', tile: '#101d33', tileEdge: '#24395c', text: '#e6edf7', sub: '#8494ad', accent: '#3ee0d8', font: 'soc-text' };
 
 function careColor(v: number): string {
-  return v >= BENCHMARKS.averageCare ? '#3ee0d8' : v >= 50 ? '#f2994a' : '#ff6b6b';
+  return v >= 75 ? '#3ee0d8' : v >= 50 ? '#f2994a' : '#ff6b6b';
 }
 
 function Tile({ x, y, w, h, t, title, tag }: { x: number; y: number; w: number; h: number; t: Theme; title: string; tag?: string }) {
@@ -48,27 +48,30 @@ function Tile({ x, y, w, h, t, title, tag }: { x: number; y: number; w: number; 
   );
 }
 
-/** Care continuity as a ring, with the benchmark track underneath. */
-function CareBlock({ value, t, reality }: { value: number; t: Theme; reality: boolean }) {
+/** The night's care score as a big ring, the player's own record, and the "Why?" behind it. */
+function CareBlock({ snapshot, outcome, t, reality }: { snapshot: Snapshot; outcome: Outcome; t: Theme; reality: boolean }) {
+  const value = outcome.summary.careContinuity;
   const cx = 250;
-  const cy = 318;
-  const r = 128;
+  const cy = 262;
+  const r = 104;
   const circ = 2 * Math.PI * r;
   const color = careColor(value);
-  const tx = 70;
-  const tw = 360;
-  const at = (v: number) => tx + (v / 100) * tw;
-  const best = value > BENCHMARKS.bestCare;
+  const { best, previous } = snapshot.record;
+  const fresh = best !== null && best === value && (previous === null || value > previous);
+  const why = whyLines(outcome.summary.factors, snapshot.scenarioId, 4);
+  const top = 492;
+  const row = 44;
+  const fit = (text: string) => (text.length > 36 ? `${text.slice(0, 35)}…` : text);
   return (
     <g>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={t.tile} strokeWidth={28} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={t.tile} strokeWidth={24} />
       <motion.circle
         cx={cx}
         cy={cy}
         r={r}
         fill="none"
         stroke={color}
-        strokeWidth={28}
+        strokeWidth={24}
         strokeLinecap="round"
         strokeDasharray={circ}
         transform={`rotate(-90 ${cx} ${cy})`}
@@ -76,40 +79,55 @@ function CareBlock({ value, t, reality }: { value: number; t: Theme; reality: bo
         animate={{ strokeDashoffset: circ * (1 - value / 100) }}
         transition={{ duration: 1.6, ease: 'easeOut', delay: 0.3 }}
       />
-      <text x={cx} y={cy + 26} textAnchor="middle" fontSize={80} fontWeight={800} fill={t.text}>
+      <text x={cx} y={cy + 24} textAnchor="middle" fontSize={72} fontWeight={800} fill={t.text}>
         {value}
-        <tspan fontSize={40}>%</tspan>
+        <tspan fontSize={36}>%</tspan>
       </text>
-      <text x={cx} y={496} textAnchor="middle" fontSize={32} fontWeight={700} fill={t.text}>
-        Care continuity
+      <text x={cx} y={404} textAnchor="middle" fontSize={30} fontWeight={700} fill={t.text}>
+        Care score
       </text>
-      <text x={cx} y={526} textAnchor="middle" fontSize={19} fill={t.sub}>
-        {reality ? 'clinical service availability' : 'exhibits kept running, all night'}
+      <text x={cx} y={430} textAnchor="middle" fontSize={18} fill={t.sub}>
+        {reality ? 'clinical service availability, night average' : 'exhibits kept running, all night'}
       </text>
+      {/* the player's own record */}
+      {fresh ? (
+        <motion.text
+          x={cx}
+          y={466}
+          textAnchor="middle"
+          fontSize={24}
+          fontWeight={800}
+          fill={t.accent}
+          initial={{ opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 12, delay: 0.8 }}
+          style={{ transformOrigin: `${cx}px 458px` }}
+        >
+          ★ New record!{previous !== null ? ` (was ${previous}%)` : ''}
+        </motion.text>
+      ) : (
+        <text x={cx} y={466} textAnchor="middle" fontSize={22} fill={t.text}>
+          Your best: {best ?? value}%
+        </text>
+      )}
 
-      {/* benchmark track */}
-      <rect x={tx} y={588} width={tw} height={12} rx={6} fill={t.tile} />
-      <rect x={tx} y={588} width={Math.max(12, at(value) - tx)} height={12} rx={6} fill={color} opacity={0.85} />
-      {[
-        { v: BENCHMARKS.averageCare, label: 'avg' },
-        { v: BENCHMARKS.bestCare, label: 'best' },
-      ].map((m) => (
-        <g key={m.label}>
-          <rect x={at(m.v) - 2} y={578} width={4} height={32} rx={2} fill={t.sub} />
-          <text x={at(m.v)} y={570} textAnchor="middle" fontSize={17} fill={t.sub}>
-            {m.label}
+      {/* Why? What moved the score most */}
+      <Tile x={40} y={top - 10} w={420} h={258} t={t} title="Why?" tag={reality ? 'score drivers' : 'what moved it most'} />
+      {why.length === 0 && (
+        <text x={64} y={top + 76} fontSize={19} fill={t.sub}>
+          {reality ? 'No significant service loss.' : 'Nothing dented it. Lovely.'}
+        </text>
+      )}
+      {why.map((line, i) => (
+        <g key={i}>
+          <text x={64} y={top + 70 + i * row} fontSize={18} fill={t.text}>
+            {fit((reality ? line.soc : line.game).replace(/^The /, ''))}
+          </text>
+          <text x={440} y={top + 70 + i * row} textAnchor="end" fontSize={22} fontWeight={800} fill={line.points < 0 ? '#f2994a' : '#3ee0d8'}>
+            {pointsText(line.points)}
           </text>
         </g>
       ))}
-      <circle cx={at(value)} cy={594} r={13} fill={color} stroke={t.card} strokeWidth={4} />
-      <text x={cx} y={646} textAnchor="middle" fontSize={22} fill={t.text}>
-        Average {BENCHMARKS.averageCare}%, best {BENCHMARKS.bestCare}%
-      </text>
-      {best && (
-        <text x={cx} y={678} textAnchor="middle" fontSize={22} fontWeight={700} fill={t.accent}>
-          {reality ? 'Best result on record' : 'A new museum record!'}
-        </text>
-      )}
     </g>
   );
 }
@@ -264,7 +282,7 @@ export function ResultCard({ snapshot, outcome, reality }: { snapshot: Snapshot;
         )}
       </g>
 
-      <CareBlock value={s.careContinuity} t={t} reality={reality} />
+      <CareBlock snapshot={snapshot} outcome={outcome} t={t} reality={reality} />
 
       {/* detect and respond */}
       <TimeTile x={right} label={reality ? 'MTTD' : TIME_LABELS.detect.museum} tag={reality ? '(mean time to detect)' : undefined} ms={s.mttdMs} missing="Never spotted" instant={reality ? 'Immediate' : 'At once'} count={`${s.spotted} of ${s.groups} ${reality ? 'detected' : 'spotted'}`} snapshot={snapshot} t={t} />

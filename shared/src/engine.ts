@@ -49,6 +49,8 @@ export interface RoomState {
   litBy: string | null;
   /** The staff already complained about this closure (reset when the room opens again). */
   complained: boolean;
+  /** How long it has been dark without a break (a dark room costs more care the longer it stays dark). */
+  darkMs: number;
 }
 
 export interface Group {
@@ -58,9 +60,14 @@ export interface Group {
   /** Seen by a patrol: flees at the next spread tick unless the room is locked. */
   spotted: boolean;
   visited: RoomId[];
-  /** Let in by a phishing letter: decides with its own random stream, so the original gang's route never changes. */
-  stream?: 'phish';
+  /**
+   * Let in by a phishing letter ('phish'), or a later wave ('wave'): each decides with its own random stream,
+   * so the original gang's route never changes.
+   */
+  stream?: GroupStream;
 }
+
+export type GroupStream = 'phish' | 'wave';
 
 export interface Task {
   action: ActionKind;
@@ -141,6 +148,34 @@ export interface NightSummary {
   groups: number;
   spotted: number;
   stopped: number;
+  /** What moved the care score, biggest first: the "Why?" on the result card and in the morning report. */
+  factors: CareFactor[];
+}
+
+/**
+ * One thing that moved the night's care score. `points`: its effect on the night's average, in points
+ * (negative: it cost care; positive: it saved care). The losses add up to 100 minus the score.
+ */
+export interface CareFactor {
+  key: string;
+  kind: 'locked' | 'dark' | 'attack' | 'phish' | 'vault' | 'repair' | 'candle';
+  /** A room id, a wing, or null. */
+  target: string | null;
+  points: number;
+  /** How long (locked or dark), in game-clock real ms. */
+  ms: number;
+  /** How many (bad phishing calls, repairs). */
+  count: number;
+  /** When (the vault). */
+  atMs: number | null;
+}
+
+/** Care bookkeeping per factor: lost and saved care, in points × ms. */
+export interface CareEntry {
+  lost: number;
+  saved: number;
+  ms: number;
+  count: number;
 }
 
 export interface Outcome {
@@ -283,6 +318,8 @@ export interface GameState {
   wanderRng: number;
   /** And one for the groups that phishing lets in. */
   phishRng: number;
+  /** And one for the later waves. */
+  waveRng: number;
   reality: boolean;
   debug: boolean;
 
@@ -372,6 +409,12 @@ export interface GameState {
   finaleStarted: boolean;
   /** Slow motion left after a close call (real ms; see SLOWMO_MS). */
   slowMs: number;
+  /** Waves that have arrived but found their doors locked: they wait outside (scenario indexes). */
+  wavesDue: number[];
+  /** When each bad phishing call happened (its care drop fades from there). */
+  phishHits: number[];
+  /** What moved the care score, per factor (see careFactors). */
+  careBook: Record<string, CareEntry>;
 }
 
 // ---------- Setup ----------
@@ -389,9 +432,10 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     rng: sc.seed >>> 0,
     wanderRng: (sc.seed * 7919 + 13) >>> 0,
     phishRng: (sc.seed * 104729 + 7) >>> 0,
+    waveRng: (sc.seed * 15485863 + 11) >>> 0,
     reality: false,
     debug: false,
-    rooms: perRoom(() => ({ locked: false, dark: false, occupiedMs: 0, litBy: null, complained: false })),
+    rooms: perRoom(() => ({ locked: false, dark: false, occupiedMs: 0, litBy: null, complained: false, darkMs: 0 })),
     groups: [],
     nextGroupId: 1,
     guards: sc.guards.map((g) => ({ id: g.id, name: g.name, room: g.startRoom, task: null, wander: null })),
@@ -443,6 +487,9 @@ export function initialState(scenarioId: string = DEMO.id): GameState {
     orders: [],
     finaleStarted: false,
     slowMs: 0,
+    wavesDue: [],
+    phishHits: [],
+    careBook: {},
   };
 }
 
@@ -559,6 +606,10 @@ function tick(s: GameState, w: World): void {
   sc.phishing.letters.forEach((l, i) => {
     if (reached(clockToMs(l.at, hour))) s.lettersDue.push(i);
   });
+  sc.waves.forEach((wave, i) => {
+    if (reached(clockToMs(wave.at, hour))) s.wavesDue.push(i);
+  });
+  admitWaves(s, w);
 
   updateGuards(s, w);
   wander(s, w);
@@ -578,9 +629,11 @@ function tick(s: GameState, w: World): void {
     spread(s, w);
     for (const room of sc.rooms) {
       const gang = s.groups.some((g) => g.room === room.id && !g.stream);
-      const phished = !gang && s.groups.some((g) => g.room === room.id);
+      const phished = !gang && s.groups.some((g) => g.room === room.id && g.stream === 'phish');
+      const waved = !gang && !phished && s.groups.some((g) => g.room === room.id && g.stream === 'wave');
       if (gang && rand(s) < sc.clues.cctvChancePerTick) cctv(s, w, room.id, true);
       else if (phished && phishRand(s) < sc.clues.cctvChancePerTick) cctv(s, w, room.id, true);
+      else if (waved && waveRand(s) < sc.clues.cctvChancePerTick) cctv(s, w, room.id, true);
     }
     updateRex(s, w);
     s.nextSpreadMs += s.masterKeys ? ms.masterKeysTick : ms.spreadTick;
@@ -598,7 +651,28 @@ function tick(s: GameState, w: World): void {
 
 // ---------- Intruders ----------
 
-function addGroup(s: GameState, room: RoomId, visited: RoomId[], stream?: 'phish'): void {
+/** Waves that have arrived come in through their door, or the other one; both locked: they wait outside. */
+function admitWaves(s: GameState, w: World): void {
+  if (s.wavesDue.length === 0) return;
+  const waiting: number[] = [];
+  for (const i of s.wavesDue) {
+    const wave = w.sc.waves[i];
+    const entry = !s.rooms[wave.room].locked ? wave.room : !s.rooms[wave.alt].locked ? wave.alt : null;
+    if (!entry) {
+      waiting.push(i);
+      continue;
+    }
+    addGroup(s, entry, [entry], 'wave');
+    s.brokenIn = true;
+    const guard = s.guards.find((g) => g.id === wave.guard) ?? s.guards[0];
+    const room = w.room.get(entry)!;
+    if (entry === wave.room) say(s, guard, wave.text, entry, wave.real);
+    else say(s, guard, `Chief! More of them, coming in through ${theRoom(room.name)}!`, entry, `New intrusion via ${room.real}.`);
+  }
+  s.wavesDue = waiting;
+}
+
+function addGroup(s: GameState, room: RoomId, visited: RoomId[], stream?: GroupStream): void {
   const id = s.nextGroupId++;
   s.groups.push(stream ? { id, room, enteredMs: s.timeMs, spotted: false, visited, stream } : { id, room, enteredMs: s.timeMs, spotted: false, visited });
   s.groupLog.push({ id, appearedMs: s.timeMs, spottedMs: null, stoppedMs: null });
@@ -750,6 +824,7 @@ function updateRooms(s: GameState, w: World): void {
 
     if (room.special === 'vault' && rs.occupiedMs >= w.ms.vaultLose) {
       s.impact.ambulances = Math.max(s.impact.ambulances, Math.floor(s.impact.ambulances) + w.sc.majorIncidentAmbulances);
+      s.care = 0; // the crown jewel is gone: care drops to nothing (and stays there until dawn, see summarise)
       end(s, 'lost', 'The gang cracked the Vault.', 'Major incident declared: ambulances diverted.');
       return;
     }
@@ -1004,14 +1079,13 @@ function resolveCatch(s: GameState, w: World, won: boolean): void {
 
   if (won) {
     c.result = 'caught';
-    // The last group out ends the night: the end card says it all, no "Phew!" on top.
-    const last = s.groups.every((g) => g.room === c.room);
-    for (const g of inside) markStopped(s, w, g, !last);
+    for (const g of inside) markStopped(s, w, g);
     s.groups = s.groups.filter((g) => g.room !== c.room);
     s.stats.evicted += inside.length;
     fx(s, 'evicted', c.room);
     say(s, guard, evictedLine(guard.id, s.nextLogId, name), c.room, `Ransomware eradicated from ${room.real}.`);
-    if (s.groups.length === 0) end(s, 'won', 'Every intruder has been shown the door.', 'All malware eradicated. Incident contained.');
+    // Catching everyone does not end the night: more can come before dawn.
+    if (s.groups.length === 0) log(s, { kind: 'event', text: 'All clear… for now. Keep your eyes open until dawn.', real: 'No active threats. Monitoring continues until the incident window closes.' });
     return;
   }
   if (rs.locked) {
@@ -1097,7 +1171,14 @@ function wander(s: GameState, w: World): void {
 
 /** The random stream a group decides with: the gang's own, or the phishing groups'. */
 function groupRand(s: GameState, g: Group): number {
-  return g.stream === 'phish' ? phishRand(s) : rand(s);
+  return g.stream === 'phish' ? phishRand(s) : g.stream === 'wave' ? waveRand(s) : rand(s);
+}
+
+function waveRand(s: GameState): number {
+  let t = (s.waveRng = (s.waveRng + 0x6d2b79f5) | 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
 function phishRand(s: GameState): number {
@@ -1156,7 +1237,10 @@ function resolveLetter(s: GameState, w: World, answer: 'safe' | 'phishing' | nul
       : { kind: 'event', text: `A real letter from ${letter.from}. Safe to open.`, real: `Legitimate email from ${letter.address} released.` });
     return;
   }
-  // A bad call (or none): the letter lets the gang in, through any door that is not locked.
+  // A bad call (or none) shows at once on the care score (an account is compromised), then fades a little.
+  s.phishHits.push(s.timeMs);
+  book(s, 'phish').count++;
+  // ...and the letter lets the gang in, through any door that is not locked.
   const front = w.sc.intruders.frontDoor.room;
   const entry = !s.rooms[w.sc.intruders.entryRoom].locked ? w.sc.intruders.entryRoom : !s.rooms[front].locked ? front : null;
   l.breach = entry;
@@ -1270,7 +1354,13 @@ function resolveWires(s: GameState, w: World, ok: boolean): void {
     say(s, guard, `Sparks everywhere! ${upper(name)} is still out. Again, chief?`, g.room, `Restore failed: network links not up on ${room.real}. Retry.`);
     return;
   }
+  // What this repair saves: the room's current cost, for the rest of the night.
+  const saved = roomLoss(s, w, g.room).loss * Math.max(0, w.ms.night - s.timeMs);
+  const entry = book(s, `repair:${g.room}`);
+  entry.saved += saved;
+  entry.count++;
   rs.dark = false;
+  rs.darkMs = 0;
   rs.locked = false;
   rs.occupiedMs = 0;
   s.stats.repairs++;
@@ -1477,22 +1567,84 @@ function complete(s: GameState, w: World, guard: Guard, task: Task): void {
 
 // ---------- Care ----------
 
+function book(s: GameState, key: string): CareEntry {
+  return (s.careBook[key] ??= { lost: 0, saved: 0, ms: 0, count: 0 });
+}
+
+/**
+ * What a closed room costs the care score right now: its exhibits' criticality, more the longer it has been
+ * dark, less with candlelight in its wing. `saved`: what the candles take off.
+ */
+function roomLoss(s: GameState, w: World, roomId: RoomId): { loss: number; saved: number } {
+  const room = w.room.get(roomId)!;
+  const rs = s.rooms[roomId];
+  const rules = w.sc.care;
+  const attacked = !rs.locked && !rs.dark && s.groups.some((g) => g.room === roomId);
+  if (!rs.locked && !rs.dark && !attacked) return { loss: 0, saved: 0 };
+  const base = room.exhibits.reduce((sum, ex) => sum + ex.criticality, 0) * (attacked ? rules.underAttack : 1);
+  const longer = rs.dark ? 1 + Math.min(rules.darkMaxExtra, (rs.darkMs / w.ms.gameHour) * rules.darkGrowthPerGameHour) : 1;
+  const candle = s.candlelight[room.wing] ? w.sc.actions.candlelightModifier : 1;
+  return { loss: base * longer * candle, saved: base * longer * (1 - candle) };
+}
+
+/**
+ * Care score = 100 − what every closed or dark room costs (dark rooms cost more the longer they stay dark,
+ * candlelight takes some off) − the fading drop of bad phishing calls; clamped 0–100. Every step, the loss
+ * is booked against what caused it, so the end of the night can say why the score is what it is.
+ */
 function updateCare(s: GameState, w: World): void {
   const { sc } = w;
-  let loss = 0;
+  const rules = sc.care;
+  const parts: { key: string; loss: number }[] = [];
   for (const room of sc.rooms) {
     const rs = s.rooms[room.id];
-    if (!rs.locked && !rs.dark) continue;
-    const factor = s.candlelight[room.wing] ? sc.actions.candlelightModifier : 1;
+    rs.darkMs = rs.dark ? rs.darkMs + STEP_MS : 0;
+    const { loss, saved } = roomLoss(s, w, room.id);
+    if (loss === 0) continue;
+    // Intruders loose in an open room: its services run degraded even before the exhibits go dark.
+    parts.push({ key: `${rs.dark ? 'dark' : rs.locked ? 'locked' : 'attack'}:${room.id}`, loss });
+    if (saved > 0) book(s, `candle:${room.wing}`).saved += saved * STEP_MS;
+    if (!rs.locked && !rs.dark) continue; // patient impact counters: closed exhibits only
+    const impactFactor = s.candlelight[room.wing] ? sc.actions.candlelightImpactModifier : 1;
     for (const ex of room.exhibits) {
-      loss += ex.criticality * factor;
-      const impactFactor = s.candlelight[room.wing] ? sc.actions.candlelightImpactModifier : 1;
       if (ex.impact) s.impact[ex.impact] += (sc.impactPerGameHour[ex.impact] * impactFactor * STEP_MS) / w.ms.gameHour;
     }
   }
-  s.care = Math.max(0, Math.min(100, 100 - loss));
+  let phish = 0;
+  for (const at of s.phishHits) {
+    const fade = Math.max(0, 1 - (s.timeMs - at) / (rules.phishFadeGameHours * w.ms.gameHour));
+    phish += rules.phishLasting + (rules.phishDrop - rules.phishLasting) * fade;
+  }
+  if (phish > 0) parts.push({ key: 'phish', loss: phish });
+
+  const raw = parts.reduce((sum, p) => sum + p.loss, 0);
+  const lost = Math.min(100, raw);
+  const share = raw > 0 ? lost / raw : 0;
+  for (const p of parts) {
+    const entry = book(s, p.key);
+    entry.lost += p.loss * share * STEP_MS;
+    entry.ms += STEP_MS;
+  }
+  s.care = 100 - lost;
   s.lowestCare = Math.min(s.lowestCare, s.care);
   s.stats.careMs += s.care * STEP_MS;
+}
+
+/** What moved the care score so far, biggest first (points on the night's average; small ones left out). */
+export function careFactors(state: GameState): CareFactor[] {
+  const w = world(state.scenarioId);
+  const night = w.ms.night;
+  const out: CareFactor[] = [];
+  for (const [key, e] of Object.entries(state.careBook)) {
+    const [kind, target = null] = key.split(':') as [CareFactor['kind'], string?];
+    const atMs = kind === 'vault' ? (state.outcome?.atMs ?? null) : null;
+    if (e.lost > 0) out.push({ key, kind, target, points: -e.lost / night, ms: e.ms, count: e.count, atMs });
+    if (e.saved > 0) out.push({ key: `${key}+`, kind, target, points: e.saved / night, ms: e.ms, count: e.count, atMs });
+  }
+  return out
+    .map((f) => ({ ...f, points: Math.round(f.points * 10) / 10 }))
+    .filter((f) => Math.abs(f.points) >= 0.5)
+    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points));
 }
 
 function end(s: GameState, result: Outcome['result'], reason: string, real: string): void {
@@ -1507,6 +1659,7 @@ function end(s: GameState, result: Outcome['result'], reason: string, real: stri
   s.lettersDue = [];
   if (s.groups.length === 0 && s.stats.containedMs === null) s.stats.containedMs = s.timeMs;
   s.outcome = { result, reason, real, atMs: s.timeMs, summary: summarise(s, result) };
+  s.outcome.summary.factors = careFactors(s);
   for (const rs of Object.values(s.rooms)) rs.litBy = null;
   log(s, { kind: 'event', text: reason, real });
 }
@@ -1515,25 +1668,29 @@ function summarise(s: GameState, result: Outcome['result']): NightSummary {
   const night = world(s.scenarioId).ms.night;
   // An early win keeps the current care until dawn; a major incident means none until dawn.
   const rest = Math.max(0, night - s.timeMs) * (result === 'won' ? s.care : 0);
+  // The Vault cracked: no care at all until dawn, booked against the Vault.
+  const penalty = result === 'lost' ? world(s.scenarioId).sc.care.vaultPenalty : 0;
+  if (result === 'lost') book(s, 'vault').lost += Math.max(0, night - s.timeMs) * 100 + penalty * night;
   for (const g of s.groups) if (s.rooms[g.room].locked) recordOf(s, g).stoppedMs ??= s.timeMs;
   const log = s.groupLog;
   const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
   const spotted = log.filter((r) => r.spottedMs !== null);
   const stopped = log.filter((r) => r.stoppedMs !== null);
   return {
-    careContinuity: Math.round((s.stats.careMs + rest) / night),
+    careContinuity: Math.max(0, Math.round((s.stats.careMs + rest) / night - penalty)),
     mttdMs: avg(spotted.map((r) => r.spottedMs! - r.appearedMs)),
     // A group stopped before anyone saw it needed no response time at all.
     mttrMs: avg(stopped.map((r) => Math.max(0, r.stoppedMs! - (r.spottedMs ?? r.stoppedMs!)))),
     groups: log.length,
     spotted: spotted.length,
     stopped: stopped.length,
+    factors: [],
   };
 }
 
 // ---------- Intents ----------
 
-export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'action', 'catch', 'wire', 'code', 'aim', 'letter'] as const;
+export const INTENT_TYPES = ['start', 'skipIntro', 'togglePause', 'reset', 'toggleReality', 'toggleDebug', 'toggleCode', 'clearRecord', 'action', 'catch', 'wire', 'code', 'aim', 'letter'] as const;
 export type IntentType = (typeof INTENT_TYPES)[number];
 
 export type Intent =
@@ -1551,7 +1708,7 @@ export type Intent =
   | { type: 'letter'; answer: 'safe' | 'phishing' };
 
 /** Only the presenter page can start (or skip the intro), reset or hand over control. */
-export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode'];
+export const PRESENTER_ONLY: readonly IntentType[] = ['start', 'skipIntro', 'reset', 'toggleCode', 'clearRecord'];
 
 export function isIntent(value: unknown): value is Intent {
   if (typeof value !== 'object' || value === null) return false;
@@ -1620,6 +1777,7 @@ export function applyIntent(state: GameState, intent: Intent): ApplyResult {
     case 'toggleDebug':
       return { state: { ...state, debug: !state.debug } };
     case 'toggleCode':
+    case 'clearRecord': // the record lives on the server, not in the night
       return { state };
     case 'action':
       return dispatch(state, intent);

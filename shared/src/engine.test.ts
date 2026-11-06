@@ -9,10 +9,13 @@ import {
   world,
   padlocks,
   ACTION_REAL,
+  PRESENTER_ONLY,
+  careFactors,
   finaleActive,
   type ActionKind,
   type GameState,
 } from './index';
+import { playNight } from './bots';
 
 const w = world('demo');
 const HOUR = w.sc.night.realSecondsPerGameHour;
@@ -49,6 +52,25 @@ function placeGang(s: GameState, room: string): GameState {
 }
 
 const idleNight = () => runUntil(started(), () => false);
+
+/** Like runUntil, but every letter is answered right as it arrives (so the post lets nobody in). */
+function runAnswering(s: GameState, done: (s: GameState) => boolean): GameState {
+  while (s.phase === 'running' && !done(s) && s.timeMs < w.ms.night + 1000) {
+    if (s.letter && s.letter.result === null) s = applyIntent(s, { type: 'letter', answer: s.letter.phishing ? 'phishing' : 'safe' }).state;
+    s = advance(s, 100);
+  }
+  return s;
+}
+
+/** Test setup: no gang tonight (it never breaks in), to measure the care score on its own. */
+function noGang(s: GameState): GameState {
+  const copy: GameState = JSON.parse(JSON.stringify(s));
+  copy.brokenIn = true;
+  copy.groups = [];
+  copy.entrySplit = false;
+  copy.nextSpreadMs = Number.MAX_SAFE_INTEGER;
+  return copy;
+}
 
 /** Test setup: a patrol has spotted the gang in `room` (Evict needs that). */
 function spotted(s: GameState, room: string): GameState {
@@ -280,7 +302,7 @@ describe('find, trap, evict, repair', () => {
     let s = runUntil(afterBreakIn(), (x) => x.groups.length > 1);
     s = act(s, 'lock', 'mail-room', 'sam');
     s = runUntil(s, (x) => x.rooms['mail-room'].locked);
-    expect(s.care).toBe(98);
+    expect(s.care).toBe(91); // the Mail Room shut (−6), and the other group loose in the Entrance Hall (−3)
     s = evictAndCatch(s, 'mail-room', 'sam');
     expect(s.stats.evicted).toBe(1);
     expect(s.phase).toBe('running');
@@ -288,7 +310,7 @@ describe('find, trap, evict, repair', () => {
     expect(s.groups.some((g) => g.room === 'mail-room')).toBe(false);
   });
 
-  it('trapping and evicting both groups wins the night', () => {
+  it('catching every group does not end the night: all clear for now, and more come later', () => {
     let s = runUntil(afterBreakIn(), (x) => x.groups.length > 1);
     s = act(s, 'lock', 'mail-room', 'sam');
     s = act(s, 'lock', 'entrance-hall', 'tom');
@@ -298,9 +320,14 @@ describe('find, trap, evict, repair', () => {
     s = evictAndCatch(s, 'mail-room', 'sam');
     s = evictAndCatch(s, 'entrance-hall', 'tom');
     expect(s.groups).toHaveLength(0);
-    expect(s.phase).toBe('ended');
-    expect(s.outcome?.result).toBe('won');
+    expect(s.phase).toBe('running');
+    expect(s.outcome).toBeNull();
     expect(s.stats.evicted).toBe(2);
+    expect(s.log.some((l) => l.text.startsWith('All clear… for now'))).toBe(true);
+    // the night goes on; the 02:00 wave finds both doors still locked, and waits outside
+    s = runUntil(s, (x) => x.timeMs >= at('02:10'));
+    expect(s.phase).toBe('running');
+    expect(s.wavesDue).toEqual([0]);
   });
 
   it('the Mail Room has a second door, straight into the West Corridor', () => {
@@ -316,7 +343,7 @@ describe('find, trap, evict, repair', () => {
   });
 
   it('every lock has a cost, candlelight halves it, repair restores it', () => {
-    let s = act(started(), 'lock', 'lab', 'sam');
+    let s = act(noGang(started()), 'lock', 'lab', 'sam');
     s = runUntil(s, (x) => x.rooms.lab.locked);
     expect(s.care).toBe(86);
 
@@ -780,14 +807,15 @@ describe('Safe or phishing? (letters in the Mail Room)', () => {
 
   it('calling the fake "Phishing" and the real one "Safe": no new intruders, two right calls', () => {
     let s = nextLetter(started());
-    const groups = () => s.groupLog.length;
+    // (the 02:00 wave comes in between the letters, so count what the post let in)
+    const breaches = () => s.log.filter((l) => l.real?.startsWith('Phishing payload executed')).length;
     s = applyIntent(s, { type: 'letter', answer: 'phishing' }).state;
     expect(s.letter!.result).toBe('right');
-    const before = groups();
     s = nextLetter(runFor(s, 2000));
     s = applyIntent(s, { type: 'letter', answer: 'safe' }).state;
     expect(s.letter!.result).toBe('right');
-    expect(groups()).toBe(before);
+    expect(breaches()).toBe(0);
+    expect(s.phishHits).toEqual([]);
     expect(s.stats.letters).toEqual({ right: 2, wrong: 0, missed: 0 });
   });
 
@@ -1245,12 +1273,12 @@ describe('"Phew! That was close!" (stopped one room from the Vault)', () => {
     expect(s.fx.some((f) => f.kind === 'phew' && f.room === 'archive')).toBe(true);
   });
 
-  it('no Phew when that catch ends the night (the end card says it all), nor far from the Vault', () => {
+  it('catching the last group next to the Vault: Phew too (the night goes on); far from the Vault: no Phew', () => {
     let s = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     s = placeGang(s, 'archive');
     s = evictAndCatch(holdStill(s), 'archive', 'mia');
-    expect(s.outcome?.result).toBe('won');
-    expect(s.fx.some((f) => f.kind === 'phew')).toBe(false);
+    expect(s.phase).toBe('running');
+    expect(s.fx.some((f) => f.kind === 'phew')).toBe(true);
 
     let t = runUntil(started(), (x) => x.timeMs >= at('02:00'));
     t = placeGang(t, 'lab');
@@ -1315,5 +1343,119 @@ describe('the Catch action (Eradicate in the reality view)', () => {
 
   it('in SOC words it is still Eradicate', () => {
     expect(ACTION_REAL.evict).toBe('Eradicate');
+  });
+});
+
+describe('waves: more intruders during the night', () => {
+  it('02:00 at the front door (Tom radios it in), 04:00 through the Mail Room; on their own random stream', () => {
+    let s = runAnswering(noGang(started()), (x) => x.groups.length > 0);
+    expect(msToClock(s.timeMs, HOUR)).toBe('02:00');
+    expect(s.groups[0]).toMatchObject({ room: 'entrance-hall', stream: 'wave' });
+    expect(s.log.at(-1)).toMatchObject({ speaker: 'Tom', text: 'Chief! More berets at the front door!' });
+    s = noGang(s);
+    s = runAnswering(s, (x) => x.groups.length > 0);
+    expect(msToClock(s.timeMs, HOUR)).toBe('04:00');
+    expect(s.groups[0]).toMatchObject({ room: 'mail-room', stream: 'wave' });
+  });
+
+  it('a locked door sends the wave to the other one; both locked: they wait outside until one opens', () => {
+    let s = noGang(runAnswering(started(), (x) => x.timeMs >= at('01:50')));
+    s = act(s, 'lock', 'entrance-hall', 'tom');
+    s = runAnswering(s, (x) => x.groups.length > 0);
+    expect(s.groups[0].room).toBe('mail-room');
+
+    let t = noGang(runAnswering(started(), (x) => x.timeMs >= at('01:50')));
+    t = act(t, 'lock', 'entrance-hall', 'tom');
+    t = act(t, 'lock', 'mail-room', 'sam');
+    t = runAnswering(t, (x) => x.timeMs >= at('02:40'));
+    expect(t.groups).toEqual([]);
+    expect(t.wavesDue).toEqual([0]);
+    t = act(t, 'unlock', 'mail-room', 'sam');
+    t = runAnswering(t, (x) => x.groups.length > 0);
+    expect(t.groups[0].room).toBe('mail-room');
+  });
+
+  it('the night always runs to dawn unless the Vault falls', () => {
+    const good = playNight('good');
+    expect(good.outcome).toMatchObject({ result: 'won', atMs: w.ms.night });
+    expect(good.outcome!.summary.groups).toBeGreaterThanOrEqual(4); // the gang, its split and both waves
+    const idle = playNight('idle');
+    expect(idle.outcome!.result).toBe('lost');
+  });
+});
+
+describe('the care score (the only score)', () => {
+  it('a dark room costs more the longer it stays dark, and a repair brings it all back', () => {
+    let s = noGang(started());
+    s.rooms.lab.dark = true;
+    s = runFor(s, 300);
+    const early = 100 - s.care;
+    const until = s.timeMs + w.ms.gameHour * 2;
+    s = noGang(runAnswering(s, (x) => x.timeMs >= until)); // (letters answered right, nobody in)
+    s = runFor(s, 100);
+    const later = 100 - s.care;
+    expect(early).toBeCloseTo(14, 0);
+    expect(later).toBeCloseTo(28, 0); // twice as much after two game hours dark
+    s = act(s, 'lock', 'lab', 'sam');
+    s = repairAndWire(runUntil(s, (x) => x.rooms.lab.locked), 'lab', 'sam');
+    s = runFor(s, 200);
+    expect(s.care).toBe(100);
+    const repair = careFactors(s).find((f) => f.kind === 'repair' && f.target === 'lab');
+    expect(repair!.points).toBeGreaterThan(0);
+  });
+
+  it('a wrong phishing call shows at once (−12), then fades to a lasting −4', () => {
+    let s = runUntil(noGang(started()), (x) => x.letter !== null && x.letter.result === null);
+    s = applyIntent(s, { type: 'letter', answer: 'safe' }).state; // the fake one, opened
+    s = noGang(s);
+    s = runFor(s, 100);
+    expect(s.care).toBeCloseTo(88, 0);
+    s = noGang(runFor(s, w.ms.gameHour));
+    s = runFor(s, 200);
+    expect(s.care).toBeCloseTo(96, 0);
+  });
+
+  it('the Vault cracked: care drops to nothing and the night ends early, far below a careless survivor', () => {
+    const idle = playNight('idle');
+    expect(idle.outcome!.result).toBe('lost');
+    expect(idle.care).toBe(0);
+    expect(idle.outcome!.atMs / w.ms.night).toBeLessThan(0.7);
+    expect(idle.outcome!.summary.factors[0]).toMatchObject({ kind: 'vault' });
+  });
+
+  it('scores mean something: a good night in the 80s–90s, a careless one in the 40s–50s, doing nothing far lower', () => {
+    const good = playNight('good').outcome!.summary.careContinuity;
+    const careless = playNight('careless').outcome!.summary.careContinuity;
+    const idle = playNight('idle').outcome!.summary.careContinuity;
+    expect(good).toBeGreaterThanOrEqual(80);
+    expect(good).toBeLessThanOrEqual(99);
+    expect(careless).toBeGreaterThanOrEqual(40);
+    expect(careless).toBeLessThan(60);
+    expect(idle).toBeLessThan(careless);
+  });
+
+  it('the factors explain the score: the losses add up to 100 minus it', () => {
+    for (const style of ['good', 'careless', 'idle'] as const) {
+      const o = playNight(style).outcome!;
+      const all = careFactorsAll(o);
+      expect(Math.abs(100 - o.summary.careContinuity + all)).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('the same night gives the same score and the same factors (deterministic)', () => {
+    expect(playNight('good').outcome).toEqual(playNight('good').outcome);
+  });
+});
+
+/** Sum of every loss, without the small-factor cut, from the summary's own numbers. */
+function careFactorsAll(o: NonNullable<GameState['outcome']>): number {
+  return o.summary.factors.filter((f) => f.points < 0).reduce((sum, f) => sum + f.points, 0);
+}
+
+describe('the record is the server\'s, not the night\'s', () => {
+  it('clearRecord is a presenter-only intent that changes nothing in the game', () => {
+    expect(PRESENTER_ONLY).toContain('clearRecord');
+    const s = started();
+    expect(applyIntent(s, { type: 'clearRecord' }).state).toBe(s);
   });
 });

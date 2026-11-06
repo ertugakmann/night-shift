@@ -24,6 +24,7 @@ import {
 import { Control } from './control';
 import { reportMode, writeMorningReport } from './morningReport';
 import { resolvePresenterKey } from './presenterKey';
+import { BestRecord } from './record';
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -78,6 +79,8 @@ if (SERVE_DIST) {
 
 let state: GameState = initialState();
 const control = new Control(PRESENTER_KEY);
+// The best night so far: kept across nights and restarts (a git-ignored file next to .env, or RECORD_FILE).
+const record = new BestRecord(process.env.RECORD_FILE || path.join(ROOT, '.night-shift-record.json'));
 
 function snapshot(): Snapshot {
   return {
@@ -85,6 +88,7 @@ function snapshot(): Snapshot {
     codeVisible: control.code !== null,
     controllers: control.controllerCount,
     viewers: io.engine.clientsCount,
+    record: record.state,
   };
 }
 
@@ -117,7 +121,13 @@ function checkReport(): void {
     report = null;
     io.emit('report', null);
   }
-  if (!key) return;
+  if (!key) {
+    record.nextNight();
+    return;
+  }
+  if (state.outcome && record.count(key, state.outcome.summary.careContinuity)) {
+    console.log(`New record: ${state.outcome.summary.careContinuity}%`);
+  }
   void writeMorningReport(state).then((written) => {
     if (written.key !== reportFor) return; // the game was reset meanwhile
     report = written;
@@ -177,6 +187,9 @@ io.on('connection', (socket) => {
           ? `Control code ${control.code} is on the Security Office screen.`
           : 'Control code hidden. Extra control revoked.',
       );
+    } else if (intent.type === 'clearRecord') {
+      record.clear();
+      socket.emit('notice', 'Record cleared. The next night sets a new one.');
     } else {
       try {
         const result = applyIntent(state, intent);

@@ -7,6 +7,13 @@ export interface Snapshot extends PublicState {
   codeVisible: boolean;
   controllers: number;
   viewers: number;
+  /** The player's own record (the server keeps it across nights; R never clears it). */
+  record: {
+    /** The best night's care score so far. */
+    best: number | null;
+    /** The best before the night that just ended: beat it, and the card says "New record!". */
+    previous: number | null;
+  };
 }
 
 export type Role = 'presenter' | 'controller' | 'watcher';

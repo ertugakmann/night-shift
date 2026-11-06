@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advance, applyIntent, initialState, lessonsFrom, nightFacts, reportKey, SOC_SECTIONS, templateReport, type ActionKind, type GameState } from './index';
+import { advance, applyIntent, factorText, initialState, lessonsFrom, nightFacts, pointsText, reportKey, SOC_SECTIONS, templateReport, type ActionKind, type GameState } from './index';
 
 function started(): GameState {
   return applyIntent(applyIntent(initialState(), { type: 'start' }).state, { type: 'skipIntro' }).state;
@@ -200,5 +200,31 @@ describe('time to spot / time to stop (MTTD and MTTR)', () => {
     const note = templateReport(won).museum.paragraphs.join(' ');
     expect(note).toContain(f.timeToDetect!.split(',')[0]);
     expect(templateReport(won).soc.incidentSummary.join(' ')).toContain(f.timeToDetect!);
+  });
+});
+
+describe('why the care score is what it is', () => {
+  it('factors read the same in both voices, with their points', () => {
+    const f = { key: 'locked:lab', kind: 'locked', target: 'lab', points: -8.2, ms: 33_333, count: 0, atMs: null } as const;
+    expect(factorText(f, 'demo')).toEqual({ game: 'The Lab Gallery locked for 1h 20m', soc: 'Laboratory isolated 1h 20m' });
+    expect(pointsText(f.points)).toBe('−8');
+    expect(factorText({ ...f, key: 'phish', kind: 'phish', target: null, count: 1 }, 'demo')).toEqual({ game: 'Wrong call on a letter', soc: 'Phishing email released' });
+    expect(factorText({ ...f, key: 'repair:pharmacy', kind: 'repair', target: 'pharmacy', points: 5, count: 1 }, 'demo').game).toBe('The Pharmacy Gallery repaired early');
+    expect(pointsText(4.6)).toBe('+5');
+    expect(factorText({ ...f, key: 'candle:west', kind: 'candle', target: 'west', points: 3 }, 'demo')).toEqual({ game: 'Candles in the West Wing', soc: 'Downtime procedures: Lab and pharmacy' });
+  });
+
+  it('a lost night: the Vault is the biggest reason, in the note and in the handover', () => {
+    const f = nightFacts(idle);
+    expect(f.why[0].game).toBe('Vault cracked at 03:48');
+    const r = templateReport(idle);
+    expect(r.museum.paragraphs[0]).toMatch(/Our care score for the night: \d+%\. What moved it most: Vault cracked at 03:48 \(−\d+\)/);
+    expect(r.soc.patientImpact.join(' ')).toMatch(/Care score \d+% \(night average\)\. Main drivers: Patient records encrypted at 03:48 \(−\d+\)/);
+    expect(r.soc.patientImpact.join(' ')).not.toMatch(/average 72|best 86/);
+  });
+
+  it('the tips follow the factors: what cost the most care gets advice', () => {
+    const lessons = nightFacts(idle).lessons.map((l) => l.game).join(' ');
+    expect(lessons).toMatch(/dark for .* cost \d+ points\. Lock it once it's clear and repair it/);
   });
 });

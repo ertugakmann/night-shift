@@ -1,4 +1,3 @@
-import benchmarksJson from '../scenario/benchmarks.json';
 import demoJson from '../scenario/demo.json';
 import type { ScreenId } from './screens';
 
@@ -63,6 +62,34 @@ export interface PhishingLetter {
   spf: 'pass' | 'fail';
 }
 
+/** A new group of intruders at a set time (the gang is never the only one tonight). */
+export interface Wave {
+  at: string;
+  /** Where they come in; if it is locked, `alt`; if both are, they wait outside until one opens. */
+  room: RoomId;
+  alt: RoomId;
+  /** Who radios it in, and what they say (reality: the SOC wording). */
+  guard: string;
+  text: string;
+  real: string;
+}
+
+/** How the care score moves, beyond closed exhibits (see updateCare in the engine). */
+export interface CareRules {
+  /** A dark (vandalised) room hurts more the longer it stays dark: +this × its loss per game hour... */
+  darkGrowthPerGameHour: number;
+  /** ...up to this much extra (1.5 = two and a half times its loss). */
+  darkMaxExtra: number;
+  /** A bad phishing call: an instant drop of `phishDrop` points, fading to `phishLasting` over `phishFadeGameHours`. */
+  phishDrop: number;
+  phishLasting: number;
+  phishFadeGameHours: number;
+  /** The Vault cracked: on top of no care until dawn, this many points off the night (a major incident). */
+  vaultPenalty: number;
+  /** A room with intruders loose inside (before it goes dark) runs at reduced service: this share of its exhibits' loss. */
+  underAttack: number;
+}
+
 /** Game clock time, "HH:MM". */
 type Clock = string;
 
@@ -116,6 +143,9 @@ export interface Scenario {
     maxLocks: number;
   };
   guards: { id: string; name: string; startRoom: RoomId }[];
+  /** More groups during the night: the night always runs to dawn, so catching everyone is never the end of it. */
+  waves: Wave[];
+  care: CareRules;
   rooms: Room[];
   doors: [RoomId, RoomId][];
   /** Patient impact per closed exhibit per game hour (without candlelight). */
@@ -144,9 +174,6 @@ export interface Scenario {
 }
 
 export const DEMO: Scenario = demoJson as unknown as Scenario;
-
-/** Care continuity from test runs, for the comparison line on the end screen ("Average 72%, best 86%"). */
-export const BENCHMARKS: { averageCare: number; bestCare: number } = benchmarksJson;
 
 const scenarios = new Map<string, Scenario>([[DEMO.id, DEMO]]);
 

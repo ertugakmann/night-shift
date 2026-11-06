@@ -1,8 +1,57 @@
 // The morning report: the facts of the night (from the event log), and a template report written from
 // them. The server asks Claude for a nicer version of the same report; the template is the fallback, so
 // the demo never depends on the API. Pure TypeScript, no I/O.
-import { ACTION_REAL, type ActionKind, type GameState, type Outcome } from './engine';
-import { BENCHMARKS, IMPACT_LABELS, IMPACT_TYPES, WING_NAMES, msToClock, theRoom, world, type ImpactType } from './scenario';
+import { ACTION_REAL, type ActionKind, type CareFactor, type GameState, type Outcome } from './engine';
+import { IMPACT_LABELS, IMPACT_TYPES, WING_NAMES, msToClock, theRoom, world, type ImpactType } from './scenario';
+
+// ---------- Why the care score is what it is ----------
+
+/** "1h 20m", "40m" on the night clock. */
+function nightSpan(ms: number, gameHourMs: number): string {
+  const minutes = Math.max(1, Math.round((ms / gameHourMs) * 60));
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+}
+
+/** One factor in words, in each voice: "Lab Gallery locked for 1h 20m" / "Laboratory isolated 1h 20m". */
+export function factorText(f: CareFactor, scenarioId: string): { game: string; soc: string } {
+  const w = world(scenarioId);
+  const span = nightSpan(f.ms, w.ms.gameHour);
+  const room = f.target ? w.room.get(f.target) : undefined;
+  const Name = room ? theRoom(room.name).replace(/^the /, 'The ') : '';
+  switch (f.kind) {
+    case 'locked':
+      return { game: `${Name} locked for ${span}`, soc: `${room?.real} isolated ${span}` };
+    case 'dark':
+      return { game: `${Name} dark for ${span}`, soc: `${room?.real} encrypted ${span}` };
+    case 'attack':
+      return { game: `Intruders loose in ${theRoom(room?.name ?? '')} for ${span}`, soc: `Active ransomware on ${room?.real} ${span}` };
+    case 'phish':
+      return f.count > 1 ? { game: `${f.count} wrong calls on letters`, soc: `${f.count} phishing emails released` } : { game: 'Wrong call on a letter', soc: 'Phishing email released' };
+    case 'vault': {
+      const at = f.atMs === null ? '' : ` at ${msToClock(f.atMs, w.sc.night.realSecondsPerGameHour)}`;
+      return { game: `Vault cracked${at}`, soc: `Patient records encrypted${at}` };
+    }
+    case 'repair':
+      return { game: `${Name} repaired${f.count > 1 ? ` ${f.count} times` : ' early'}`, soc: `${room?.real} restored from backup` };
+    case 'candle': {
+      const wing = WING_NAMES[(f.target ?? 'lobby') as keyof typeof WING_NAMES];
+      return { game: `Candles in the ${wing.name}`, soc: `Downtime procedures: ${wing.real}` };
+    }
+  }
+}
+
+/** "−8", "+5" (a real minus sign). */
+export function pointsText(points: number): string {
+  const n = Math.max(1, Math.round(Math.abs(points)));
+  return points < 0 ? `−${n}` : `+${n}`;
+}
+
+/** The "Why?": what moved the score most (3 or 4 factors), in both voices. */
+export function whyLines(factors: CareFactor[], scenarioId: string, max = 4): { game: string; soc: string; points: number }[] {
+  return factors.slice(0, max).map((f) => ({ ...factorText(f, scenarioId), points: f.points }));
+}
 
 /**
  * MTTD and MTTR in each voice. Museum: plain words ("Time to spot"); reality: the SOC term with its meaning.
@@ -54,11 +103,13 @@ export function reportKey(outcome: Outcome): string {
 export interface NightFacts {
   result: 'won' | 'lost';
   /** How the night ended: dawn with the Vault safe, every intruder evicted, or the Vault cracked. */
-  ending: 'dawn' | 'evicted' | 'vault';
+  /** How the night ended: dawn (the night always runs to dawn), or the Vault cracked early. */
+  ending: 'dawn' | 'vault';
   endedAt: string;
+  /** The night's care score: the care score averaged over the whole night (after a cracked Vault, nothing until dawn, and a penalty). */
   careContinuity: number;
-  averageCare: number;
-  bestCare: number;
+  /** What moved it, biggest first, in both voices, with the points (negative: cost care; positive: saved it). */
+  why: { game: string; soc: string; points: number }[];
   /** "1 h 12 min (night clock), 29 s real time", or null when it never happened. */
   timeToDetect: string | null;
   timeToRespond: string | null;
@@ -123,7 +174,7 @@ export function nightFacts(state: GameState): NightFacts {
   const clock = (ms: number) => msToClock(ms, hour);
   const outcome = state.outcome;
   const result = outcome?.result ?? 'lost';
-  const ending: NightFacts['ending'] = result === 'lost' ? 'vault' : (outcome?.atMs ?? 0) >= w.ms.night ? 'dawn' : 'evicted';
+  const ending: NightFacts['ending'] = result === 'lost' ? 'vault' : 'dawn';
   const room = (id: string) => w.room.get(id)!;
 
   const timeline: NightFacts['timeline'] = [];
@@ -139,8 +190,7 @@ export function nightFacts(state: GameState): NightFacts {
     ending,
     endedAt: clock(outcome?.atMs ?? state.timeMs),
     careContinuity: outcome?.summary.careContinuity ?? Math.round(state.care),
-    averageCare: BENCHMARKS.averageCare,
-    bestCare: BENCHMARKS.bestCare,
+    why: whyLines(outcome?.summary.factors ?? [], state.scenarioId, 6),
     timeToDetect: span(state, outcome?.summary.mttdMs ?? null),
     timeToRespond: span(state, outcome?.summary.mttrMs ?? null),
     respondedAtOnce: outcome?.summary.mttrMs === 0,
@@ -280,13 +330,25 @@ export function lessonsFrom(state: GameState): Lesson[] {
   const emptyLock = state.done.find((d) => d.action === 'lock' && d.empty);
   if (emptyLock) {
     const room = w.room.get(emptyLock.room)!;
-    add(4, `You locked ${theRoom(room.name)} with nobody inside, so its exhibits closed for nothing. Patrol first, then lock.`, `${room.real} isolated with no infection present. Confirm first: isolation costs care.`);
+    // (it ranks high when that lock is what cost the most care tonight)
+    const costly = (state.outcome?.summary.factors ?? []).find((x) => x.points <= -3 && x.kind === 'locked')?.target === room.id;
+    add(costly ? 8 : 4, `You locked ${theRoom(room.name)} with nobody inside, so its exhibits closed for nothing. Patrol first, then lock.`, `${room.real} isolated with no infection present. Confirm first: isolation costs care.`);
   }
 
   // A critical department closed, and no candles in its wing.
   const unlit = w.sc.rooms.find((r) => r.complaint && (state.rooms[r.id].locked || state.rooms[r.id].dark) && !state.candlelight[r.wing]);
   if (unlit) {
     add(4, `${theRoom(unlit.name).replace(/^the/, 'The')} stayed closed without candles. Light them in the ${WING_NAMES[unlit.wing].name} to keep care going.`, `No downtime procedures for ${unlit.real} while it was offline. Invoke them early.`);
+  }
+
+  // What cost the most care tonight.
+  const worst = (state.outcome?.summary.factors ?? []).find((x) => x.points <= -3 && (x.kind === 'dark' || x.kind === 'locked' || x.kind === 'attack'));
+  if (worst) {
+    const text = factorText(worst, state.scenarioId);
+    const pts = pointsText(worst.points);
+    if (worst.kind === 'dark') add(8, `${text.game} cost ${pts.replace('−', '')} points. Lock it once it's clear and repair it: the longer it stays dark, the more it costs.`, `${text.soc} (${pts}). Isolate, then restore from backup early: encrypted systems cost more over time.`);
+    else if (worst.kind === 'locked' && emptyLock?.room !== worst.target) add(8, `${text.game} cost ${pts.replace('−', '')} points. Catch the gang and repair or reopen it to win the exhibits back sooner.`, `${text.soc} (${pts}). Eradicate and restore sooner to bring the service back.`);
+    else add(7, `${text.game} cost ${pts.replace('−', '')} points. Find them sooner: follow the clues and patrol.`, `${text.soc} (${pts}). Faster detection limits the damage.`);
   }
 
   // Always something to take away.
@@ -383,14 +445,20 @@ function timesLine(f: NightFacts): string {
   return `${TIME_LABELS.detect.museum}: ${spot}. ${TIME_LABELS.respond.museum}: ${stop}.`;
 }
 
+/** "What moved it most: the Lab Gallery dark for 1h 20m (−8) and a wrong call on a letter (−4)." */
+function whySentence(f: NightFacts): string | null {
+  const top = f.why.slice(0, 3);
+  if (top.length === 0) return 'Nothing much dented it.';
+  const bits = top.map((x) => `${x.game.replace(/^The /, 'the ')} (${pointsText(x.points)})`);
+  return `What moved it most: ${list(bits)}.`;
+}
+
 function museumTemplate(f: NightFacts): MorningReport['museum'] {
-  const title = f.result === 'won' ? (f.ending === 'dawn' ? 'Morning, team!' : 'Early night, team!') : 'Rough night, team.';
+  const title = f.result === 'won' ? (f.careContinuity >= 80 ? 'Morning, team!' : 'Made it to dawn, team.') : 'Rough night, team.';
   const opening =
     f.ending === 'dawn'
-      ? `Dawn at last, and the Vault is safe. We kept ${f.careContinuity}% of the museum running through the night.`
-      : f.ending === 'evicted'
-        ? `Every intruder was shown the door by ${f.endedAt}. We kept ${f.careContinuity}% of the museum running.`
-        : `The gang cracked the Vault at ${f.endedAt} and the ambulances had to be sent elsewhere. We kept ${f.careContinuity}% of the museum running.`;
+      ? `Dawn at last, and the Vault is safe. Our care score for the night: ${f.careContinuity}%.`
+      : `The gang cracked the Vault at ${f.endedAt} and the ambulances had to be sent elsewhere. Our care score for the night: ${f.careContinuity}%.`;
   const dark = f.vandalised.map((v) => theRoom(v.gallery));
   const damage =
     dark.length === 0 ? 'Not a single gallery went dark. The cleaners will be bored.' : `${some(dark, 4, 'galleries').replace(/^the/, 'The')} went dark${f.backupsDestroyed ? ', and the Archive is wrecked' : ''}. Bring the toolbox.`;
@@ -398,7 +466,7 @@ function museumTemplate(f: NightFacts): MorningReport['museum'] {
   const patients = hurt.length > 0 ? ` Real patients felt it: ${list(hurt)}.` : ' And no patient had to wait.';
   return {
     title,
-    paragraphs: [`${opening} ${timesLine(f)}`, damage + patients, f.guards.map(guardLine).join(' '), [rexLine(f), postLine(f)].filter(Boolean).join(' ')],
+    paragraphs: [[opening, whySentence(f), timesLine(f)].filter(Boolean).join(' '), damage + patients, f.guards.map(guardLine).join(' '), [rexLine(f), postLine(f)].filter(Boolean).join(' ')],
   };
 }
 
@@ -406,9 +474,7 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
   const outcome =
     f.ending === 'vault'
       ? `Major incident declared at ${f.endedAt}: electronic patient records encrypted, ambulances diverted.`
-      : f.ending === 'evicted'
-        ? `Contained: all ransomware eradicated at ${f.endedAt}.`
-        : 'Incident window closed at 06:00 with patient records protected.';
+      : 'Incident window closed at 06:00 with patient records protected.';
   const encrypted = f.vandalised.flatMap((v) => v.systems);
   const actions = f.guards.flatMap((g) => g.actions.filter((a) => a.success).map((a) => ({ ...a, who: g.name })));
   actions.sort((a, b) => a.at.localeCompare(b.at));
@@ -446,7 +512,8 @@ function socTemplate(f: NightFacts): MorningReport['soc'] {
     ],
     patientImpact: [
       impact.length > 0 ? `${impact.join(', ')}.` : 'No patients affected.',
-      `Care continuity ${f.careContinuity}% (average ${f.averageCare}%, best ${f.bestCare}%).`,
+      `Care score ${f.careContinuity}% (night average).`,
+      ...(f.why.length > 0 ? [`Main drivers: ${f.why.slice(0, 2).map((x) => `${x.soc} (${pointsText(x.points)})`).join('; ')}.`] : []),
     ],
     aiCopilotPerformance: [
       `${f.rex.barks} alerts, ${f.rex.wrongBarks} false positive${f.rex.wrongBarks === 1 ? '' : 's'}.`,

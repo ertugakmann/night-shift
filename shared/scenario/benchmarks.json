@@ -1,6 +1,0 @@
-{
-  "scenario": "demo",
-  "note": "Care continuity (care score averaged over the night) from test runs of the demo scenario.",
-  "averageCare": 72,
-  "bestCare": 86
-}
