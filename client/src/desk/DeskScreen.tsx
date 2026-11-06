@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { padlocks, type Snapshot } from '@night-shift/shared';
 import { DangerMeter, dangerLevel } from '../game/danger';
-import { selectRoom, useGame } from '../net/game';
+import { reportPointer, selectRoom, useGame } from '../net/game';
+import { PresenterCursor } from './PresenterCursor';
 import { RealityStrip, type StripMode } from '../reality/RealityStrip';
 import { ScreenEndWash } from '../end/EndMoment';
 import { ActionPopup } from './ActionPopup';
@@ -188,7 +189,21 @@ function StickyNote({ snapshot }: { snapshot: Snapshot }) {
  * `reality`: the same desk as a SOC console (the content shrinks a little to make room for the strip).
  */
 export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boolean; strip?: StripMode }) {
-  const { snapshot, selected, role } = useGame();
+  const { snapshot, selected, role, pointer } = useGame();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const watching = role === 'watcher';
+
+  // The presenter's hand on the desk, in desk units, mirrored to every watching desk.
+  function track(e: React.PointerEvent) {
+    if (role !== 'presenter') return;
+    const m = svgRef.current?.getScreenCTM();
+    if (!m) return;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    reportPointer({ cursor: { x: p.x, y: p.y, touch: e.pointerType === 'touch' } });
+  }
+  function untrack() {
+    if (role === 'presenter') reportPointer({ cursor: null, hover: null });
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -199,7 +214,17 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
   }, []);
 
   return (
-    <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" className="block h-full w-full select-none" role="img" aria-label="Security desk">
+    <svg
+      ref={svgRef}
+      viewBox="0 0 1600 900"
+      preserveAspectRatio="xMidYMid meet"
+      className="block h-full w-full select-none"
+      role="img"
+      aria-label="Security desk"
+      onPointerMove={track}
+      onPointerDown={track}
+      onPointerLeave={untrack}
+    >
       <defs>
         <pattern id="desk-wood" width={1600} height={90} patternUnits="userSpaceOnUse">
           <rect width={1600} height={90} fill="#5b3a28" />
@@ -227,8 +252,9 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
         </>
       )}
       {snapshot && (
-        <g className={reality ? 'soc-text' : undefined} transform={reality && strip !== 'none' ? 'translate(64,0) scale(0.92)' : undefined}>
-          <MiniMap snapshot={snapshot} selected={selected} reality={reality} role={role} />
+        // watching: the presenter's menu and hover are shown, but nothing here can be clicked
+        <g className={reality ? 'soc-text' : undefined} transform={reality && strip !== 'none' ? 'translate(64,0) scale(0.92)' : undefined} pointerEvents={watching ? 'none' : undefined}>
+          <MiniMap snapshot={snapshot} selected={selected} reality={reality} role={role} mirroredHover={watching ? (pointer?.hover ?? null) : undefined} />
           <StatusColumn snapshot={snapshot} reality={reality} />
           <NistStrip snapshot={snapshot} reality={reality} />
           <PadlockTray snapshot={snapshot} reality={reality} />
@@ -238,9 +264,10 @@ export function DeskScreen({ reality = false, strip = 'split' }: { reality?: boo
           <Rex snapshot={snapshot} selected={selected} reality={reality} />
           <StickyNote snapshot={snapshot} />
           <Tip snapshot={snapshot} reality={reality} />
-          {selected && <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} reality={reality} />}
+          {selected && <ActionPopup snapshot={snapshot} roomId={selected} canAct reality={reality} />}
         </g>
       )}
+      {watching && <PresenterCursor pointer={pointer} reality={reality} />}
       <ScreenEndWash screen={2} rect={{ x: 0, y: 0, w: 1600, h: 900 }} reality={reality} />
       {reality && <RealityStrip x0={0} y={832} mode={strip} screen={2} />}
     </svg>

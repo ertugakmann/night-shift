@@ -7,3 +7,4 @@ export * from './scenario';
 export * from './engine';
 export * from './protocol';
 export * from './report';
+export * from './mirror';

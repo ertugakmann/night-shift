@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ACTIONS, type Role, type Snapshot } from '@night-shift/shared';
 import { ActionIcon } from './ActionPopup';
 import { actionBlocked } from './util';
 import { guardPose } from '../building/geometry';
 import { DOORS, ROOMS } from '../building/layout';
 import { worldOf } from '../game/view';
-import { selectRoom } from '../net/game';
+import { reportPointer, selectRoom } from '../net/game';
 import { MAP_SCALE, MAP_X, MAP_Y, mapX, mapY, truncate } from './util';
 
 const GUARD_COLOR: Record<string, string> = { sam: '#3ee0d8', mia: '#ff9ec7', tom: '#a8e07a' };
@@ -23,8 +23,11 @@ function Paw({ x, y, scale = 1 }: { x: number; y: number; scale?: number }) {
 }
 
 /** The building plan pinned to the desk: every room, its state, the guards, and Rex's hunches. */
-export function MiniMap({ snapshot, selected, reality = false, role = 'watcher' }: { snapshot: Snapshot; selected: string | null; reality?: boolean; role?: Role }) {
-  const [hover, setHover] = useState<string | null>(null);
+/** `mirroredHover`: on a watching desk, the room the presenter's mouse is over (replaces this page's own hover). */
+export function MiniMap({ snapshot, selected, reality = false, role = 'watcher', mirroredHover }: { snapshot: Snapshot; selected: string | null; reality?: boolean; role?: Role; mirroredHover?: string | null }) {
+  const [ownHover, setHover] = useState<string | null>(null);
+  useEffect(() => reportPointer({ hover: ownHover }), [ownHover]);
+  const hover = mirroredHover !== undefined ? mirroredHover : ownHover;
   const w = worldOf(snapshot);
   const bark = w.sc.rex.barkThreshold;
   const width = 6400 * MAP_SCALE;
@@ -134,7 +137,7 @@ export function MiniMap({ snapshot, selected, reality = false, role = 'watcher' 
         );
       })}
 
-      {hover && hover !== selected && <HoverActions snapshot={snapshot} room={hover} reality={reality} canAct={role !== 'watcher'} />}
+      {hover && hover !== selected && <HoverActions snapshot={snapshot} room={hover} reality={reality} canAct={role !== 'watcher' || mirroredHover !== undefined} />}
 
       {/* guards */}
       {snapshot.guards.map((g) => {

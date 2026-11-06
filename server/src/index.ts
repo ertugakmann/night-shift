@@ -12,6 +12,8 @@ import {
   initialState,
   publicState,
   isIntent,
+  parsePointer,
+  type PresenterPointer,
   parseRoomOrder,
   reportKey,
   type ClientToServerEvents,
@@ -150,12 +152,20 @@ setInterval(() => {
   broadcast();
 }, TICK_MS);
 
+// ---------- The presenter's pointer ----------
+
+// What the presenter has selected, hovers and points at on the desk. Relayed to every other page
+// (watchers mirror it); never part of the game state.
+let pointer: PresenterPointer | null = null;
+let pointerFrom: string | null = null;
+
 // ---------- Connections ----------
 
 io.on('connection', (socket) => {
   socket.emit('wall', { order: ROOM_ORDER });
   socket.emit('report', report);
   socket.emit('snapshot', snapshot());
+  socket.emit('pointer', pointer);
   sendControl(socket);
 
   socket.on('hello', (raw: Partial<Hello> | undefined, ack: unknown) => {
@@ -213,8 +223,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('pointer', (raw: unknown) => {
+    if (control.role(socket.id) !== 'presenter') return;
+    const next = parsePointer(raw);
+    if (!next) return;
+    pointer = next;
+    pointerFrom = socket.id;
+    socket.broadcast.emit('pointer', pointer);
+  });
+
   socket.on('disconnect', () => {
     control.remove(socket.id);
+    if (pointerFrom === socket.id) {
+      pointer = null;
+      pointerFrom = null;
+      io.emit('pointer', null);
+    }
   });
 });
 

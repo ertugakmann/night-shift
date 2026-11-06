@@ -219,8 +219,9 @@ export function WallPage() {
         {/* Over a zoomed monitor the desk is off screen, so its action menu floats here instead. */}
         {monitorFocus && snapshot && selected && (
           <svg viewBox={`0 0 ${STAGE_W} ${STAGE_H}`} className="pointer-events-none absolute inset-0 z-20 h-full w-full">
-            <g style={{ pointerEvents: 'auto' }}>
-              <ActionPopup snapshot={snapshot} roomId={selected} canAct={role !== 'watcher'} floating reality={snapshot.reality} />
+            {/* watching: the presenter's menu, mirrored, not clickable */}
+            <g style={{ pointerEvents: role === 'watcher' ? 'none' : 'auto' }}>
+              <ActionPopup snapshot={snapshot} roomId={selected} canAct floating reality={snapshot.reality} />
             </g>
           </svg>
         )}

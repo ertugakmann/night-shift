@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { DEFAULT_ROOM_ORDER, type MorningReport, type ScreenId } from '@night-shift/shared';
+import { DEFAULT_ROOM_ORDER, NO_POINTER, shownSelection, type MorningReport, type PresenterPointer, type ScreenId } from '@night-shift/shared';
 import type {
   ClientToServerEvents,
   CodeResult,
@@ -20,8 +20,10 @@ export interface GameView {
   notice: { id: number; text: string } | null;
   /** 'websocket' once upgraded, 'polling' while (or if stuck) on HTTP long-polling. */
   transport: string | null;
-  /** Room picked on this page for the action menu. Local to this tab. */
+  /** Room whose action menu is open: picked on this tab, or (watching) the presenter's, mirrored. */
   selected: string | null;
+  /** What the presenter is doing on the desk (selection, hover, cursor), mirrored on watching pages. */
+  pointer: PresenterPointer | null;
   /** How the screens stand in the room, left to right (ROOM_ORDER, sent by the server). */
   roomOrder: readonly ScreenId[];
   /** The morning report of the night that just ended, once the server has written it. */
@@ -95,13 +97,42 @@ let view: GameView = {
   notice: null,
   transport: null,
   selected: null,
+  pointer: null,
   roomOrder: DEFAULT_ROOM_ORDER,
   report: null,
   reportLive: false,
 };
 
+let localSelected: string | null = null;
+
+/** Pick a room on this tab. A watcher cannot: it shows the presenter's pick instead. */
 export function selectRoom(room: string | null): void {
+  if (view.role === 'watcher') return;
+  localSelected = room;
   set({ selected: room });
+  reportPointer({ selected: room });
+}
+
+function reselect(): void {
+  const selected = shownSelection(view.role, localSelected, view.pointer);
+  if (selected !== view.selected) set({ selected });
+}
+
+// The presenter's own pointer, sent at most every 50 ms (the last change always goes out).
+let mine: PresenterPointer = NO_POINTER;
+let pointerTimer: ReturnType<typeof setTimeout> | undefined;
+let pointerSentAt = 0;
+function flushPointer(): void {
+  pointerTimer = undefined;
+  if (view.role !== 'presenter' || !socket.connected) return;
+  pointerSentAt = Date.now();
+  socket.emit('pointer', mine);
+}
+/** Presenter pages report what they point at; on every other page this does nothing. */
+export function reportPointer(patch: Partial<PresenterPointer>): void {
+  mine = { ...mine, ...patch };
+  if (view.role !== 'presenter' || pointerTimer) return;
+  pointerTimer = setTimeout(flushPointer, Math.max(0, 50 - (Date.now() - pointerSentAt)));
 }
 const listeners = new Set<() => void>();
 
@@ -137,7 +168,14 @@ socket.on('disconnect', () => set({ connected: false, transport: null }));
 socket.on('snapshot', (snapshot) => set({ snapshot }));
 socket.on('control', ({ role, code }) => {
   if (role === 'watcher') writeCode(null);
+  if (role !== view.role) localSelected = null;
   set({ role, code });
+  reselect();
+  if (role === 'presenter') reportPointer({ selected: localSelected });
+});
+socket.on('pointer', (pointer) => {
+  set({ pointer });
+  reselect();
 });
 socket.on('notice', showNotice);
 socket.on('wall', ({ order }) => set({ roomOrder: order }));
